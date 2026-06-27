@@ -1,38 +1,38 @@
-﻿import type { Comparison } from "@/types/comparisons";
+import type { Comparison } from "@/types/comparisons";
 
 /**
- * GoHighLevel vs Answer Any Call — the flagship comparison page.
+ * GoHighLevel vs LeadStack — the flagship comparison page.
  *
- * GHL is the direct rival Answer Any Call is positioned head-to-head against, so
+ * GHL is the direct rival LeadStack is positioned head-to-head against, so
  * this page sees the highest converting search intent. Update pricing +
  * verification date when GHL changes their public tiers.
  *
  * Underlying-stack identifiers (Firebase, Twilio, Vapi, Resend, OpenRouter,
  * Vercel, Next.js, gitpage.site, specific AI model names, etc.) are
  * deliberately kept out of this file. Visitors shouldn't be able to
- * reconstruct Answer Any Call's architecture from the comparison page — that
+ * reconstruct LeadStack's architecture from the comparison page — that
  * information ships inside the repo they get after purchase.
  */
 export const gohighlevelComparison: Comparison = {
   slug: "gohighlevel",
   competitorName: "GoHighLevel",
   competitorShortName: "GHL",
-  metaTitle: "GoHighLevel vs Answer Any Call | All-in-One CRM Compared (2026)",
+  metaTitle: "GoHighLevel vs LeadStack | All-in-One CRM Compared (2026)",
   metaDescription:
-    "GoHighLevel vs Answer Any Call — feature, pricing, and ownership comparison. Why agencies are switching from $297/mo recurring to a self-hosted all-in-one CRM they own outright.",
+    "GoHighLevel vs LeadStack — feature, pricing, and ownership comparison. Why agencies are switching from $297/mo recurring to a self-hosted all-in-one CRM they own outright.",
   lastVerifiedDate: "June 2026",
 
   hero: {
-    h1: "GoHighLevel vs Answer Any Call",
+    h1: "GoHighLevel vs LeadStack",
     subhead:
       "Both are all-in-one CRMs built for agencies. Only one of them lets you own the code, set your own prices, keep your client data on your own infrastructure, and walk away the day you decide to switch tools.",
-    ctaLabel: "See Answer Any Call pricing",
+    ctaLabel: "See LeadStack pricing",
   },
 
   pullQuote: {
-    text: "GoHighLevel made the modern agency stack possible — one tool, one bill, every channel. Answer Any Call is the next step: the same surface area, but you own the code, the data, and the margin instead of renting them.",
-    author: "The Answer Any Call team",
-    role: "On why Answer Any Call exists",
+    text: "GoHighLevel made the modern agency stack possible — one tool, one bill, every channel. LeadStack is the next step: the same surface area, but you own the code, the data, and the margin instead of renting them.",
+    author: "The LeadStack team",
+    role: "On why LeadStack exists",
   },
 
   painPoints: {
@@ -56,7 +56,7 @@ export const gohighlevelComparison: Comparison = {
   advantages: [
     {
       title: "You own the code, not a seat",
-      body: "Answer Any Call is the full source code of an agency CRM you clone, deploy to your own cloud account, and brand as your own product. Every file — the UI, the API routes, the AI agent logic, the booking pages, the quote generator — is yours to read, modify, and extend. There is no platform behind Answer Any Call waiting to deprecate the feature you depend on.",
+      body: "LeadStack is the full source code of an agency CRM you clone, deploy to your own cloud account, and brand as your own product. Every file — the UI, the API routes, the AI agent logic, the booking pages, the quote generator — is yours to read, modify, and extend. There is no platform behind LeadStack waiting to deprecate the feature you depend on.",
     },
     {
       title: "Pricing is a line on a vendor invoice, not a subscription",
@@ -73,7 +73,7 @@ export const gohighlevelComparison: Comparison = {
   ],
 
   featureTable: {
-    heading: "How Answer Any Call's base license compares to GoHighLevel's base plan",
+    heading: "How LeadStack's base license compares to GoHighLevel's base plan",
     rows: [
       {
         label: "Unlimited sub-accounts",
@@ -135,6 +135,11 @@ export const gohighlevelComparison: Comparison = {
         leadstack: true,
         competitor: true,
       },
+      {
+        label: "Social post scheduling (Facebook + Instagram)",
+        leadstack: true,
+        competitor: true,
+      },
     ],
   },
 
@@ -143,16 +148,14 @@ export const gohighlevelComparison: Comparison = {
     leadstack: {
       headline: "One-time license + your real vendor costs",
       detail:
-        "Pay for Answer Any Call once. The features GoHighLevel sells as paid add-ons — AI Employee, premium support — and capabilities it gates behind higher tiers — the full public API + webhooks — are all included with the license. For most agencies, monthly running costs come in under the price of a cup of coffee — the free tiers across the underlying providers are generous.",
+        "Pay for LeadStack once. The features GoHighLevel sells as paid add-ons — AI Employee, premium support — and capabilities it gates behind higher tiers — the full public API + webhooks — are all included with the license. For most agencies, monthly running costs come in under the price of a cup of coffee — the free tiers across the underlying providers are generous.",
       notes: [
-        "AI Employee equivalent (Web Chat + SMS + Voice agents): $0/month — included with the license.",
-        "Public API + webhooks: $0 — included with the license (no tier gate).",
-        "Premium support: $0/month — direct line to the team comes with the license.",
-        "Cloud hosting — generous free tier covers low-volume deployments; ~$20/month for production agencies.",
-        "Database + auth — generous free tier covers thousands of contacts; pay-as-you-grow thereafter.",
-        "SMS + voice provider — per-number cost (~$1/month) plus per-message and per-minute rates billed to you at their published prices.",
-        "Transactional email — free up to several thousand sends per month; ~$20/month at production volume.",
-        "AI gateway — pay-per-token; cost per reply is negligible at typical reply volumes.",
+        "AI agents (Web Chat + SMS + Voice): $0/month — included with the license (GoHighLevel's AI Employee is a $97/mo-per-sub-account add-on).",
+        "Public API + webhooks: $0 — included with the license (GoHighLevel gates these to higher tiers).",
+        "Premium support: $0/month — a direct line to the team comes with the license (GoHighLevel charges $500/month).",
+        "Hosting, database, and email all run on generous free tiers that comfortably cover a small agency's first dozen sub-accounts.",
+        "Typical all-in running cost for a small agency: around the price of a cup of coffee a month.",
+        "SMS, email, and AI usage is billed directly by your providers at their published rates — the same usage GoHighLevel bills you for too, just without the platform markup. Apples-to-apples, it's a wash or cheaper.",
       ],
     },
     competitor: {
@@ -177,52 +180,47 @@ export const gohighlevelComparison: Comparison = {
     heading: "Frequently asked questions",
     items: [
       {
-        question: "Is Answer Any Call a true GoHighLevel replacement?",
+        question: "Is LeadStack a true GoHighLevel replacement?",
         answer:
-          "For the core agency-CRM use cases — contacts, pipeline, calendar, booking pages, quotes, automations, bulk email broadcasts, AI Web Chat + SMS + Voice agents, Google review requests, dedicated per-sub-account phone numbers and sending domains, public REST API with webhooks — yes. Answer Any Call covers the surface area most agencies actually use day-to-day. For memberships, courses, or native mobile apps, GoHighLevel is currently more complete; those modules are on the Answer Any Call roadmap rather than shipped today.",
+          "Yes — for the work agencies do every day: contacts, pipeline, calendar, booking pages, quotes, automations, bulk email broadcasts, AI Web Chat + SMS + Voice agents, social post scheduling (Facebook + Instagram), Google review requests, dedicated per-sub-account phone numbers and sending domains, and a full public REST API with webhooks. It's the same surface area you sell today — delivered as code you own.",
       },
       {
-        question: "Can I migrate my clients from GoHighLevel to Answer Any Call?",
+        question: "Can I bring my clients across from GoHighLevel?",
         answer:
-          "Yes. Contacts move via a built-in CSV import; deals, tasks, and other records come across through the public REST API. Conversations, recorded voice calls, and historical automation execution logs are harder to extract from any platform — GoHighLevel is no exception. The realistic path most agencies take is: migrate new clients to Answer Any Call as they sign on, leave existing GHL clients in place until natural renewal, and run both side by side during the transition.",
+          "Yes, on your timeline. Contacts import via CSV and your other records come across through the public REST API. The smooth path most agencies take: onboard new clients straight onto LeadStack, run both side by side, and move existing clients at their natural renewal. No big-bang cutover, no pressure.",
       },
       {
-        question: "How does the white-label work if Answer Any Call is self-hosted?",
+        question: "How does the white-label work?",
         answer:
-          "When you buy Answer Any Call, you clone the repository, deploy it to your own cloud account under your own domain, and edit the brand configuration file with your business name, tagline, support email, and pricing. The landing page, every dashboard surface, every transactional email, the public booking pages, the AI chat widget, the customer-facing quote pages — all render with your brand. The Answer Any Call name does not appear in the deployed product. Each agency sub-account you create can additionally be given its own sending domain and dedicated phone number so your clients see fully separated brands at the channel layer.",
+          "You deploy LeadStack to your own cloud under your own domain and set your brand in one config file — name, logo, tagline, support email, pricing. Every surface your clients touch renders as your brand: the landing page, every dashboard screen, transactional emails, public booking pages, the AI chat widget, and customer-facing quote pages. The LeadStack name never appears. And each sub-account can carry its own sending domain and dedicated phone number, so your clients see fully separate brands right down to the channel.",
       },
       {
-        question: "What's the total cost of ownership over 12 months?",
+        question: "What does it actually cost to run?",
         answer:
-          "After the one-time license, typical first-year vendor spend for a small agency running 3–10 sub-accounts lands between $30 and $200 per month depending on SMS volume, email volume, and AI usage. Compare to GoHighLevel Unlimited at $297/month flat: even an active Answer Any Call deployment at the upper end is significantly cheaper, and most of that spend is pass-through to your communications and AI providers at their published rates rather than a platform markup.",
+          "After the one-time license, a small agency runs on the generous free tiers across hosting, database, and email — around the price of a cup of coffee a month. GoHighLevel is $297/month for the platform alone, forever, before add-ons. The usage you'd pay either way — SMS, email, AI — you pay your providers directly, at their published rates, without a platform markup on top.",
       },
       {
-        question: "Who owns my client data with Answer Any Call?",
+        question: "Who owns my client data?",
         answer:
-          "You do, in the strictest sense. The database storing contacts, deals, conversations, voice call summaries, and every other artifact is in your own cloud project, under your billing account, under your access control. There is no Answer Any Call-controlled database in the loop. If you wanted to walk away from the Answer Any Call codebase tomorrow and run the deployment indefinitely without us, the deployment would continue to function — and you can export the full database at any time using the standard export tooling your database vendor provides.",
+          "You do — completely. Every contact, deal, conversation, and call summary lives in your own cloud project, under your billing and your access control. There's no LeadStack-controlled database in the loop, and you can export everything at any time with your database vendor's standard tools. Your clients' data is your asset, not a vendor's leverage.",
       },
       {
-        question: "What about the GoHighLevel features Answer Any Call doesn't have yet?",
+        question: "Do I need to be a developer to run LeadStack?",
         answer:
-          "We're transparent about gaps: memberships and courses, native mobile apps, and a native drag-and-drop funnel builder are present in GoHighLevel today and on the Answer Any Call roadmap rather than shipped. The two strategic responses: (1) most agencies don't use every GHL module — review which features you actually charge clients for before assuming you need parity; (2) because Answer Any Call is a codebase you own, you can ship missing features yourself, contract a developer to do so, or wait for the roadmap. With GHL, the only option is wait for their roadmap.",
+          "No code, ever — once it's deployed, the entire CRM runs in the browser. Setup is a one-time, guided process: you create a few standard provider accounts and paste in the keys, with an AI coding assistant able to walk you through every step. There's nothing to write — just accounts to connect. Budget around a couple of hours if it's your first time and this isn't something you do every day; faster if it is. After that, it's just your CRM.",
       },
       {
-        question: "Do I need to be a developer to run Answer Any Call?",
+        question: "What if I want to stop using LeadStack one day?",
         answer:
-          "Setting Answer Any Call up requires a one-time configuration step where you create accounts at a small number of standard service providers (cloud hosting + database, payments, email, SMS, and a handful of optional services), then paste API keys into an environment file. The repository ships a step-by-step onboarding guide written for non-developers, and most buyers finish the setup with help from an AI coding assistant in under an hour. Day-to-day operation requires no code — the entire CRM is browser-based once deployed.",
-      },
-      {
-        question: "What happens if Answer Any Call stops being maintained?",
-        answer:
-          "Your deployment keeps running. Unlike a SaaS where the product stops the day the company does, Answer Any Call is code you own. Worst case, you continue running the version you have. More practically, the codebase is built on widely-used open-source frameworks and managed cloud services, so you or any competent developer can maintain and extend it long after any individual vendor's involvement ends.",
+          "You keep everything. It's your code on your infrastructure with your data — so your deployment runs as long as you want it to, with or without us. That's the whole point of owning an asset instead of renting access: a SaaS disappears the day the company does; what you own doesn't.",
       },
     ],
   },
 
   finalCta: {
     headline: "Own your CRM. Stop renting it.",
-    body: "Answer Any Call gives agencies the full GoHighLevel-style surface area as code they own, on infrastructure they control, with no recurring platform fee on top.",
-    primaryCtaLabel: "See Answer Any Call pricing",
+    body: "LeadStack gives agencies the full GoHighLevel-style surface area as code they own, on infrastructure they control, with no recurring platform fee on top.",
+    primaryCtaLabel: "See LeadStack pricing",
     primaryCtaHref: "/#pricing",
   },
 };

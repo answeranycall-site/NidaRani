@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { BrandingSection } from "@/components/agency/branding-section";
+import { MessagingSection } from "@/components/agency/messaging-section";
 import { SeedDemoSection } from "@/components/agency/seed-demo-section";
 import { PasswordSection } from "@/components/settings/password-section";
 import { LANDING_VARIANT } from "@/config/landing";
@@ -41,16 +42,20 @@ export default function AgencySettingsPage() {
 
       <BrandingSection />
 
+      {/* Read-only view of the shared (env-var) Twilio + Resend senders, so the
+          owner can see exactly what "agency-level" SMS/email resolves to. */}
+      <MessagingSection />
+
       {/* Password change — user-level concern but mounted on both the
           agency-settings and sub-account-settings pages so it's reachable
           wherever the operator happens to be sitting. Same component
           either place; handles its own reauth. */}
       <PasswordSection />
 
-      {/* Demo seed/unseed panel — Answer Any Call-branded deployment only.
+      {/* Demo seed/unseed panel — LeadStack-branded deployment only.
           Buyer clones (LANDING_VARIANT === "custom") don't see this, and
           the underlying API route 404s for them too. */}
-      {LANDING_VARIANT === "Answer Any Call" && <SeedDemoSection />}
+      {LANDING_VARIANT === "leadstack" && <SeedDemoSection />}
     </div>
   );
 }

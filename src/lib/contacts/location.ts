@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 
@@ -231,7 +231,7 @@ export async function locationFromIp(
   try {
     const res = await fetch(`https://ipapi.co/${encodeURIComponent(ip)}/json/`, {
       signal: AbortSignal.timeout(3000),
-      headers: { "User-Agent": "Answer Any Call-form-submit" },
+      headers: { "User-Agent": "leadstack-form-submit" },
     });
     if (!res.ok) return EMPTY_LOCATION;
     const data = (await res.json()) as {

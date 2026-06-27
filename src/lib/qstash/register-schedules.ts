@@ -1,11 +1,11 @@
-﻿import "server-only";
+import "server-only";
 
 import { Client } from "@upstash/qstash";
 import { FieldValue, type Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 
 /**
- * Auto-register the Answer Any Call daily cron schedules on cold start.
+ * Auto-register the LeadStack daily cron schedules on cold start.
  *
  * Removes the manual "click into the QStash dashboard, create a
  * schedule" step from buyer onboarding. The buyer sets QStash env vars
@@ -42,13 +42,13 @@ interface ScheduleSpec {
 
 const SCHEDULES: ScheduleSpec[] = [
   {
-    scheduleId: "answeranycall-gitpage-heartbeat",
+    scheduleId: "leadstack-gitpage-heartbeat",
     path: "/api/cron/gitpage-heartbeat",
     cron: "0 3 * * *",
     description: "Daily gitpage telemetry + subscription status cache.",
   },
   {
-    scheduleId: "answeranycall-api-cleanup",
+    scheduleId: "leadstack-api-cleanup",
     path: "/api/cron/api-cleanup",
     cron: "0 4 * * *",
     description:

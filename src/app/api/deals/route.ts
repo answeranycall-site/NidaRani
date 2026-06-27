@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountMember } from "@/lib/auth/require-tenancy";
 import { createDealServerSide } from "@/lib/server/deals-service";
+import { loadCustomFieldDefs } from "@/lib/custom-fields/load-defs";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 import { PIPELINE_STAGES, DEAL_PRIORITIES } from "@/types/deals";
 import type { DealPriority, PipelineStageId } from "@/types/deals";
 
@@ -62,6 +64,13 @@ export async function POST(request: Request) {
   const subSnap = await getAdminDb().doc(`subAccounts/${subAccountId}`).get();
   const agencyId = (subSnap.data()?.agencyId as string) ?? access.agencyId ?? "";
 
+  // Validate custom-field values against the sub-account's deal definitions.
+  const defs = await loadCustomFieldDefs(subAccountId, "deal");
+  const cf = validateCustomFieldValues(body.customFields, defs);
+  if (!cf.ok) {
+    return NextResponse.json({ error: cf.error }, { status: 400 });
+  }
+
   const { id, deal } = await createDealServerSide({
     subAccountId,
     agencyId,
@@ -74,6 +83,7 @@ export async function POST(request: Request) {
     stageId,
     priority,
     territoryId: typeof body.territoryId === "string" ? body.territoryId : null,
+    customFields: cf.value,
   });
 
   return NextResponse.json({ id, deal }, { status: 201 });

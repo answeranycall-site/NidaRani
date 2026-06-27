@@ -167,7 +167,7 @@ export async function POST(
     hashedSecret: hashApiKey(minted.rawKey),
     scopes,
     // Pin the key to the version live at mint time. The auth middleware
-    // reads this when no `Answer Any Call-Version` request header is set, so
+    // reads this when no `LeadStack-Version` request header is set, so
     // future breaking API changes don't silently change behaviour for
     // already-issued keys.
     defaultVersion: LATEST_API_VERSION,

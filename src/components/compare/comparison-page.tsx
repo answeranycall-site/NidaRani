@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { Check, X, Sparkles, Quote, ChevronRight } from "lucide-react";
 import type { Comparison } from "@/types/comparisons";
 import { listComparisons } from "@/data/comparisons";
@@ -109,7 +109,7 @@ function Advantages({ comparison }: { comparison: Comparison }) {
   return (
     <section className="mb-12 sm:mb-16">
       <h2 className="mb-6 text-2xl font-bold tracking-tight sm:text-3xl">
-        How Answer Any Call is different
+        How LeadStack is different
       </h2>
       <div className="grid gap-4 sm:grid-cols-2">
         {comparison.advantages.map((advantage) => (
@@ -142,7 +142,7 @@ function FeatureTable({ comparison }: { comparison: Comparison }) {
                 Feature
               </th>
               <th className="px-4 py-3 text-center font-semibold sm:px-6">
-                Answer Any Call
+                LeadStack
               </th>
               <th className="px-4 py-3 text-center font-semibold sm:px-6">
                 {comparison.competitorShortName ?? comparison.competitorName}
@@ -220,7 +220,7 @@ function PricingTable({ comparison }: { comparison: Comparison }) {
           headline={comparison.pricing.leadstack.headline}
           detail={comparison.pricing.leadstack.detail}
           notes={comparison.pricing.leadstack.notes}
-          variant="aac"
+          variant="leadstack"
         />
         <PricingCard
           headline={comparison.pricing.competitor.headline}
@@ -246,12 +246,12 @@ function PricingCard({
   headline: string;
   detail: string;
   notes: string[];
-  variant: "aac" | "competitor";
+  variant: "leadstack" | "competitor";
 }) {
   return (
     <div
       className={
-        variant === "aac"
+        variant === "leadstack"
           ? "rounded-2xl border-2 border-emerald-500/40 bg-card p-6"
           : "rounded-2xl border-2 border-rose-500/40 bg-card p-6"
       }
@@ -329,16 +329,16 @@ function CrossLink({ currentSlug }: { currentSlug: string }) {
   return (
     <section className="mb-12 sm:mb-16">
       <h2 className="mb-4 text-xl font-bold tracking-tight">
-        Compare Answer Any Call to other tools
+        Compare LeadStack to other tools
       </h2>
       <div className="flex flex-wrap gap-2">
         {others.map((other) => (
           <Link
             key={other.slug}
-            href={`/aac-vs-${other.slug}`}
+            href={`/leadstack-vs-${other.slug}`}
             className="inline-flex items-center gap-1.5 rounded-full border bg-card px-4 py-2 text-sm transition-colors hover:bg-muted"
           >
-            Answer Any Call vs {other.competitorName}
+            LeadStack vs {other.competitorName}
             <ChevronRight className="h-3.5 w-3.5" />
           </Link>
         ))}
@@ -378,7 +378,7 @@ function Disclaimer({ comparison }: { comparison: Comparison }) {
         Comparison provided for informational purposes; verify current
         {" "}details on the {comparison.competitorName} website before making
         a purchasing decision. All trademarks are property of their
-        respective owners. This is an independent comparison and Answer Any Call
+        respective owners. This is an independent comparison and LeadStack
         is not affiliated with or endorsed by {comparison.competitorName}.
       </p>
     </footer>

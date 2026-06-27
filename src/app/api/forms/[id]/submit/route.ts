@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { GLOBAL_TERRITORY_ID } from "@/types";
-import { fireTriggers } from "@/lib/automations/triggers";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { serializeContactForApi } from "@/lib/api/serializers/contacts";
 import { emitContactCreatedById } from "@/lib/server/contacts-service";
@@ -412,14 +412,21 @@ async function handleSubmit(
       createdAt: FieldValue.serverTimestamp(),
     });
 
-  // Fire any matching automations. Failures are logged but don't break the
-  // form submission response — the contact is already saved.
-  await fireTriggers({
+  // Fire any matching workflows. Fire-and-forget — a workflow problem must
+  // never break the form submission response (the contact is already saved).
+  // Forward the submitted answers (label → value) so a Webhook step can pass
+  // form fields — like the "How can we help?" message — downstream to n8n etc.
+  const formData: Record<string, string> = {};
+  for (const f of form.fields) {
+    const v = (body.values?.[f.id] ?? "").toString().trim();
+    if (v) formData[f.label] = v;
+  }
+  void fireWorkflowTrigger({
     agencyId,
     subAccountId,
-    triggerType: "form_submit",
+    type: "form.submitted",
     contactId: contactRef.id,
-    context: { formId: id },
+    context: { formId: id, formName: form.name, formData },
   });
 
   // Outbound webhooks: a public form submission is a real contact (and

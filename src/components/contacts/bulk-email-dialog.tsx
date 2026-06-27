@@ -227,7 +227,7 @@ export function BulkEmailDialog({
                 No email templates yet.{" "}
                 <a
                   className="underline"
-                  href={saPath("/automations/templates/new")}
+                  href={saPath("/templates/new")}
                 >
                   Create one
                 </a>{" "}

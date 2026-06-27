@@ -1,13 +1,13 @@
-﻿import type { Comparison } from "@/types/comparisons";
+import type { Comparison } from "@/types/comparisons";
 import { gohighlevelComparison } from "./gohighlevel";
 
 /**
- * Manifest of every competitor comparison published at /Answer Any Call-vs-{slug}.
+ * Manifest of every competitor comparison published at /leadstack-vs-{slug}.
  *
  * The dynamic route reads this map to build generateStaticParams (so every
  * page is prerendered at build time + the HTML is fully crawlable from the
  * initial response — no React hydration required to see body copy), and
- * the Answer Any Call footer reads it to build the Compare column.
+ * the LeadStack footer reads it to build the Compare column.
  *
  * Add a new competitor:
  *   1. Create src/data/comparisons/{slug}.ts exporting a Comparison.

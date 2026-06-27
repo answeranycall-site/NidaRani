@@ -1,9 +1,9 @@
-﻿/**
+/**
  * Outbound webhooks — server-to-server event delivery for the public API.
  *
  * Subscribers register a URL + an event-type allowlist. Whenever a write
  * inside the sub-account emits a matching event, every subscription gets
- * its own delivery attempt, signed Stripe-style with `Answer Any Call-Signature`.
+ * its own delivery attempt, signed Stripe-style with `LeadStack-Signature`.
  *
  * Three Firestore collections:
  *   - `subAccounts/{id}/webhookSubscriptions/{subId}`
@@ -66,6 +66,14 @@ export const WEBHOOK_EVENT_TYPES = [
   "webchat.lead.captured",
   "member.invited",
   "automation.completed",
+  // Community + Courses (Skool-style) lifecycle. Emitted from the community
+  // service write paths so automations can react to joins, purchases, and
+  // course progress (e.g. "course.completed → tag + create task").
+  "community.member.joined",
+  "community.member.approved",
+  "community.purchase.paid",
+  "community.lesson.completed",
+  "community.course.completed",
 ] as const;
 
 export type WebhookEventType = (typeof WEBHOOK_EVENT_TYPES)[number];
@@ -82,7 +90,7 @@ export interface WebhookSubscriptionDoc {
   /** Event-type allowlist. Empty array means "every event" — discouraged but legal. */
   events: WebhookEventType[];
   /**
-   * Raw signing secret used in `Answer Any Call-Signature` HMAC computation.
+   * Raw signing secret used in `LeadStack-Signature` HMAC computation.
    * Returned to the subscriber ONCE at creation; stored raw here so the
    * dispatcher can sign. Server-only collection — Firestore rules deny
    * client access entirely.

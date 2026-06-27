@@ -3,13 +3,24 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowLeft, Building2, Hash, Mail, Phone, User as UserIcon } from "lucide-react";
+import { ArrowLeft, Building2, Hash, Layers, Mail, Phone, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
+
+interface SnapshotOption {
+  id: string;
+  name: string;
+  counts: {
+    forms: number;
+    messageTemplates: number;
+    products: number;
+    workflows: number;
+  };
+}
 
 export default function NewSubAccountPage() {
   const router = useRouter();
@@ -26,6 +37,8 @@ export default function NewSubAccountPage() {
   const [contactPhone, setContactPhone] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [nextNumber, setNextNumber] = useState<number | null>(null);
+  const [snapshots, setSnapshots] = useState<SnapshotOption[]>([]);
+  const [snapshotId, setSnapshotId] = useState("");
 
   useEffect(() => {
     if (loading || agencyRole !== "owner") return;
@@ -35,6 +48,13 @@ export default function NewSubAccountPage() {
       .then((data) => {
         if (cancelled || !data) return;
         if (typeof data.next === "number") setNextNumber(data.next);
+      })
+      .catch(() => undefined);
+    fetch("/api/agency/snapshots")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        if (Array.isArray(data.snapshots)) setSnapshots(data.snapshots);
       })
       .catch(() => undefined);
     return () => {
@@ -97,10 +117,51 @@ export default function NewSubAccountPage() {
       if (!res.ok || !payload.subAccountId) {
         throw new Error(payload.error ?? "Could not create sub-account.");
       }
+
+      // Optionally seed the new sub-account from a snapshot. The account is
+      // already created, so a failed apply shouldn't block navigation — we
+      // surface it as a warning and the owner can re-apply nothing's lost.
+      let snapshotNote = "";
+      if (snapshotId) {
+        try {
+          const applyRes = await fetch(
+            `/api/agency/sub-accounts/${payload.subAccountId}/apply-snapshot`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ snapshotId }),
+            },
+          );
+          const applyData = (await applyRes.json().catch(() => ({}))) as {
+            result?: {
+              formsCreated: number;
+              templatesCreated: number;
+              productsCreated: number;
+              workflowsCreated: number;
+              workflowsLinked: number;
+            };
+            error?: string;
+          };
+          if (!applyRes.ok) {
+            throw new Error(applyData.error ?? "Snapshot apply failed.");
+          }
+          const r = applyData.result;
+          snapshotNote = r
+            ? ` Loaded snapshot: ${r.formsCreated} forms, ${r.workflowsCreated} workflows (drafts), ${r.templatesCreated} templates, ${r.productsCreated} products.`
+            : " Snapshot loaded.";
+        } catch (applyErr) {
+          toast.warning(
+            applyErr instanceof Error
+              ? `Account created, but the snapshot didn't apply: ${applyErr.message}`
+              : "Account created, but the snapshot didn't apply.",
+          );
+        }
+      }
+
       toast.success(
-        payload.accountNumber !== undefined
+        (payload.accountNumber !== undefined
           ? `Created "${name.trim()}" (#${payload.accountNumber}).`
-          : `Created "${name.trim()}".`,
+          : `Created "${name.trim()}".`) + snapshotNote,
       );
       router.push(`/sa/${payload.subAccountId}/dashboard`);
       router.refresh();
@@ -190,6 +251,51 @@ export default function NewSubAccountPage() {
           <p className="text-[11px] text-muted-foreground">
             Defaults to your browser&apos;s timezone. Used for send-window
             and reporting in this sub-account.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="snapshot">Start from a snapshot (optional)</Label>
+          <div className="relative">
+            <Layers className="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <select
+              id="snapshot"
+              value={snapshotId}
+              onChange={(e) => setSnapshotId(e.target.value)}
+              disabled={snapshots.length === 0}
+              className="h-9 w-full rounded-md border border-input bg-background pl-8 pr-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {snapshots.length === 0 ? (
+                <option value="">No snapshots captured yet</option>
+              ) : (
+                <>
+                  <option value="">None — blank account</option>
+                  {snapshots.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.counts.forms} forms · {s.counts.workflows}{" "}
+                      workflows · {s.counts.messageTemplates} templates ·{" "}
+                      {s.counts.products} products)
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {snapshots.length === 0 ? (
+              <>
+                Pre-load a new client from a proven setup. Capture one first
+                under Sub-accounts → Snapshots, then it&apos;ll be selectable
+                here.
+              </>
+            ) : (
+              <>
+                Pre-loads this client&apos;s forms, workflows, message
+                templates, and products from a captured setup. Workflows arrive
+                as drafts to review and activate. No customer data or
+                credentials are copied.
+              </>
+            )}
           </p>
         </div>
 

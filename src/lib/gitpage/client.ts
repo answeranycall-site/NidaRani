@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import type { WebsiteConfig } from "@/types/website";
 import { isNicheKey, NICHE_FORCED_PAGES } from "@/lib/website/niches";
@@ -13,7 +13,7 @@ import { isNicheKey, NICHE_FORCED_PAGES } from "@/lib/website/niches";
  * for local mocking.
  *
  * v1 contract is frozen — additions ship into v1, breaking changes land at
- * /api/v2/. See Answer Any Call_INTEGRATION.md for the full spec.
+ * /api/v2/. See LEADSTACK_INTEGRATION.md for the full spec.
  *
  * If env vars aren't set, both functions throw — callers translate that to
  * a 503 to the client (mirrors the existing pattern in

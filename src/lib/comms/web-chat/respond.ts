@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -190,7 +190,7 @@ export async function respondToWebChat(
       const saSnap = await db.doc(`subAccounts/${input.subAccountId}`).get();
       const subAccount = saSnap.data() as SubAccountDoc | undefined;
       const appUrl =
-        process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://answeranycall.com";
+        process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://leadstack.dev";
       void sendEscalationNotification({
         to: eff.escalationNotifyEmail,
         businessName:

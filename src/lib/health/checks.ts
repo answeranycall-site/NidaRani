@@ -911,26 +911,28 @@ async function checkVapi(): Promise<IntegrationHealth> {
 }
 
 // ---------------------------------------------------------------------------
-// Meta Inbox — Facebook Messenger + Instagram DM unified-inbox channels.
-// Optional + beta. Agency-level Meta app creds; the per-sub-account agency
-// gate (metaInboxEnabledByAgency) + OAuth connect are separate. Without the
-// app creds the whole surface stays inert and invisible.
+// Meta — ONE Facebook/Instagram app powering BOTH the Messenger + IG DM inbox
+// AND the Social Planner (they share one connection / one set of env vars).
+// Optional + beta. Per-sub-account agency gates (metaInboxEnabledByAgency,
+// socialPlannerEnabledByAgency) + OAuth connect are separate. Without the app
+// creds both surfaces stay inert and invisible. There is deliberately no
+// second "Meta Social" check — it would test the identical META_APP_ID/SECRET.
 
 async function checkMeta(): Promise<IntegrationHealth> {
   const appId = process.env.META_APP_ID?.trim();
   const appSecret = process.env.META_APP_SECRET?.trim();
   const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN?.trim();
 
-  // No app creds → not configured on this deployment. The unified-inbox
-  // Meta channels stay invisible, so report cleanly rather than as an error.
+  // No app creds → not configured on this deployment. Both the inbox and the
+  // Social Planner stay invisible, so report cleanly rather than as an error.
   if (!appId || !appSecret) {
     return {
       id: "meta",
-      label: "Meta Inbox (Messenger + Instagram)",
+      label: "Meta (Facebook + Instagram)",
       category: "comms",
       required: false,
       status: "missing",
-      message: rollupMessage("missing", "Meta Inbox"),
+      message: rollupMessage("missing", "Meta"),
       subChecks: [
         {
           label: "META_APP_ID",
@@ -940,7 +942,7 @@ async function checkMeta(): Promise<IntegrationHealth> {
           label: "META_APP_SECRET",
           status: appSecret ? "ok" : "missing",
           detail:
-            "Optional. Both META_APP_ID + META_APP_SECRET are needed to connect a Facebook Page / Instagram account for the unified inbox.",
+            "Optional. Both META_APP_ID + META_APP_SECRET power the unified inbox (Messenger + IG DMs) AND the Social Planner — one connection serves both.",
         },
       ],
     };
@@ -980,23 +982,36 @@ async function checkMeta(): Promise<IntegrationHealth> {
 
   // Verify token gates the inbound webhook GET handshake — without it Meta
   // can't register the webhook, so no inbound messages flow even though
-  // OAuth connect would succeed.
+  // OAuth connect would succeed. INBOX-ONLY — the Social Planner publishes
+  // outbound and doesn't need the webhook, so this is "partial" (degraded),
+  // not a blocker for posting.
   subChecks.push({
     label: "META_WEBHOOK_VERIFY_TOKEN",
     status: verifyToken ? "ok" : "partial",
     detail: verifyToken
       ? "Echoed during the inbound webhook handshake."
-      : "Missing — Meta's webhook verification handshake will fail, so no inbound Messenger/Instagram messages reach the inbox until it's set.",
+      : "Missing — inbound Messenger/Instagram messages won't reach the INBOX until it's set. The Social Planner (outbound posting) is unaffected.",
+  });
+
+  // Informational only — posting permissions can't be verified from env vars.
+  // They're per-connection (granted at OAuth, gated by Meta App Review) and
+  // shown as capability badges on the Settings → Facebook & Instagram card.
+  // Always "skipped" so it never moves the dot.
+  subChecks.push({
+    label: "Social Planner posting",
+    status: "skipped",
+    detail:
+      "Posting (pages_manage_posts + instagram_content_publish) requires Meta App Review and is granted per-connection — verified by the capability badges on the Settings → Facebook & Instagram card, not by this env-level check.",
   });
 
   const status = rollup(subChecks);
   return {
     id: "meta",
-    label: "Meta Inbox (Messenger + Instagram)",
+    label: "Meta (Facebook + Instagram)",
     category: "comms",
     required: false,
     status,
-    message: rollupMessage(status, "Meta Inbox"),
+    message: rollupMessage(status, "Meta"),
     subChecks,
   };
 }

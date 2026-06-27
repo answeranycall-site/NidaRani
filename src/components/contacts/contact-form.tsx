@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useSubAccount } from "@/context/sub-account-context";
 import { TerritorySelectField } from "@/components/settings/territory-select-field";
+import { CustomFieldInputs } from "@/components/custom-fields/custom-field-inputs";
+import { subscribeToCustomFields } from "@/lib/firestore/custom-fields";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
+import type { CustomFieldDef, CustomFieldValue } from "@/types/custom-fields";
 import type { Contact, ContactFormData, ContactSource } from "@/types/contacts";
 
 const SOURCES: { value: ContactSource; label: string }[] = [
@@ -36,7 +40,7 @@ export function ContactForm({
   onSubmit,
   onCancel,
 }: ContactFormProps) {
-  const { subAccount, isAdmin } = useSubAccount();
+  const { subAccountId, subAccount, isAdmin } = useSubAccount();
   const scopingOn = subAccount?.territoryScopingEnabled === true;
   // For existing contacts, only admins may reassign the territory.
   // For new contacts, any caller can pick (the rule is on update).
@@ -53,6 +57,23 @@ export function ContactForm({
   const [territoryId, setTerritoryId] = useState<string | null>(
     initial?.territoryId ?? null,
   );
+
+  const [cfDefs, setCfDefs] = useState<CustomFieldDef[]>([]);
+  const [cfValues, setCfValues] = useState<Record<string, CustomFieldValue>>(
+    (initial?.customFields ?? {}) as Record<string, CustomFieldValue>,
+  );
+
+  // Live custom-field definitions for contacts in this sub-account.
+  useEffect(() => {
+    if (!subAccountId) return;
+    const unsub = subscribeToCustomFields(
+      subAccountId,
+      "contact",
+      setCfDefs,
+      () => {},
+    );
+    return () => unsub();
+  }, [subAccountId]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
@@ -71,6 +92,13 @@ export function ContactForm({
       .map((t) => t.trim())
       .filter(Boolean);
 
+    // Validate + coerce custom-field values against the live definitions.
+    const cf = validateCustomFieldValues(cfValues, cfDefs);
+    if (!cf.ok) {
+      toast.error(cf.error);
+      return;
+    }
+
     setSaving(true);
     try {
       const payload: ContactFormData = {
@@ -81,6 +109,7 @@ export function ContactForm({
         address: address.trim(),
         source,
         tags,
+        customFields: cf.value,
       };
       // Only include territoryId when scoping is on AND (creating OR
       // admin editing). Rules also enforce this server-side.
@@ -204,6 +233,21 @@ export function ContactForm({
         disabled={!canEditTerritory}
         autoDefaultFromAssigned={!isEdit}
       />
+
+      {/* Operator-defined custom fields (renders nothing when none defined). */}
+      {cfDefs.length > 0 && (
+        <div className="space-y-4 border-t pt-4">
+          <p className="text-xs font-medium text-muted-foreground">
+            Custom fields
+          </p>
+          <CustomFieldInputs
+            idPrefix="c-cf"
+            defs={cfDefs}
+            values={cfValues}
+            onChange={setCfValues}
+          />
+        </div>
+      )}
 
       <div className="flex items-center justify-end gap-2 pt-2">
         {onCancel && (

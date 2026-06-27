@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   useCallback,
@@ -48,7 +48,7 @@ type LocalMessage = {
 };
 
 function sessionStorageKey(saId: string): string {
-  return `Answer Any Call:webchat:session:${saId}`;
+  return `leadstack:webchat:session:${saId}`;
 }
 
 /** Generates a 22-char URL-safe random string. Server's session-id regex
@@ -76,7 +76,7 @@ function ensureSessionId(saId: string): string {
 function postToParent(message: Record<string, unknown>): void {
   if (typeof window === "undefined") return;
   if (window.parent === window) return;
-  window.parent.postMessage({ source: "Answer Any Call-webchat", ...message }, "*");
+  window.parent.postMessage({ source: "leadstack-webchat", ...message }, "*");
 }
 
 export function ChatWindow(props: ChatWindowProps) {

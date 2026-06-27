@@ -1,11 +1,11 @@
-﻿/**
- * Answer Any Call logo mark — the "Chevron Stack" variant.
+/**
+ * LeadStack logo mark — the "Chevron Stack" variant.
  *
  * Three offset chevron-tipped bars alternating direction. Top points left,
  * middle right, bottom left — chevron tips trace the directional flow of an S
  * while alternating alignment gives the stacked-cards reading.
  *
- * Use `<LogoMark size={20} />` next to the "Answer Any Call" wordmark, or alone as
+ * Use `<LogoMark size={20} />` next to the "LeadStack" wordmark, or alone as
  * a brand glyph.
  */
 

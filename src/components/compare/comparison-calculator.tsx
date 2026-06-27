@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,19 +27,19 @@ import { cn } from "@/lib/utils";
 const GHL_BASE_MONTHLY = 297;
 const GHL_AI_PER_SUB_MONTHLY = 97;
 const GHL_PREMIUM_SUPPORT_MONTHLY = 500;
-// Standard retail price for Answer Any Call. The landing-page calculator anchors
+// Standard retail price for LeadStack. The landing-page calculator anchors
 // on the founders-cohort price ($891) because that's the offer in market on
 // the homepage; the comparison page is generic evaluation traffic and uses
 // the published list price so the savings claim doesn't depend on the
 // founders cohort still being open.
-const AAC_PRICE = 1782;
+const LEADSTACK_PRICE = 891;
 
 const SUB_ACCOUNTS_MIN = 1;
 const SUB_ACCOUNTS_MAX = 20;
 // Defaults represent a realistic established-agency scenario — 11 clients,
 // AI Employee on every sub-account, Premium Support on. At these inputs the
 // monthly GHL bill is $1,864 (= $297 + 11×$97 + $500), which crosses the
-// $1,782 Answer Any Call license threshold so the payback line opens at "1 month".
+// $891 LeadStack license threshold so the payback line opens at "1 month".
 // Anything lighter (fewer sub-accounts, AI off, Premium off) shows 2–4
 // months instead — visitors can slide down to see their own scenario.
 const SUB_ACCOUNTS_DEFAULT = 11;
@@ -61,15 +61,15 @@ export function ComparisonCalculator() {
   const monthlyGhl = GHL_BASE_MONTHLY + aiMonthlyCost + supportMonthlyCost;
   const yearlyGhl = monthlyGhl * 12;
 
-  const yearlyAAC = AAC_PRICE;
-  const year1Savings = yearlyGhl - yearlyAAC;
-  // Year 2 + Year 3 savings = the full GHL yearly bill (Answer Any Call is $0
+  const yearlyLeadstack = LEADSTACK_PRICE;
+  const year1Savings = yearlyGhl - yearlyLeadstack;
+  // Year 2 + Year 3 savings = the full GHL yearly bill (LeadStack is $0
   // recurring from here), so savings get bigger every year after Year 1.
   const ongoingYearSavings = yearlyGhl;
   const threeYearSavings = year1Savings + ongoingYearSavings * 2;
   const paybackMonths = Math.max(
     1,
-    Math.ceil(AAC_PRICE / monthlyGhl),
+    Math.ceil(LEADSTACK_PRICE / monthlyGhl),
   );
 
   return (
@@ -180,11 +180,11 @@ export function ComparisonCalculator() {
             />
           </CostCard>
 
-          {/* Answer Any Call — same 8 content rows + 1 title row = 9 children */}
-          <CostCard variant="aac" title="Answer Any Call">
+          {/* LeadStack — same 8 content rows + 1 title row = 9 children */}
+          <CostCard variant="leadstack" title="LeadStack">
             <Line
               label="License (one-time)"
-              value={`$${AAC_PRICE.toLocaleString()}`}
+              value={`$${LEADSTACK_PRICE.toLocaleString()}`}
             />
             <Line
               label="Per-client AI add-on"
@@ -200,7 +200,7 @@ export function ComparisonCalculator() {
             <Line label="Monthly" value="$0/mo" strong />
             <Line
               label="Year 1 total"
-              value={`$${yearlyAAC.toLocaleString()}`}
+              value={`$${yearlyLeadstack.toLocaleString()}`}
               big
               gradient
             />
@@ -349,7 +349,7 @@ function CostCard({
   title,
   children,
 }: {
-  variant: "ghl" | "aac";
+  variant: "ghl" | "leadstack";
   title: string;
   children: React.ReactNode;
 }) {

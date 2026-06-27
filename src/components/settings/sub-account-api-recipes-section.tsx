@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { toast } from "sonner";
@@ -51,7 +51,7 @@ const RECIPES: Recipe[] = [
   {
     id: "meta-ads",
     title: "Capture Meta / Google ad leads",
-    subtitle: "Send every Facebook / Google Lead Ads submission into Answer Any Call.",
+    subtitle: "Send every Facebook / Google Lead Ads submission into LeadStack.",
     icon: Megaphone,
     duration: "~3 min in Zapier",
     presetName: "Zapier · Meta Lead Ads",
@@ -431,7 +431,7 @@ function WebsiteFormGuide({
           new contact should appear in your Contacts list within seconds,
           with <Code>source: website-form</Code> on it. Any automation
           attached to the form (Speed-to-Lead, etc.) fires the same way as
-          a submission from a Answer Any Call-hosted form.
+          a submission from a LeadStack-hosted form.
         </p>
       </Step>
     </div>
@@ -467,7 +467,7 @@ function SlackAlertGuide() {
           </li>
           <li>
             Zapier shows you a <strong>Custom Webhook URL</strong> — copy
-            it. You&apos;ll paste it into Answer Any Call in step 3.
+            it. You&apos;ll paste it into LeadStack in step 3.
           </li>
           <li>
             For the <strong>Action</strong>, pick <strong>Slack</strong> →{" "}
@@ -501,7 +501,7 @@ function SlackAlertGuide() {
         </p>
       </Step>
 
-      <Step n={3} title="Add the webhook in Answer Any Call">
+      <Step n={3} title="Add the webhook in LeadStack">
         <ol className="ml-4 list-decimal space-y-1.5">
           <li>
             Scroll to the <strong>Webhooks</strong> section on this page.
@@ -521,7 +521,7 @@ function SlackAlertGuide() {
 
       <Step n={4} title="Test the end-to-end">
         <p>
-          In Answer Any Call, create a test contact (Contacts → + New). The Zap
+          In LeadStack, create a test contact (Contacts → + New). The Zap
           should fire within seconds, and the Slack channel should show
           the message. If nothing appears: open Zapier&apos;s{" "}
           <strong>Zap History</strong> to see whether the webhook arrived
@@ -532,7 +532,7 @@ function SlackAlertGuide() {
       <Step n={5} title="Power-user note">
         <p className="text-[11px] text-muted-foreground">
           Want to skip Zapier and post directly to Slack? Slack accepts a
-          specific JSON shape that Answer Any Call doesn&apos;t emit verbatim. You
+          specific JSON shape that LeadStack doesn&apos;t emit verbatim. You
           can put a small serverless function (Vercel, Cloudflare Worker)
           in between to transform — but for most agencies, the Zapier
           bridge is faster to set up + easier to modify.

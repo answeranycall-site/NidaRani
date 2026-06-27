@@ -1,11 +1,11 @@
-﻿import "server-only";
+import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 
 /**
- * Liveness ping to gitpage so the upstream team knows this Answer Any Call
+ * Liveness ping to gitpage so the upstream team knows this LeadStack
  * deployment is alive, plus retrieves whether the agency owner has an
  * active gitpage Agency subscription. The response is cached in
  * `system/gitpageStatus` so the website-builder UI can render
@@ -20,7 +20,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
  *   - /api/cron/gitpage-heartbeat — daily scheduled callback
  */
 
-const HEARTBEAT_URL_PATH = "/api/v1/Answer Any Call/heartbeat";
+const HEARTBEAT_URL_PATH = "/api/v1/leadstack/heartbeat";
 const APP_VERSION = "0.1.0";
 const HEARTBEAT_TIMEOUT_MS = 5000;
 
@@ -62,7 +62,7 @@ function detectPlatform(): string {
 /**
  * Resolve a stable instanceId persisted in Firestore at `system/heartbeat`.
  * Generated once on first heartbeat and reused thereafter so gitpage's
- * `Answer Any Call_instances` collection treats this deployment as one row.
+ * `leadstack_instances` collection treats this deployment as one row.
  */
 async function getOrCreateInstanceId(): Promise<{
   id: string;

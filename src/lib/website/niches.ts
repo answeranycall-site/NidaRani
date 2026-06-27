@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ColorScheme,
   Niche,
   WebsiteConfig,
@@ -20,7 +20,7 @@ import {
  *
  * The label and description are operator-facing copy. The default
  * colorScheme reflects gitpage's "natural surface" recommendation per
- * §4.1 of Answer Any Call_NICHE_TEMPLATES.md — always allow override.
+ * §4.1 of LEADSTACK_NICHE_TEMPLATES.md — always allow override.
  *
  * Forced page set is the same for every niche (per §2.2): index, services,
  * contact, privacy, terms. Blog is not allowed.

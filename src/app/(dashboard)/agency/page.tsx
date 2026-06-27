@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
@@ -111,7 +111,7 @@ function AgencyHomeContent() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {isOwner && LANDING_VARIANT === "Answer Any Call" && (
+          {isOwner && LANDING_VARIANT === "leadstack" && (
             <>
               <Button
                 variant="outline"

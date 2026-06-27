@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -332,7 +332,7 @@ export async function maybeRespondWithAi(
   if (triggered) {
     if (eff.escalationNotifyEmail) {
       const appUrl =
-        process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://answeranycall.com";
+        process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://leadstack.dev";
       await sendEscalationNotification({
         to: eff.escalationNotifyEmail,
         businessName:

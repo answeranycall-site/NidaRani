@@ -18,13 +18,13 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import {
-  PIPELINE_STAGES,
   type Deal,
   type PipelineStage,
   type PipelineStageId,
 } from "@/types/deals";
 import type { Contact } from "@/types/contacts";
 import { GLOBAL_TERRITORY_ID, type TerritoryDoc } from "@/types";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { DealCard } from "@/components/pipeline/deal-card";
 import { EditDealDialog } from "@/components/pipeline/edit-deal-dialog";
 import { LostReasonDialog } from "@/components/pipeline/lost-reason-dialog";
@@ -86,16 +86,20 @@ export function PipelineBoard({
     return map;
   }, [territories]);
 
+  // Configured stages (label/order overrides applied; ids + terminals
+  // unchanged). Falls back to the canonical stages when none are set.
+  const stages = usePipelineStages();
+
   const dealsByStage = useMemo(() => {
     const grouped = new Map<PipelineStageId, Deal[]>();
-    for (const s of PIPELINE_STAGES) grouped.set(s.id, []);
+    for (const s of stages) grouped.set(s.id, []);
     for (const d of deals) {
       const stage = grouped.get(d.stageId as PipelineStageId);
       if (stage) stage.push(d);
-      else grouped.get("new")!.push(d);
+      else grouped.get("new")?.push(d);
     }
     return grouped;
-  }, [deals]);
+  }, [deals, stages]);
 
   const [activeDeal, setActiveDeal] = useState<Deal | null>(null);
   const [pendingLost, setPendingLost] = useState<Deal | null>(null);
@@ -119,7 +123,7 @@ export function PipelineBoard({
     const deal = deals.find((d) => d.id === e.active.id);
     if (!deal) return;
     const nextStageId = String(overId) as PipelineStageId;
-    if (!PIPELINE_STAGES.some((s) => s.id === nextStageId)) return;
+    if (!stages.some((s) => s.id === nextStageId)) return;
     if (nextStageId === deal.stageId) return;
 
     if (nextStageId === "lost") {
@@ -129,7 +133,7 @@ export function PipelineBoard({
 
     try {
       await patchDealStage(deal.id, nextStageId);
-      const label = PIPELINE_STAGES.find((s) => s.id === nextStageId)?.label;
+      const label = stages.find((s) => s.id === nextStageId)?.label;
       toast.success(`Moved to ${label}`);
     } catch (err) {
       console.error(err);
@@ -141,7 +145,9 @@ export function PipelineBoard({
     if (!pendingLost) return;
     try {
       await patchDealStage(pendingLost.id, "lost", reason);
-      toast.success("Moved to Lost");
+      toast.success(
+        `Moved to ${stages.find((s) => s.id === "lost")?.label ?? "Lost"}`,
+      );
     } catch (err) {
       console.error(err);
       toast.error("Couldn't move deal. Try again.");
@@ -160,7 +166,7 @@ export function PipelineBoard({
         onDragCancel={() => setActiveDeal(null)}
       >
         <div className="flex gap-3 overflow-x-auto pb-2">
-          {PIPELINE_STAGES.map((stage) => (
+          {stages.map((stage) => (
             <Column
               key={stage.id}
               stage={stage}

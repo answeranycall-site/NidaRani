@@ -4,10 +4,6 @@ import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth, type Auth } from "firebase-admin/auth";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 
-function stripBom(s: string): string {
-  return s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s;
-}
-
 let _app: App | null = null;
 
 function getAdminApp(): App {
@@ -17,10 +13,11 @@ function getAdminApp(): App {
     } else {
       _app = initializeApp({
         credential: cert({
-          projectId: stripBom(process.env.FIREBASE_ADMIN_PROJECT_ID ?? ""),
-          clientEmail: stripBom(process.env.FIREBASE_ADMIN_CLIENT_EMAIL ?? ""),
-          privateKey: stripBom(
-            (process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "").replace(/\\n/g, "\n")
+          projectId: process.env.FIREBASE_ADMIN_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(
+            /\\n/g,
+            "\n"
           ),
         }),
       });

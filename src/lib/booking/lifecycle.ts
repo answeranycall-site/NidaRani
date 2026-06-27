@@ -3,7 +3,7 @@ import "server-only";
 import { FieldValue, type Timestamp } from "firebase-admin/firestore";
 
 import { getAdminDb } from "@/lib/firebase/admin";
-import { fireTriggers } from "@/lib/automations/triggers";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { publishCallback, qstashIsConfigured } from "@/lib/automations/qstash";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import type { ActivityType } from "@/types/contacts";
@@ -103,13 +103,15 @@ export async function fireBookingTrigger(
   trigger: Extract<AutomationTriggerType, `event_${string}`>,
 ): Promise<void> {
   if (!event.contactId) return;
-  await fireTriggers({
-    agencyId: event.agencyId,
-    subAccountId: event.subAccountId,
-    triggerType: trigger,
-    contactId: event.contactId,
-    context: {},
-  });
+  // Workflow Builder: only new bookings are a v1 trigger.
+  if (trigger === "event_booked") {
+    void fireWorkflowTrigger({
+      agencyId: event.agencyId,
+      subAccountId: event.subAccountId,
+      type: "booking.created",
+      contactId: event.contactId,
+    });
+  }
 }
 
 /** Booking lifecycle events that have a matching outbound webhook type. */

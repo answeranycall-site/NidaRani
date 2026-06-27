@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import type { Affiliate } from "@/types/affiliate";
 
@@ -7,10 +7,10 @@ interface EnsureAccountInput {
   displayName?: string | null;
 }
 
-// Stub — the real affiliate-account logic is Answer Any Call-marketing-specific.
+// Stub — the real affiliate-account logic is LeadStack-marketing-specific.
 // All three exports are typed no-ops so `webhooks.ts` still type-checks;
 // the affiliate branch of the webhook is gated on
-// LANDING_VARIANT === "Answer Any Call", which the buyer never sets, so these
+// LANDING_VARIANT === "leadstack", which the buyer never sets, so these
 // are never called at runtime.
 
 const STUB_AFFILIATE: Affiliate = {

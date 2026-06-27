@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Multi-event ICS feed generator — the operator's "calendar subscription"
  * surface. Powers GET /api/sub-accounts/{id}/calendar.ics so external
  * calendar clients (Google, Apple, Outlook) can pull the sub-account's
@@ -80,7 +80,7 @@ export function generateIcsFeed(input: FeedInput): string {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    `PRODID:-//Answer Any Call//Calendar Feed//${input.domain}//EN`,
+    `PRODID:-//LeadStack//Calendar Feed//${input.domain}//EN`,
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${escapeIcsText(input.calendarName)}`,

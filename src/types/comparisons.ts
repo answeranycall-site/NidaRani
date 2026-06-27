@@ -1,5 +1,5 @@
-﻿/**
- * Public-page competitor comparison data shape. Each /Answer Any Call-vs-{slug}
+/**
+ * Public-page competitor comparison data shape. Each /leadstack-vs-{slug}
  * page is rendered from one of these objects so the route, components,
  * and JSON-LD schema all consume a single typed source.
  *
@@ -10,7 +10,7 @@
  * The route + sitemap pick it up automatically via generateStaticParams.
  */
 export type Comparison = {
-  /** URL slug — becomes /Answer Any Call-vs-{slug}. Lowercase, hyphenated. */
+  /** URL slug — becomes /leadstack-vs-{slug}. Lowercase, hyphenated. */
   slug: string;
   /** Display name of the competitor (e.g. "GoHighLevel", "HubSpot"). */
   competitorName: string;
@@ -42,7 +42,7 @@ export type Comparison = {
       body: string;
     }>;
   };
-  /** 4-block advantage grid — what Answer Any Call does differently. */
+  /** 4-block advantage grid — what LeadStack does differently. */
   advantages: Array<{
     title: string;
     body: string;

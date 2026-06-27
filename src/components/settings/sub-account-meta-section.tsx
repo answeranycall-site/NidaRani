@@ -6,11 +6,14 @@ import {
   AlertTriangle,
   CheckCircle2,
   Copy,
+  HelpCircle,
   Instagram,
   Loader2,
   MessagesSquare,
+  XCircle,
 } from "lucide-react";
 import { useSubAccount } from "@/context/sub-account-context";
+import { metaCanInbox, metaCanPublish } from "@/lib/comms/meta-capabilities";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -52,7 +55,9 @@ const STATUS_MESSAGES: Record<
 
 export function SubAccountMetaSection() {
   const { subAccountId, subAccount, isAdmin } = useSubAccount();
-  const gateOn = subAccount?.metaInboxEnabledByAgency === true;
+  const inboxOn = subAccount?.metaInboxEnabledByAgency === true;
+  const socialOn = subAccount?.socialPlannerEnabledByAgency === true;
+  const gateOn = inboxOn || socialOn;
   const cfg = subAccount?.metaConfig ?? null;
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -85,16 +90,22 @@ export function SubAccountMetaSection() {
     return `${base}/api/webhooks/meta`;
   }, []);
 
+  // ONE redirect URI for the whole deployment — registered once in the Meta
+  // app, never per sub-account. The connecting sub-account travels in the
+  // signed OAuth `state`. Must mirror metaRedirectUri() on the server.
   const redirectUri = useMemo(() => {
     const base =
       typeof window !== "undefined"
         ? window.location.origin
         : (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "");
-    return `${base}/api/sub-accounts/${subAccountId}/meta/callback`;
-  }, [subAccountId]);
+    return `${base}/api/meta/callback`;
+  }, []);
 
-  // Gate: invisible unless admin + agency-enabled.
+  // Gate: invisible unless admin + at least one Meta feature enabled.
   if (!isAdmin || !gateOn) return null;
+
+  const canInbox = metaCanInbox(cfg);
+  const canPublish = metaCanPublish(cfg);
 
   function handleConnect() {
     // Full-page nav so the OAuth redirect chain works.
@@ -104,7 +115,7 @@ export function SubAccountMetaSection() {
   async function handleDisconnect() {
     if (
       !confirm(
-        "Disconnect Facebook + Instagram for this sub-account? Messenger and IG DMs will stop landing in the inbox. Message history is kept; you can reconnect anytime.",
+        "Disconnect Facebook + Instagram for this sub-account? This removes the shared connection — Messenger/IG DMs stop landing in the inbox AND the Social Planner can no longer publish. Message history + scheduled posts are kept; you can reconnect anytime.",
       )
     ) {
       return;
@@ -144,15 +155,18 @@ export function SubAccountMetaSection() {
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold">Facebook + Instagram inbox</h2>
+            <h2 className="text-base font-semibold">Facebook &amp; Instagram</h2>
             <span className="rounded-full bg-pink-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-pink-600 dark:text-pink-400">
               Beta
             </span>
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            Connect a Facebook Page (and its linked Instagram business account)
-            so Messenger and IG DMs land in the unified inbox alongside SMS and
-            WhatsApp. One connection powers both channels.
+            One connection for everything Meta on this sub-account. Connect a
+            Facebook Page (and its linked Instagram business account) to power
+            {inboxOn && " the unified inbox (Messenger + IG DMs)"}
+            {inboxOn && socialOn && " and"}
+            {socialOn && " the Social Planner (scheduled posts)"}. This is the
+            single place to connect, reconnect, or disconnect.
           </p>
         </div>
       </header>
@@ -175,26 +189,58 @@ export function SubAccountMetaSection() {
                 </p>
               )}
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={disconnecting}
-              onClick={handleDisconnect}
-            >
-              {disconnecting ? (
-                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-              ) : null}
-              Disconnect
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleConnect}
+                title="Re-authorise (refreshes the token + permissions)"
+              >
+                Reconnect
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={disconnecting}
+                onClick={handleDisconnect}
+              >
+                {disconnecting ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Disconnect
+              </Button>
+            </div>
           </div>
+
+          {/* Capability badges — what THIS token can actually do, per feature
+              gate. Prevents a connection made for one feature from looking
+              ready for the other. */}
+          <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+            {inboxOn && <CapabilityBadge label="Inbox" ok={canInbox} />}
+            {socialOn && <CapabilityBadge label="Posting" ok={canPublish} />}
+          </div>
+          {socialOn && !canPublish && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>
+                Posting permission isn&apos;t granted on this connection. Click
+                Reconnect and approve posting access so the Social Planner can
+                publish.
+              </span>
+            </p>
+          )}
         </div>
       ) : (
         <div className="rounded-lg border bg-background p-4">
           <p className="text-sm font-medium">Not connected</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Connect your Facebook Page to start receiving Messenger + Instagram
-            messages here. You&apos;ll be sent to Facebook to authorise access.
+            Connect your Facebook Page to enable
+            {inboxOn && " the inbox"}
+            {inboxOn && socialOn && " and"}
+            {socialOn && " Social Planner posting"}. You&apos;ll be sent to
+            Facebook to authorise access.
           </p>
           <div className="mt-3">
             <Button type="button" size="sm" onClick={handleConnect}>
@@ -209,8 +255,10 @@ export function SubAccountMetaSection() {
         <p className="font-medium text-foreground">Meta app setup (one-time)</p>
         <p className="mt-1">
           The agency registers these in the Meta app (Webhooks + Facebook Login
-          → Valid OAuth redirect URIs). Beta access also requires Meta App
-          Review for messaging permissions.
+          → Valid OAuth redirect URIs) <strong>once for the whole deployment</strong>
+          — they&apos;re the same for every sub-account, so new clients connect with
+          no extra Meta setup. Beta access also requires Meta App Review for
+          messaging permissions.
         </p>
         <div className="mt-2 space-y-2">
           <div>
@@ -255,11 +303,127 @@ export function SubAccountMetaSection() {
         <p className="mt-2 flex items-start gap-1.5">
           <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
           <span>
-            Beta — inbound messages appear in the inbox; replying from
-            Messenger/Instagram is coming in a follow-up update.
+            Beta — Meta App Review is required for messaging permissions
+            (inbox){socialOn && " and posting permissions (Social Planner)"}.
+            Until approved, only app admins/testers can connect.
           </span>
         </p>
+
+        <details className="mt-3 rounded-md border bg-background/60 p-3">
+          <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-foreground">
+            <HelpCircle className="h-3.5 w-3.5" />
+            Testing in Development mode &amp; troubleshooting
+          </summary>
+
+          <div className="mt-3 space-y-3 text-[11px] leading-relaxed">
+            <div>
+              <p className="font-medium text-foreground">
+                Why a message might not send
+              </p>
+              <p className="mt-1">
+                Meta enforces two separate gates. (1) <strong>App mode:</strong>{" "}
+                in <em>Development</em> mode the messaging permissions work
+                without App Review, but <strong>only for people who have a role
+                on your Meta app</strong> (Admin / Developer / Tester). (2){" "}
+                <strong>Permission level:</strong>{" "}
+                <code className="rounded bg-muted px-1">pages_messaging</code>{" "}
+                and{" "}
+                <code className="rounded bg-muted px-1">
+                  instagram_manage_messages
+                </code>{" "}
+                only reach the general public after <strong>App Review</strong>.
+                This is a Meta restriction — it can&apos;t be bypassed in the app.
+              </p>
+            </div>
+
+            <div>
+              <p className="font-medium text-foreground">
+                Checklist to test outbound (esp. Instagram) in Dev mode
+              </p>
+              <ul className="mt-1 list-disc space-y-1 pl-4">
+                <li>
+                  The Instagram account is a <strong>Professional</strong>{" "}
+                  (Business or Creator) account <strong>linked to the connected
+                  Facebook Page</strong>.
+                </li>
+                <li>
+                  In the Instagram app: Settings → Messages → turn on{" "}
+                  <strong>&ldquo;Allow access to messages&rdquo;</strong>{" "}
+                  (Connected Tools). Outbound IG silently fails if this is off.
+                </li>
+                <li>
+                  The person connecting is an{" "}
+                  <strong>Admin / Developer / Tester</strong> on the Meta app and
+                  has <strong>accepted</strong> the invite.
+                </li>
+                <li>
+                  The user you&apos;re messaging is <strong>also a Tester</strong>{" "}
+                  on the app — in Dev mode you can&apos;t message arbitrary users.
+                  Tip: DM the business from a second IG account that&apos;s also a
+                  Tester, then reply from here.
+                </li>
+                <li>
+                  You&apos;re inside Meta&apos;s <strong>24-hour window</strong>{" "}
+                  (they messaged you first).
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <p className="font-medium text-foreground">
+                What the errors mean
+              </p>
+              <ul className="mt-1 space-y-1">
+                <li>
+                  <strong>&ldquo;not authorized yet&rdquo; (codes 10 / 200):</strong>{" "}
+                  permission not granted, or the account isn&apos;t a Tester —
+                  add them as a Tester, or complete App Review to go live.
+                </li>
+                <li>
+                  <strong>&ldquo;couldn&apos;t deliver&rdquo; (code 100):</strong>{" "}
+                  recipient isn&apos;t a Tester, is outside the 24-hour window, or
+                  (IG) hasn&apos;t enabled &ldquo;Allow access to messages&rdquo;.
+                </li>
+                <li>
+                  <strong>&ldquo;window closed&rdquo;:</strong> 24 hours have
+                  passed since their last message — re-opening needs a message
+                  tag (a later release).
+                </li>
+                <li>
+                  <strong>&ldquo;connection expired&rdquo; (code 190):</strong>{" "}
+                  reconnect the Page above.
+                </li>
+              </ul>
+            </div>
+
+            <p className="text-muted-foreground">
+              The permanent fix for production is <strong>Meta App Review</strong>{" "}
+              for the messaging permissions — start it early, approval can take
+              days to weeks.
+            </p>
+          </div>
+        </details>
       </div>
     </section>
+  );
+}
+
+function CapabilityBadge({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${
+        ok
+          ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+          : "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+      }`}
+    >
+      {ok ? (
+        <CheckCircle2 className="h-3 w-3" />
+      ) : (
+        <XCircle className="h-3 w-3" />
+      )}
+      {label}
+      {ok ? " enabled" : " not granted"}
+    </span>
   );
 }

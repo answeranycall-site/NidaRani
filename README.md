@@ -212,7 +212,7 @@ All collections are **tenancy-scoped** via `firestore.rules`. Every CRM doc carr
 |---|---|
 | `agencies/{id}` + `/agencyMembers/{uid}` | Agency profile, billing, owner/staff list |
 | `subAccounts/{id}` + `/subAccountMembers/{uid}` | Workspace metadata, send-window, Twilio config, per-SA membership rows |
-| `subAccounts/{id}/website/main` | Singleton gitpage.site build config + status |
+| `subAccounts/{id}/website/{siteId}` | gitpage.site build config + status — up to 5 per sub-account (legacy `main` is one slot) |
 | `userMemberships/{uid}/subAccounts/{saId}` | Denormalized index for the sub-account switcher |
 | `users/{uid}` | Slim profile (display name, photo, primary agency) |
 | `appConfig/main` | Bootstrap singleton (first agency owner) |

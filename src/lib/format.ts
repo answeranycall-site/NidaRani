@@ -1,9 +1,9 @@
-﻿import type { Timestamp, FieldValue } from "firebase/firestore";
+import type { Timestamp, FieldValue } from "firebase/firestore";
 
 /**
  * Replace local-part + domain-name with bullets, keep the @ and TLD so
  * the field still reads as "an email" during demos / screenshares.
- *   admin@Answer Any Call.com  ->  a••••@l•••••••.com
+ *   admin@leadstack.com  ->  a••••@l•••••••.com
  *
  * Pure presentation — caller decides when to swap to the real value
  * (typically via a Show/Hide toggle).

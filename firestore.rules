@@ -119,6 +119,22 @@ service cloud.firestore {
       allow read: if true;
       allow write: if false;
     }
+    // /appConfig/exitIntentModal — exit-intent discount offer (coupon code,
+    // amount, scarcity) read by the unauthenticated landing page. Edited by
+    // the agency owner via /api/agency/exit-intent-config (Admin SDK, bypasses
+    // these rules); clients only read.
+    match /appConfig/exitIntentModal {
+      allow read: if true;
+      allow write: if false;
+    }
+    // /appConfig/updatesModal — "what's new" updates popup (heading, delay,
+    // list of recent updates) read by the unauthenticated landing page. Edited
+    // by the agency owner via /api/agency/updates-modal-config (Admin SDK,
+    // bypasses these rules); clients only read.
+    match /appConfig/updatesModal {
+      allow read: if true;
+      allow write: if false;
+    }
     // /appConfig/main — singleton written by /api/auth/signup once on the
     // first signup. Active members read it to know which agency was minted.
     match /appConfig/{docId} {
@@ -149,6 +165,18 @@ service cloud.firestore {
       match /agencyMembers/{uid} {
         // Read peers' membership rows so /agency/members can render.
         allow read: if inAgency(agencyId);
+        allow write: if false;
+      }
+
+      // Snapshots — reusable config templates (forms, message templates,
+      // products, workflows) captured from one sub-account and applied to
+      // another within the same agency. Agency-owner read so the Snapshots
+      // panel can list them; ALL writes go through the Admin-SDK routes
+      // (/api/agency/snapshots for capture/list,
+      // /api/agency/sub-accounts/[id]/apply-snapshot for apply) which own
+      // the strip-on-capture + sanitize-on-apply logic.
+      match /snapshots/{snapshotId} {
+        allow read: if isAgencyOwner(agencyId);
         allow write: if false;
       }
     }
@@ -302,6 +330,71 @@ service cloud.firestore {
           get(/databases/$(database)/documents/subAccounts/$(subAccountId)).data.agencyId
         );
         allow write: if false;
+      }
+
+      // Community + Courses (Skool-style). Groups and all their nested data
+      // (memberships, posts, courses) are member-readable so the dashboard
+      // roster + builder can hydrate; ALL writes go through the Admin-SDK
+      // routes (/api/sub-accounts/[id]/community/* for staff,
+      // /api/community/* for members) so we enforce the agency gate, slug
+      // uniqueness, and access rules. The public /c/ pages fetch server-side
+      // via the Admin SDK (rules bypass). Community members are NOT Firebase
+      // Auth users, so they never read through the client SDK at all — only
+      // staff do, hence the canAccessSub scoping.
+      match /communityGroups/{groupId} {
+        allow read: if canAccessSub(
+          subAccountId,
+          get(/databases/$(database)/documents/subAccounts/$(subAccountId)).data.agencyId
+        );
+        allow write: if false;
+        match /{document=**} {
+          allow read: if canAccessSub(
+            subAccountId,
+            get(/databases/$(database)/documents/subAccounts/$(subAccountId)).data.agencyId
+          );
+          allow write: if false;
+        }
+      }
+
+      // Community member identities (the login record; one per email per
+      // sub-account). Staff-readable for the roster; server-only writes.
+      match /members/{memberId} {
+        allow read: if canAccessSub(
+          subAccountId,
+          get(/databases/$(database)/documents/subAccounts/$(subAccountId)).data.agencyId
+        );
+        allow write: if false;
+      }
+
+      // Member direct messages + block records. Fully server-only: members are
+      // not Firebase users and never read these via the client SDK — all DM
+      // reads/writes go through the Admin-SDK routes (/api/community/[saId]/dm/*).
+      match /dmThreads/{threadId} {
+        allow read, write: if false;
+        match /{document=**} {
+          allow read, write: if false;
+        }
+      }
+      match /dmBlocks/{blockId} {
+        allow read, write: if false;
+      }
+
+      // Custom-field definitions (contacts + deals). Member-readable so forms
+      // can render them; all writes go through the Admin-SDK routes at
+      // /api/sub-accounts/[id]/custom-fields, so the client write path stays
+      // closed (mirrors bookingPages + products).
+      match /customFields/{fieldId} {
+        allow read: if canAccessSub(
+          subAccountId,
+          get(/databases/$(database)/documents/subAccounts/$(subAccountId)).data.agencyId
+        );
+        allow write: if false;
+      }
+
+      // Import id-mappings (source-system id ↔ LeadStack id). Internal only —
+      // written + read by the admin-SDK import routes; no client access.
+      match /importMappings/{refId} {
+        allow read, write: if false;
       }
 
       // Public API keys (Bearer tokens for /api/v1/*). Server-only on every
@@ -678,6 +771,38 @@ service cloud.firestore {
     // routes which bypass rules, so client write paths can stay closed
     // (defense in depth — the API is the only sanctioned create path).
     match /products/{productId} {
+      allow read: if canAccessSub(
+        resource.data.subAccountId,
+        resource.data.agencyId
+      );
+      allow write: if false;
+    }
+
+    // Social Planner posts. Reads from the browser (subscribeToSocialPosts
+    // drives the content calendar); all writes go through admin-SDK API
+    // routes (create/schedule/publish/delete), so client writes stay closed.
+    match /socialPosts/{postId} {
+      allow read: if canAccessSub(
+        resource.data.subAccountId,
+        resource.data.agencyId
+      );
+      allow write: if false;
+    }
+
+    // Workflow Builder definitions + runs. Fully server-only: the builder,
+    // list, and run-log surfaces all read/write through the member-gated
+    // Admin-SDK routes (/api/sub-accounts/[id]/workflows/** + the QStash step
+    // worker) — nothing reads these via the client SDK.
+    match /workflows/{workflowId} {
+      allow read, write: if false;
+    }
+    match /workflowRuns/{runId} {
+      allow read, write: if false;
+    }
+
+    // Import jobs (bulk migration ingest). Members can read to watch progress
+    // + see the run summary; all writes go through the admin-SDK import routes.
+    match /importJobs/{jobId} {
       allow read: if canAccessSub(
         resource.data.subAccountId,
         resource.data.agencyId

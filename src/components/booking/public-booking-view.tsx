@@ -98,6 +98,7 @@ export function PublicBookingView({ subAccountId, page, branding }: Props) {
     status: "scheduled" | "awaiting_payment";
     paymentUrl: string | null;
     confirmationMessage: string | null;
+    redirectUrl: string | null;
   } | null>(null);
 
   // Detect the visitor's timezone after hydration. The server renders
@@ -387,6 +388,7 @@ function IntakeFormSection({
     status: "scheduled" | "awaiting_payment";
     paymentUrl: string | null;
     confirmationMessage: string | null;
+    redirectUrl: string | null;
   }) => void;
 }) {
   const [name, setName] = useState("");
@@ -435,6 +437,7 @@ function IntakeFormSection({
         status?: "scheduled" | "awaiting_payment";
         paymentUrl?: string | null;
         confirmationMessage?: string | null;
+        redirectUrl?: string | null;
       };
       if (!res.ok || !data.ok) {
         throw new Error(data.error ?? "Booking failed. Please try again.");
@@ -443,6 +446,7 @@ function IntakeFormSection({
         status: data.status ?? "scheduled",
         paymentUrl: data.paymentUrl ?? null,
         confirmationMessage: data.confirmationMessage ?? null,
+        redirectUrl: data.redirectUrl ?? null,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Booking failed.");
@@ -554,6 +558,11 @@ function IntakeFormSection({
   );
 }
 
+// Seconds the confirmation panel stays visible before an auto-redirect
+// fires — long enough for the booking to visibly succeed + any pixel on
+// this page to fire, short enough to feel like a hand-off.
+const REDIRECT_COUNTDOWN_SECONDS = 3;
+
 function ConfirmationPanel({
   confirmation,
   page,
@@ -562,10 +571,36 @@ function ConfirmationPanel({
     status: "scheduled" | "awaiting_payment";
     paymentUrl: string | null;
     confirmationMessage: string | null;
+    redirectUrl: string | null;
   };
   page: Props["page"];
 }) {
   const pending = confirmation.status === "awaiting_payment";
+
+  // Auto-redirect only for confirmed (non-pending) bookings carrying a
+  // redirect URL. Pending/paid holds never redirect (defense-in-depth on
+  // top of the server already nulling redirectUrl for them) so the
+  // PayPal CTA stays put.
+  const willRedirect = !pending && !!confirmation.redirectUrl;
+  const [secondsLeft, setSecondsLeft] = useState(REDIRECT_COUNTDOWN_SECONDS);
+
+  useEffect(() => {
+    if (!willRedirect || !confirmation.redirectUrl) return;
+    const target = confirmation.redirectUrl;
+    const tick = setInterval(() => {
+      setSecondsLeft((s) => Math.max(0, s - 1));
+    }, 1000);
+    const go = setTimeout(() => {
+      // replace() so the back button returns to the booker's origin, not
+      // the just-submitted confirmation screen.
+      window.location.replace(target);
+    }, REDIRECT_COUNTDOWN_SECONDS * 1000);
+    return () => {
+      clearInterval(tick);
+      clearTimeout(go);
+    };
+  }, [willRedirect, confirmation.redirectUrl]);
+
   return (
     <section
       className={`space-y-3 rounded-2xl border p-5 text-center text-sm ${
@@ -604,6 +639,17 @@ function ConfirmationPanel({
       <p className="text-xs">
         We&apos;ve also emailed you with all the details.
       </p>
+      {willRedirect && confirmation.redirectUrl && (
+        <p className="text-xs">
+          Redirecting you in {secondsLeft}s…{" "}
+          <a
+            href={confirmation.redirectUrl}
+            className="underline underline-offset-2"
+          >
+            Go now
+          </a>
+        </p>
+      )}
     </section>
   );
 }

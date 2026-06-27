@@ -1,5 +1,7 @@
 export * from "./firebase";
 export * from "./tenancy";
+export * from "./social";
+export * from "./custom-fields";
 export * from "./automations";
 export * from "./broadcasts";
 export * from "./voice-campaigns";

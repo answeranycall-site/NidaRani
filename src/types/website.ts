@@ -1,4 +1,4 @@
-﻿import type { Timestamp, FieldValue } from "firebase/firestore";
+import type { Timestamp, FieldValue } from "firebase/firestore";
 
 /**
  * Mirrors the gitpage.site typeform inputs verbatim. Field names match
@@ -126,13 +126,21 @@ export interface WebsiteConfig {
 }
 
 /**
- * Singleton subcollection doc at `subAccounts/{subAccountId}/website/main`.
- * One per sub-account in v1.
+ * Subcollection doc at `subAccounts/{subAccountId}/website/{siteId}`. A
+ * sub-account can hold up to `MAX_WEBSITES_PER_SUBACCOUNT` of these (see
+ * `lib/website/limits.ts`). The legacy singleton lives at `.../website/main`
+ * and remains valid as one of the slots — no migration needed.
  */
 export interface WebsiteDoc {
   id: string;
   agencyId: string;
   subAccountId: string;
+  /**
+   * Operator-facing label for the site card. Defaulted to `Website N` at
+   * creation. Legacy `main` docs predate this field — readers fall back to
+   * the config heading, then "Untitled site".
+   */
+  name?: string;
   status: WebsiteStatus;
   /** Provider job id — null until a build is submitted. */
   gitpageJobId: string | null;
@@ -364,7 +372,7 @@ export function sampleVslConfig(): WebsiteConfig {
 // ---------------------------------------------------------------------------
 // Niche sample prefills — one per (niche × build type) combination, six total.
 // Mirror the example payloads in §2.5–2.7 and §3.4–3.6 of
-// Answer Any Call_NICHE_TEMPLATES.md. Niche-locked page sets force services + contact
+// LEADSTACK_NICHE_TEMPLATES.md. Niche-locked page sets force services + contact
 // + privacy + terms all true; business_details are required since contact is
 // forced on. Design fields are still set on niche samples but gitpage's niche
 // directive overrides them — they're left in place so the form renders cleanly

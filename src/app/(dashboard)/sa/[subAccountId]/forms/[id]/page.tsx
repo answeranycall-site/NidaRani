@@ -24,7 +24,6 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
 import { subscribeToForm, updateForm } from "@/lib/firestore/forms";
-import { FormAutomationSection } from "@/components/automations/form-automation-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -120,7 +119,7 @@ function buildHtmlSnippet(form: LeadForm, origin: string): string {
     })
     .join("\n\n");
 
-  return `<!-- Answer Any Call form. Style with your own CSS — every element is unstyled. -->
+  return `<!-- LeadStack form. Style with your own CSS — every element is unstyled. -->
 <!-- Submissions create contacts and fire automations in your workspace. -->
 <form data-leadstack-form="${form.id}" novalidate>
 ${fieldsHtml}
@@ -802,8 +801,6 @@ export default function FormBuilderPage() {
             </div>
           </section>
 
-          <FormAutomationSection formId={form.id} formName={form.name} />
-
           <EmbedAppearanceSection
             appearance={form.settings.appearance ?? defaultFormAppearance()}
             onChange={updateAppearance}
@@ -976,7 +973,7 @@ function EmbedAppearanceSection({
             checked={appearance.hideChrome}
             onCheckedChange={(v) => onChange({ hideChrome: !!v })}
           />
-          <span className="text-xs">Hide Answer Any Call header + footer</span>
+          <span className="text-xs">Hide LeadStack header + footer</span>
         </label>
 
         <label className="flex items-center gap-2">

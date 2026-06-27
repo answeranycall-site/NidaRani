@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { NextResponse } from "next/server";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
@@ -7,10 +7,10 @@ import { LANDING_VARIANT } from "@/config/landing";
 import type { MemberStatus, Role } from "@/types";
 
 /**
- * Dev-only seed endpoint for the Answer Any Call public demo (#1004 sub-account).
+ * Dev-only seed endpoint for the LeadStack public demo (#1004 sub-account).
  *
  * Triple-gated:
- *   1. LANDING_VARIANT must be "Answer Any Call" — buyer clones (variant "custom")
+ *   1. LANDING_VARIANT must be "leadstack" — buyer clones (variant "custom")
  *      get a 404 so they don't even know this route exists.
  *   2. Caller must be the agency owner.
  *   3. Sub-account #1004 must already exist (the seeder targets it by
@@ -31,7 +31,7 @@ async function requireOwnerOrReject(
   request: Request,
 ): Promise<{ uid: string } | NextResponse> {
   // Variant gate first — pretend the route doesn't exist on buyer clones.
-  if (LANDING_VARIANT !== "Answer Any Call") {
+  if (LANDING_VARIANT !== "leadstack") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { RefTracker } from "@/components/affiliate/ref-tracker";
@@ -33,7 +33,7 @@ export const metadata: Metadata =
         description: CUSTOM_BRAND.shortDescription,
       }
     : {
-        title: "Answer Any Call — The all-in-one CRM for teams that actually close",
+        title: "LeadStack — The all-in-one CRM for teams that actually close",
         description:
           "Capture leads, run pipelines, and book meetings from one simple workspace. Built for small teams that want to replace five tools with one.",
       };

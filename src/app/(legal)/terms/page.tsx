@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { openCrispChat } from "@/lib/crisp";
@@ -16,19 +16,19 @@ export default function TermsPage() {
       <article className="prose dark:prose-invert mt-8 max-w-none">
         <h1>Terms of Service</h1>
         <p className="text-sm text-muted-foreground">
-          Last updated: June 3, 2026
+          Last updated: June 24, 2026
         </p>
 
         <h2>1. Acceptance of Terms</h2>
         <p>
-          By purchasing, downloading, or using Answer Any Call (&ldquo;the
+          By purchasing, downloading, or using LeadStack (&ldquo;the
           Service&rdquo;), you agree to be bound by these Terms of Service. If
           you do not agree, do not purchase or use the Service.
         </p>
 
         <h2>2. The Service</h2>
         <p>
-          Answer Any Call is a self-hosted, one-time-purchase software codebase. You
+          LeadStack is a self-hosted, one-time-purchase software codebase. You
           buy a license, receive access to the source code, and run it on
           infrastructure you control. We do not host your deployment, store
           your customer data, or provide a SaaS layer on top of the codebase.
@@ -36,7 +36,7 @@ export default function TermsPage() {
 
         <h2>3. Purchase, Payment &amp; No Refunds</h2>
         <p>
-          Answer Any Call is sold as a one-time purchase. There is no subscription
+          LeadStack is sold as a one-time purchase. There is no subscription
           and no recurring fee charged by us.
         </p>
         <p>
@@ -47,9 +47,40 @@ export default function TermsPage() {
           page, FAQ, and any pre-sale materials carefully before purchasing.
         </p>
 
-        <h2>4. License &amp; Intellectual Property</h2>
+        <h2>4. Chargebacks &amp; Payment Disputes</h2>
         <p>
-          The Answer Any Call codebase is licensed under the{" "}
+          If you have any concern about a charge, a billing issue, or the
+          Service itself, you agree to{" "}
+          <strong>
+            contact our support and make a good-faith effort to resolve the
+            matter first
+          </strong>
+          , before initiating any chargeback, payment dispute, or reversal with
+          your bank or card issuer. Most issues can be resolved quickly through
+          support.
+        </p>
+        <p>
+          Because the Service is source code delivered electronically and all
+          sales are final (Section 3), filing a chargeback, dispute, or payment
+          reversal without first contacting support to attempt a resolution is a
+          breach of these Terms.
+        </p>
+        <p>
+          If a chargeback, payment dispute, or reversal is filed against us, we
+          reserve the right to{" "}
+          <strong>
+            immediately and permanently revoke your license, your access to
+            support, and your access to all current and future updates
+          </strong>
+          , and to remove you from any associated source repositories, teams, or
+          related services. These remedies are in addition to, and without
+          prejudice to, any other remedies available to us, including recovering
+          the disputed amount together with any associated fees and costs.
+        </p>
+
+        <h2>5. License &amp; Intellectual Property</h2>
+        <p>
+          The LeadStack codebase is licensed under the{" "}
           <a
             href="https://polyformproject.org/licenses/perimeter/1.0.0"
             target="_blank"
@@ -65,17 +96,17 @@ export default function TermsPage() {
           purpose, including running it for your own business and your
           clients, with no time limit and no recurring fee. The one
           restriction is that you may not offer the codebase &mdash; modified
-          or unmodified &mdash; as a product that competes with Answer Any Call.
+          or unmodified &mdash; as a product that competes with LeadStack.
         </p>
         <p>
           You retain ownership of any modifications you make and any
           customer data you collect through your deployment.
         </p>
 
-        <h2>5. Future Updates</h2>
+        <h2>6. Future Updates</h2>
         <p>
           Updates, improvements, bug fixes, and new features we release for the
-          Answer Any Call codebase are included with your one-time purchase at no
+          LeadStack codebase are included with your one-time purchase at no
           additional cost, and are made available to you through the same
           delivery channel as your original purchase (for example, the source
           repository) for as long as we continue to maintain and distribute
@@ -83,7 +114,7 @@ export default function TermsPage() {
         </p>
         <p>
           Updates are provided on an <strong>optional, self-service basis</strong>.
-          Because Answer Any Call is self-hosted and you control your own deployment
+          Because LeadStack is self-hosted and you control your own deployment
           and any modifications you have made, it is{" "}
           <strong>
             your responsibility to review, merge, test, and deploy any update
@@ -101,7 +132,7 @@ export default function TermsPage() {
           us to develop or release any particular feature, fix, or update.
         </p>
 
-        <h2>6. Your Responsibilities</h2>
+        <h2>7. Your Responsibilities</h2>
         <p>
           You are solely responsible for hosting, deploying, configuring,
           securing, and operating the Service. The Service is designed to
@@ -127,7 +158,7 @@ export default function TermsPage() {
           customers are located.
         </p>
 
-        <h2>7. Disclaimer of Warranties</h2>
+        <h2>8. Disclaimer of Warranties</h2>
         <p>
           The Service is provided &ldquo;as is&rdquo; and &ldquo;as
           available&rdquo; without warranty of any kind, express or implied,
@@ -136,7 +167,7 @@ export default function TermsPage() {
           uninterrupted, error-free, or fit for your particular use case.
         </p>
 
-        <h2>8. Limitation of Liability</h2>
+        <h2>9. Limitation of Liability</h2>
         <p>
           To the fullest extent permitted by law, we shall not be liable for
           any indirect, incidental, special, consequential, or punitive
@@ -146,7 +177,7 @@ export default function TermsPage() {
           amount you paid for the Service.
         </p>
 
-        <h2>9. Changes to Terms</h2>
+        <h2>10. Changes to Terms</h2>
         <p>
           We may update these Terms from time to time. We will post the
           updated Terms on this page with a new &ldquo;Last updated&rdquo;
@@ -154,7 +185,7 @@ export default function TermsPage() {
           acceptance of the revised Terms.
         </p>
 
-        <h2>10. Contact</h2>
+        <h2>11. Contact</h2>
         <p>
           For questions about these Terms,{" "}
           <button

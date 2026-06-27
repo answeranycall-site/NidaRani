@@ -20,7 +20,10 @@ export function getResend(): Resend {
 }
 
 export function emailIsConfigured(): boolean {
-  return !!process.env.RESEND_API_KEY && !!process.env.EMAIL_FROM;
+  // `.trim()` so a present-but-blank env var doesn't read as configured.
+  return (
+    !!process.env.RESEND_API_KEY?.trim() && !!process.env.EMAIL_FROM?.trim()
+  );
 }
 
 /**

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { getAdminDb } from "@/lib/firebase/admin";
 import { CUSTOM_BRAND, type ResolvedBrand } from "@/config/landing";
@@ -44,7 +44,7 @@ export async function resolveCustomBrand(): Promise<ResolvedBrand> {
 
     return {
       name:
-        agency.name && agency.name !== "Answer Any Call"
+        agency.name && agency.name !== "LeadStack"
           ? agency.name
           : fallback.name,
       logoUrl: (agency.logoUrl as string | null) ?? null,

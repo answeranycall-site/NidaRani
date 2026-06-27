@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountMember } from "@/lib/auth/require-tenancy";
 import { removeSendingDomain } from "@/lib/comms/resend-domains";
+import { metaAppConfigured } from "@/lib/comms/meta";
 import type { ResendConfig } from "@/types";
 
 /**
@@ -38,6 +39,15 @@ interface PatchBody {
   whatsappEnabled?: boolean;
   metaInboxEnabled?: boolean;
   websiteEnabled?: boolean;
+  socialPlannerEnabled?: boolean;
+  communityEnabled?: boolean;
+  // "Hide instead of lock" overrides for the sidebar-gated features.
+  // Only take effect while the matching gate is off. See `*HiddenWhenDisabled`
+  // on SubAccountDoc.
+  broadcastsHiddenWhenDisabled?: boolean;
+  websiteHiddenWhenDisabled?: boolean;
+  socialPlannerHiddenWhenDisabled?: boolean;
+  communityHiddenWhenDisabled?: boolean;
 }
 
 export async function PATCH(
@@ -68,6 +78,16 @@ export async function PATCH(
   const wantsWhatsapp = typeof body.whatsappEnabled === "boolean";
   const wantsMetaInbox = typeof body.metaInboxEnabled === "boolean";
   const wantsWebsite = typeof body.websiteEnabled === "boolean";
+  const wantsSocialPlanner = typeof body.socialPlannerEnabled === "boolean";
+  const wantsCommunity = typeof body.communityEnabled === "boolean";
+  const wantsBroadcastsHidden =
+    typeof body.broadcastsHiddenWhenDisabled === "boolean";
+  const wantsWebsiteHidden =
+    typeof body.websiteHiddenWhenDisabled === "boolean";
+  const wantsSocialPlannerHidden =
+    typeof body.socialPlannerHiddenWhenDisabled === "boolean";
+  const wantsCommunityHidden =
+    typeof body.communityHiddenWhenDisabled === "boolean";
   if (
     !wantsEmail &&
     !wantsApi &&
@@ -75,12 +95,34 @@ export async function PATCH(
     !wantsOutboundVoice &&
     !wantsWhatsapp &&
     !wantsMetaInbox &&
-    !wantsWebsite
+    !wantsWebsite &&
+    !wantsSocialPlanner &&
+    !wantsCommunity &&
+    !wantsBroadcastsHidden &&
+    !wantsWebsiteHidden &&
+    !wantsSocialPlannerHidden &&
+    !wantsCommunityHidden
   ) {
     return NextResponse.json(
       {
         error:
-          "At least one of `emailDomainEnabled`, `apiAccessEnabled`, `broadcastsEnabled`, `outboundVoiceEnabled`, `whatsappEnabled`, `metaInboxEnabled`, or `websiteEnabled` (boolean) is required.",
+          "At least one of `emailDomainEnabled`, `apiAccessEnabled`, `broadcastsEnabled`, `outboundVoiceEnabled`, `whatsappEnabled`, `metaInboxEnabled`, `websiteEnabled`, `socialPlannerEnabled`, `broadcastsHiddenWhenDisabled`, `websiteHiddenWhenDisabled`, or `socialPlannerHiddenWhenDisabled` (boolean) is required.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // Meta features need app creds on the deployment. Refuse to ENABLE either
+  // Meta gate when unconfigured (the UI grays these out; this guards the API).
+  // Disabling is always allowed.
+  if (
+    (body.metaInboxEnabled === true || body.socialPlannerEnabled === true) &&
+    !metaAppConfigured()
+  ) {
+    return NextResponse.json(
+      {
+        error:
+          "Facebook/Instagram isn't configured on this deployment. Set META_APP_ID and META_APP_SECRET to enable the inbox or Social Planner.",
       },
       { status: 400 },
     );
@@ -172,6 +214,41 @@ export async function PATCH(
     updates.websiteEnabledByAgency = body.websiteEnabled;
   }
 
+  if (wantsSocialPlanner) {
+    // No tear-down — the Meta connection + any scheduled posts are left
+    // intact. Disabling 403s the connect/create/publish routes and locks the
+    // Social Planner sidebar entry; re-enabling restores it instantly.
+    updates.socialPlannerEnabledByAgency = body.socialPlannerEnabled;
+  }
+
+  if (wantsCommunity) {
+    // No tear-down — members, posts, and courses are preserved. Disabling
+    // locks the Community sidebar entry AND makes every `/c/*` page + community
+    // API 404/403 (the gate is enforced on the public surface too), so a
+    // disabled sub-account's groups are unreachable. Re-enabling resumes
+    // instantly.
+    updates.communityEnabledByAgency = body.communityEnabled;
+  }
+
+  // "Hide instead of lock" overrides. Pure presentation flags — they don't
+  // change any runtime enforcement (a disabled feature's routes 403 the same
+  // way regardless); they only decide whether the sidebar shows a greyed
+  // "Locked" entry or omits it entirely. Persisted independently of the gate
+  // so the agency owner can pre-set "hide" before flipping the feature off.
+  if (wantsBroadcastsHidden) {
+    updates.broadcastsHiddenWhenDisabled = body.broadcastsHiddenWhenDisabled;
+  }
+  if (wantsWebsiteHidden) {
+    updates.websiteHiddenWhenDisabled = body.websiteHiddenWhenDisabled;
+  }
+  if (wantsSocialPlannerHidden) {
+    updates.socialPlannerHiddenWhenDisabled =
+      body.socialPlannerHiddenWhenDisabled;
+  }
+  if (wantsCommunityHidden) {
+    updates.communityHiddenWhenDisabled = body.communityHiddenWhenDisabled;
+  }
+
   await subRef.update(updates);
 
   return NextResponse.json({
@@ -185,6 +262,25 @@ export async function PATCH(
     ...(wantsWhatsapp ? { whatsappEnabled: body.whatsappEnabled } : {}),
     ...(wantsMetaInbox ? { metaInboxEnabled: body.metaInboxEnabled } : {}),
     ...(wantsWebsite ? { websiteEnabled: body.websiteEnabled } : {}),
+    ...(wantsSocialPlanner
+      ? { socialPlannerEnabled: body.socialPlannerEnabled }
+      : {}),
+    ...(wantsCommunity ? { communityEnabled: body.communityEnabled } : {}),
+    ...(wantsBroadcastsHidden
+      ? { broadcastsHiddenWhenDisabled: body.broadcastsHiddenWhenDisabled }
+      : {}),
+    ...(wantsWebsiteHidden
+      ? { websiteHiddenWhenDisabled: body.websiteHiddenWhenDisabled }
+      : {}),
+    ...(wantsSocialPlannerHidden
+      ? {
+          socialPlannerHiddenWhenDisabled:
+            body.socialPlannerHiddenWhenDisabled,
+        }
+      : {}),
+    ...(wantsCommunityHidden
+      ? { communityHiddenWhenDisabled: body.communityHiddenWhenDisabled }
+      : {}),
     ...(clearedDomain ? { clearedDomain: true } : {}),
   });
 }

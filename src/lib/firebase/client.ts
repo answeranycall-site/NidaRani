@@ -6,22 +6,15 @@ import {
 } from "firebase/app";
 import { getAuth, type Auth } from "firebase/auth";
 import { getFirestore, type Firestore } from "firebase/firestore";
-
-// Strip UTF-8 BOM that some Windows tooling silently prepends when piping
-// env var values to the Vercel CLI. NEXT_PUBLIC_* vars are baked into the
-// client bundle at build time, so this must run client-side too.
-function b(s: string | undefined): string {
-  if (!s) return "";
-  return s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s;
-}
+import { getStorage, type FirebaseStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: b(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
-  authDomain: b(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
-  projectId: b(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
-  storageBucket: b(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
-  messagingSenderId: b(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
-  appId: b(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
 /** Returns true if Firebase env vars are configured */
@@ -35,6 +28,7 @@ export function isFirebaseConfigured(): boolean {
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
 let _db: Firestore | null = null;
+let _storage: FirebaseStorage | null = null;
 
 function getFirebaseApp(): FirebaseApp {
   if (!_app) {
@@ -58,4 +52,11 @@ export function getFirebaseDb(): Firestore {
     _db = getFirestore(getFirebaseApp());
   }
   return _db;
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  if (!_storage) {
+    _storage = getStorage(getFirebaseApp());
+  }
+  return _storage;
 }

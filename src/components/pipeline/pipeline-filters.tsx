@@ -4,10 +4,10 @@ import { Check, ChevronDown, Filter, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DEAL_PRIORITIES,
-  PIPELINE_STAGES,
   type DealPriority,
   type PipelineStageId,
 } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import type { TerritoryDoc } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +87,7 @@ export function PipelineFilters({
   availableTerritories = [],
   showTerritoryFilters = false,
 }: PipelineFiltersProps) {
+  const stages = usePipelineStages();
   const toggleStage = (id: PipelineStageId) => {
     const next = filters.stages.includes(id)
       ? filters.stages.filter((s) => s !== id)
@@ -155,7 +156,7 @@ export function PipelineFilters({
           <span className="text-[11px] font-medium text-muted-foreground">
             Stage:
           </span>
-          {PIPELINE_STAGES.map((s) => {
+          {stages.map((s) => {
             const on = filters.stages.includes(s.id);
             return (
               <button

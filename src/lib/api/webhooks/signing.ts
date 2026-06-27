@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
@@ -6,7 +6,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
  * Stripe-style webhook signature scheme.
  *
  * Wire format:
- *   Answer Any Call-Signature: t=<unix_ts>,v1=<hmac_hex>
+ *   LeadStack-Signature: t=<unix_ts>,v1=<hmac_hex>
  *
  * The HMAC is computed over `${timestamp}.${rawBody}` using the
  * subscription's signing secret. Subscribers verify by:

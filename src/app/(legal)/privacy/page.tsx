@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { openCrispChat } from "@/lib/crisp";
@@ -22,8 +22,8 @@ export default function PrivacyPage() {
         <h2>1. Scope</h2>
         <p>
           This Privacy Policy describes how we handle information collected
-          through our marketing website and the Answer Any Call purchase flow.
-          Answer Any Call itself is self-hosted software you deploy on your own
+          through our marketing website and the LeadStack purchase flow.
+          LeadStack itself is self-hosted software you deploy on your own
           infrastructure — once you deploy it, your customers&rsquo; data is
           held by you, not by us.
         </p>
@@ -52,9 +52,9 @@ export default function PrivacyPage() {
           their own privacy terms.
         </p>
 
-        <h2>5. Customer Data Inside Your Answer Any Call Deployment</h2>
+        <h2>5. Customer Data Inside Your LeadStack Deployment</h2>
         <p>
-          The customer data your end-users enter into your Answer Any Call
+          The customer data your end-users enter into your LeadStack
           deployment lives entirely within the database and provider
           accounts you control. We have no access to that data and no
           ability to retrieve, modify, or delete it. You are the data

@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowUpRight } from "lucide-react";
@@ -15,16 +15,16 @@ export const metadata: Metadata = {
 };
 
 /**
- * High-level About page. Answer Any Call-branded — only served on the
- * "Answer Any Call" landing variant; under the white-label "custom" variant it
+ * High-level About page. LeadStack-branded — only served on the
+ * "leadstack" landing variant; under the white-label "custom" variant it
  * 404s (the buyer's own deployment shouldn't expose our company's About).
  */
 
 const APPS = [
   {
-    name: "Answer Any Call",
-    domain: "answeranycall.com",
-    href: "https://answeranycall.com",
+    name: "LeadStack",
+    domain: "leadstack.dev",
+    href: "https://leadstack.dev",
     blurb: "All-in-one, white-label CRM for agencies and small teams.",
   },
   {
@@ -42,7 +42,7 @@ const APPS = [
 ];
 
 export default function AboutPage() {
-  if (LANDING_VARIANT !== "Answer Any Call") {
+  if (LANDING_VARIANT !== "leadstack") {
     notFound();
   }
 

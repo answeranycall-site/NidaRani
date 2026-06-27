@@ -9,6 +9,8 @@ import {
   type UpdateDealPatch,
 } from "@/lib/server/deals-service";
 import { maybeSendReviewRequest } from "@/lib/reviews/request";
+import { loadCustomFieldDefs } from "@/lib/custom-fields/load-defs";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 import { PIPELINE_STAGES, DEAL_PRIORITIES } from "@/types/deals";
 import type { DealPriority, PipelineStageId } from "@/types/deals";
 
@@ -76,6 +78,14 @@ export async function PATCH(
       typeof body.lostReason === "string" ? body.lostReason : null;
   }
   if (typeof body.completed === "boolean") patch.completed = body.completed;
+  if (body.customFields !== undefined) {
+    const defs = await loadCustomFieldDefs(data.subAccountId as string, "deal");
+    const cf = validateCustomFieldValues(body.customFields, defs);
+    if (!cf.ok) {
+      return NextResponse.json({ error: cf.error }, { status: 400 });
+    }
+    patch.customFields = cf.value;
+  }
 
   const result = await updateDealServerSide({
     dealId: id,

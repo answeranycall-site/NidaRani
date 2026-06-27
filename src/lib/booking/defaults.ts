@@ -48,6 +48,8 @@ export function defaultBookingPageFormData(
     accentColor: null,
     meetingUrl: null,
     confirmationMessage: "",
+    redirectUrl: null,
+    redirectAppendParams: true,
     remindersEnabled: true,
     reminderOffsetsMinutes: [...DEFAULT_REMINDER_OFFSETS_MINUTES],
     payment: null,

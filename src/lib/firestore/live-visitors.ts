@@ -1,6 +1,6 @@
-﻿import type { Unsubscribe } from "firebase/firestore";
+import type { Unsubscribe } from "firebase/firestore";
 
-// Stub — the real live-visitor heartbeat code is Answer Any Call-marketing-
+// Stub — the real live-visitor heartbeat code is LeadStack-marketing-
 // specific (Mapbox world map on /agency/landing). Type shape preserved so
 // any importer still compiles; the subscribe function returns a no-op
 // unsubscribe and never invokes the callback.

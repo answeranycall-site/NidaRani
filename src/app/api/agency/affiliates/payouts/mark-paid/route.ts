@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { LANDING_VARIANT } from "@/config/landing";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * reads the current status first and bails if it's already "paid".
  */
 export async function POST(request: Request) {
-  if (LANDING_VARIANT !== "Answer Any Call") {
+  if (LANDING_VARIANT !== "leadstack") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

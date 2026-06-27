@@ -527,6 +527,53 @@ export function validateMeetingUrl(input: unknown): Validated<string | null> {
   return { ok: true, value: url };
 }
 
+/**
+ * Optional post-booking redirect URL. Stricter than the meeting URL:
+ * this navigates a real visitor's browser, so we require https:// (no
+ * http://) and reject any non-http(s) scheme (javascript:, data:, etc.)
+ * so a malicious config can't turn the confirmation panel into an XSS /
+ * open-redirect vector. Cap at 1000 chars to keep Firestore docs lean.
+ */
+export function validateRedirectUrl(input: unknown): Validated<string | null> {
+  if (input == null || input === "") return { ok: true, value: null };
+  if (typeof input !== "string") {
+    return { ok: false, error: "Redirect URL must be a string." };
+  }
+  const url = input.trim();
+  if (url.length > 1000) {
+    return { ok: false, error: "Redirect URL is too long." };
+  }
+  if (!/^https:\/\//i.test(url)) {
+    return { ok: false, error: "Redirect URL must start with https://." };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return { ok: false, error: "Redirect URL isn't a valid URL." };
+  }
+  if (parsed.protocol !== "https:") {
+    return { ok: false, error: "Redirect URL must use https://." };
+  }
+  return { ok: true, value: url };
+}
+
+/**
+ * Toggle for appending `booking_id` + `email` to the redirect URL.
+ * Defaults to `true` (legacy docs + omitted field) so existing behaviour
+ * is preserved; the operator opts out to keep PII out of the redirect.
+ */
+export function validateRedirectAppendParams(
+  input: unknown,
+): Validated<boolean> {
+  if (input === undefined || input === null) return { ok: true, value: true };
+  if (typeof input === "boolean") return { ok: true, value: input };
+  return {
+    ok: false,
+    error: "Append-params toggle must be true or false.",
+  };
+}
+
 export function validateConfirmationMessage(
   input: unknown,
 ): Validated<string> {
@@ -603,6 +650,12 @@ export function validateBookingPageFormData(
 
   const confirmationMessage = validateConfirmationMessage(b.confirmationMessage);
   if (!confirmationMessage.ok) return confirmationMessage;
+  const redirectUrl = validateRedirectUrl(b.redirectUrl);
+  if (!redirectUrl.ok) return redirectUrl;
+  const redirectAppendParams = validateRedirectAppendParams(
+    b.redirectAppendParams,
+  );
+  if (!redirectAppendParams.ok) return redirectAppendParams;
   const remindersEnabled = validateRemindersEnabled(b.remindersEnabled);
   if (!remindersEnabled.ok) return remindersEnabled;
   const reminderOffsetsMinutes = validateReminderOffsets(
@@ -636,6 +689,8 @@ export function validateBookingPageFormData(
       accentColor: accentColor.value,
       meetingUrl: meetingUrl.value,
       confirmationMessage: confirmationMessage.value,
+      redirectUrl: redirectUrl.value,
+      redirectAppendParams: redirectAppendParams.value,
       remindersEnabled: remindersEnabled.value,
       reminderOffsetsMinutes: reminderOffsetsMinutes.value,
       payment: payment.value,

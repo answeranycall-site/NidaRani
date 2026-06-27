@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
@@ -326,7 +326,7 @@ export function SubAccountWebhooksSection() {
               type="url"
               value={form.url}
               onChange={(e) => setForm((s) => ({ ...s, url: e.target.value }))}
-              placeholder="https://example.com/webhooks/Answer Any Call"
+              placeholder="https://example.com/webhooks/leadstack"
               autoComplete="off"
               autoFocus
             />
@@ -518,7 +518,7 @@ export function SubAccountWebhooksSection() {
       )}
 
       <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-        Subscriber URLs receive a <code>Answer Any Call-Signature</code> header
+        Subscriber URLs receive a <code>LeadStack-Signature</code> header
         with each POST. Verify it server-side before trusting the payload.
         Failed deliveries retry 3 times (1m / 5m / 30m); after 10 consecutive
         failures the webhook auto-pauses.
@@ -689,7 +689,7 @@ function RevealPanel({
             Copy your signing secret now — you won&apos;t see it again
           </p>
           <p className="mt-0.5 text-xs text-amber-800/80 dark:text-amber-200/70">
-            Verify the <code>Answer Any Call-Signature</code> header on each
+            Verify the <code>LeadStack-Signature</code> header on each
             delivery using this secret. Store it in your secret manager.
           </p>
         </div>

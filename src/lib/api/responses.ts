@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
 import { LATEST_API_VERSION } from "./versions";
 
@@ -9,7 +9,7 @@ import { LATEST_API_VERSION } from "./versions";
  *   - `X-Request-Id`        — opaque per-request id surfaced in errors and
  *                             stored on `apiRequestLogs` (slice 3). Operators
  *                             quote this in support tickets to find the row.
- *   - `Answer Any Call-Version`   — resolved API version actually used. Echoes the
+ *   - `LeadStack-Version`   — resolved API version actually used. Echoes the
  *                             caller's pin OR the key default OR latest.
  *
  * Error body shape (always):
@@ -61,7 +61,7 @@ export interface ResponseMeta {
 function metaHeaders(meta: ResponseMeta): Record<string, string> {
   return {
     "X-Request-Id": meta.requestId,
-    "Answer Any Call-Version": meta.apiVersion,
+    "LeadStack-Version": meta.apiVersion,
   };
 }
 

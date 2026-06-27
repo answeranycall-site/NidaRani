@@ -4,14 +4,14 @@ import { Client, Receiver } from "@upstash/qstash";
 
 /**
  * QStash thin wrapper. Two roles:
- *   1. publishStep()   — schedules a future POST against /api/automations/step
- *      (used by triggers + the step executor when chaining the next step).
- *   2. verifySignature() — wraps Upstash's Receiver to validate the
+ *   1. publishCallback() — schedules a future POST against any app path (used
+ *      by the workflow engine, broadcasts, social planner, and website poll).
+ *   2. verifyQStashSignature() — wraps Upstash's Receiver to validate the
  *      Upstash-Signature header on inbound callback POSTs.
  *
- * If QStash isn't configured (no QSTASH_TOKEN), publishStep returns null and
- * the caller logs a graceful warning. That keeps local dev workable without
- * live QStash credentials, at the cost of automations not firing.
+ * If QStash isn't configured (no QSTASH_TOKEN), publishCallback returns null
+ * and the caller logs a graceful warning. That keeps local dev workable
+ * without live QStash credentials, at the cost of scheduled work not firing.
  */
 
 let _client: Client | null = null;
@@ -66,7 +66,8 @@ interface PublishCallbackResult {
 
 /**
  * Generic QStash publish helper — schedules a POST against any path on our
- * app. Used by the automations step executor and the website poll loop.
+ * app. Used by the workflow engine, broadcasts, social planner, and the
+ * website poll loop.
  *
  * Returns null if QStash isn't configured or the publish failed; callers
  * decide what to do (typically: mark the work item failed).
@@ -97,34 +98,28 @@ export async function publishCallback(
   }
 }
 
-interface PublishStepInput {
-  executionId: string;
-  stepIndex: number;
-  /** Seconds to defer before the callback fires. 0 = fire immediately. */
+interface PublishSocialPostInput {
+  postId: string;
+  subAccountId: string;
+  /** Seconds to defer before publishing. 0 = publish immediately. */
   delaySeconds: number;
-  /**
-   * Optional disambiguator appended to the deduplication id. The trigger
-   * helper uses no nonce so retries inside the dedup window collapse;
-   * legitimate reschedules (send-window deferral) pass a fresh nonce so
-   * the second publish lands as a new message.
-   */
-  nonce?: string;
 }
 
 /**
- * Schedule a callback POST against /api/automations/step. Thin wrapper over
- * publishCallback — exists so the executor doesn't have to know the path.
+ * Schedule a Social Planner post to publish at its scheduled time. Thin
+ * wrapper over publishCallback against /api/social/publish/step. The dedup id
+ * is namespaced (`social_<postId>`) so it can't collide with automation /
+ * broadcast dedup ids, and a re-publish of the same post collapses inside the
+ * dedup window.
  */
-export async function publishStep(
-  input: PublishStepInput,
+export async function publishSocialPost(
+  input: PublishSocialPostInput,
 ): Promise<PublishCallbackResult | null> {
   return publishCallback({
-    pathname: "/api/automations/step",
-    body: { executionId: input.executionId, stepIndex: input.stepIndex },
+    pathname: "/api/social/publish/step",
+    body: { postId: input.postId, subAccountId: input.subAccountId },
     delaySeconds: input.delaySeconds,
-    deduplicationId: input.nonce
-      ? `${input.executionId}_${input.stepIndex}_${input.nonce}`
-      : `${input.executionId}_${input.stepIndex}`,
+    deduplicationId: `social_${input.postId}`,
   });
 }
 

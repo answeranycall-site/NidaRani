@@ -4,19 +4,21 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountAdmin } from "@/lib/auth/require-tenancy";
+import { MAX_WEBSITES_PER_SUBACCOUNT } from "@/lib/website/limits";
+import { blankWebsiteConfig, type WebsiteDoc } from "@/types/website";
 
 /**
- * Reset the website doc to draft state. Used by the "Rebuild" button on
- * the ready banner — clears gitpageJobId / liveUrl / status so the user
- * can edit the form and submit a new build.
+ * Create a new (blank, draft) website for this sub-account and return its id.
+ * The client adds the returned doc to the card list via onSnapshot, then the
+ * operator fills the form and hits Build (which targets
+ * `/website/[siteId]/build`).
  *
- * Does NOT call gitpage to tear down the previously-published site — that
- * stays live until the operator deletes the GitHub repo manually. Each
- * rebuild creates a brand-new repo on gitpage's side.
- *
- * Preserves the config so the user starts from their last submission.
+ * Enforces the per-sub-account cap server-side so a client can't sneak past
+ * the limit. Gated by the agency `websiteEnabledByAgency` switch, same as the
+ * build route — adding a site is part of the gated feature even though it
+ * doesn't call gitpage yet.
  */
-export async function DELETE(
+export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
@@ -25,24 +27,63 @@ export async function DELETE(
   if (access instanceof NextResponse) return access;
 
   const db = getAdminDb();
-  const docRef = db.doc(`subAccounts/${subAccountId}/website/main`);
-  const snap = await docRef.get();
-  if (!snap.exists) {
+  const subSnap = await db.doc(`subAccounts/${subAccountId}`).get();
+  if (!subSnap.exists) {
+    return NextResponse.json({ error: "Sub-account not found" }, { status: 404 });
+  }
+  const subData = subSnap.data();
+  if (subData?.websiteEnabledByAgency !== true) {
     return NextResponse.json(
-      { error: "No website to reset." },
-      { status: 404 },
+      {
+        error:
+          "The website builder is disabled for this sub-account. Your agency administrator can enable it from Manage in the agency sub-accounts list.",
+      },
+      { status: 403 },
+    );
+  }
+  const agencyId = subData?.agencyId as string | undefined;
+  if (!agencyId) {
+    return NextResponse.json(
+      { error: "Sub-account is missing agencyId." },
+      { status: 500 },
     );
   }
 
-  await docRef.update({
+  const col = db.collection(`subAccounts/${subAccountId}/website`);
+  const existing = await col.get();
+  if (existing.size >= MAX_WEBSITES_PER_SUBACCOUNT) {
+    return NextResponse.json(
+      {
+        error: `You can create up to ${MAX_WEBSITES_PER_SUBACCOUNT} websites per sub-account. Remove one to add another.`,
+      },
+      { status: 409 },
+    );
+  }
+
+  const ref = col.doc();
+  const now = FieldValue.serverTimestamp();
+  const docData: Omit<WebsiteDoc, "createdAt" | "updatedAt" | "lastBuildAt"> & {
+    createdAt: FieldValue;
+    updatedAt: FieldValue;
+    lastBuildAt: null;
+  } = {
+    id: ref.id,
+    agencyId,
+    subAccountId,
+    name: `Website ${existing.size + 1}`,
     status: "draft",
     gitpageJobId: null,
     liveUrl: null,
     errorMessage: null,
     partialErrors: null,
     pollAttempts: 0,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+    lastBuildAt: null,
+    lastBuildByUid: null,
+    config: blankWebsiteConfig(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await ref.set(docData);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, siteId: ref.id });
 }

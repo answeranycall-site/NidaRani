@@ -24,10 +24,60 @@ export const PIPELINE_STAGES: PipelineStage[] = [
   { id: "lost", label: "Lost", tone: "bg-rose-500/10 text-rose-700 dark:text-rose-300", terminal: "lost" },
 ];
 
-export function getStage(id: PipelineStageId | string | null | undefined): PipelineStage {
-  return (
-    PIPELINE_STAGES.find((s) => s.id === id) ?? PIPELINE_STAGES[0]
-  );
+/**
+ * Resolve the pipeline stage for an id. Accepts an optional resolved stage
+ * list (from `resolvePipelineStages`) so callers with the sub-account's
+ * label/order overrides get the right label; defaults to the canonical
+ * constant for server code that only needs ids + terminal flags.
+ */
+export function getStage(
+  id: PipelineStageId | string | null | undefined,
+  stages: PipelineStage[] = PIPELINE_STAGES,
+): PipelineStage {
+  return stages.find((s) => s.id === id) ?? stages[0] ?? PIPELINE_STAGES[0];
+}
+
+/**
+ * Per-sub-account override of a canonical stage's display. ONLY `label` and
+ * `order` are operator-editable — `id` and `terminal` always come from the
+ * canonical {@link PIPELINE_STAGES}, so renaming/reordering can never change
+ * a deal's stored stageId, remove the won/lost terminals, or affect the
+ * public API / webhooks / reports math. See "Phase 2 (2A)".
+ */
+export interface PipelineStageOverride {
+  id: PipelineStageId;
+  label: string;
+  order: number;
+}
+
+/**
+ * Merge a sub-account's label/order overrides onto the canonical stages.
+ * Terminal flags, ids, and tones always come from the canonical definition.
+ * Absent / empty / invalid overrides return the canonical list unchanged
+ * (byte-identical to pre-Phase-2 behaviour) — the opt-in default path.
+ */
+export function resolvePipelineStages(
+  overrides?: PipelineStageOverride[] | null,
+): PipelineStage[] {
+  if (!Array.isArray(overrides) || overrides.length === 0) {
+    return PIPELINE_STAGES;
+  }
+  const byId = new Map(overrides.map((o) => [o.id, o]));
+  const withOrder = PIPELINE_STAGES.map((s, idx) => {
+    const o = byId.get(s.id);
+    const label =
+      o && typeof o.label === "string" && o.label.trim().length > 0
+        ? o.label
+        : s.label;
+    const order =
+      o && typeof o.order === "number" && Number.isFinite(o.order)
+        ? o.order
+        : idx;
+    // id, tone, terminal are NEVER taken from the override.
+    return { stage: { ...s, label } as PipelineStage, order, idx };
+  });
+  withOrder.sort((a, b) => a.order - b.order || a.idx - b.idx);
+  return withOrder.map((x) => x.stage);
 }
 
 export type DealPriority = "high" | "medium" | "low";
@@ -87,6 +137,13 @@ export interface Deal {
   completed?: boolean;
   completedAt?: Timestamp | FieldValue | null;
   /**
+   * Operator-defined custom field values, keyed by the custom-field
+   * definition's `key` (see {@link CustomFieldDef}). Optional/absent on legacy
+   * docs. Validated server-side against the sub-account's deal field
+   * definitions on create/update.
+   */
+  customFields?: Record<string, import("./custom-fields").CustomFieldValue> | null;
+  /**
    * Territory id when the sub-account has opted into territory scoping.
    * Defaults to the reserved "global" id (the shared floor) — new docs are
    * never unassigned. `null`/undefined only appears on legacy docs and is
@@ -106,4 +163,5 @@ export type DealFormData = {
   stageId: PipelineStageId;
   priority: DealPriority;
   territoryId?: string | null;
+  customFields?: Record<string, import("./custom-fields").CustomFieldValue> | null;
 };

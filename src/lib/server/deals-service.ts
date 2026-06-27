@@ -3,12 +3,14 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import {
   serializeDealForApi,
   type DealApiObject,
 } from "@/lib/api/serializers/deals";
 import { getStage, type DealPriority, type PipelineStageId } from "@/types/deals";
 import type { WebhookEventType } from "@/types/webhooks";
+import type { CustomFieldValue } from "@/types/custom-fields";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 
 /**
@@ -143,6 +145,7 @@ export interface CreateDealInput {
   stageId: PipelineStageId;
   priority: DealPriority;
   territoryId?: string | null;
+  customFields?: Record<string, CustomFieldValue> | null;
 }
 
 export interface DealWriteResult {
@@ -165,6 +168,7 @@ export async function createDealServerSide(
     stageId: input.stageId,
     priority: input.priority,
     lostReason: null,
+    customFields: input.customFields ?? {},
     territoryId: input.territoryId ?? GLOBAL_TERRITORY_ID,
     agencyId: input.agencyId,
     subAccountId: input.subAccountId,
@@ -220,6 +224,8 @@ export interface UpdateDealPatch {
   lostReason?: string | null;
   /** "Completed" tick on a Won deal card. Stamps/clears `completedAt`. */
   completed?: boolean;
+  /** Full replacement of the custom-field value map (validated by the route). */
+  customFields?: Record<string, CustomFieldValue> | null;
 }
 
 export async function updateDealServerSide(opts: {
@@ -247,6 +253,7 @@ export async function updateDealServerSide(opts: {
   if (patch.priority !== undefined) write.priority = patch.priority;
   if (patch.contactId !== undefined) write.contactId = patch.contactId;
   if (patch.territoryId !== undefined) write.territoryId = patch.territoryId;
+  if (patch.customFields !== undefined) write.customFields = patch.customFields;
   if (patch.completed !== undefined) {
     write.completed = patch.completed;
     write.completedAt = patch.completed ? FieldValue.serverTimestamp() : null;
@@ -308,6 +315,18 @@ export async function updateDealServerSide(opts: {
     deal,
     events,
   });
+
+  // Workflow trigger — a stage move enrolls the deal's contact (workflow runs
+  // are contact-scoped). `toStage` lets a workflow narrow to one target stage.
+  if (mode === "live" && stageChanged && data.contactId) {
+    void fireWorkflowTrigger({
+      subAccountId: existing.subAccountId as string,
+      agencyId: existing.agencyId as string,
+      type: "pipeline.stage.changed",
+      contactId: data.contactId as string,
+      context: { toStage: patch.stageId },
+    });
+  }
 
   return { id: fresh.id, deal };
 }

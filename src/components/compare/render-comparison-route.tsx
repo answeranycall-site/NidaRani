@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { LANDING_VARIANT } from "@/config/landing";
 import { getComparison } from "@/data/comparisons";
@@ -8,7 +8,7 @@ import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 
 /**
- * Shared route shell for every /aac-vs-{slug} static page.
+ * Shared route shell for every /leadstack-vs-{slug} static page.
  *
  * Why static routes instead of a dynamic [slug] segment: Next.js 15
  * Turbopack production builds (which this repo uses, per package.json)
@@ -26,13 +26,13 @@ import { Footer } from "@/components/landing/footer";
  */
 export function buildComparisonMetadata(slug: string): Metadata {
   const comparison = getComparison(slug);
-  if (!comparison || LANDING_VARIANT !== "Answer Any Call") {
+  if (!comparison || LANDING_VARIANT !== "leadstack") {
     return { title: "Not found" };
   }
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
-    "https://answeranycall.com";
-  const canonical = `${baseUrl}/aac-vs-${comparison.slug}`;
+    "https://leadstack.dev";
+  const canonical = `${baseUrl}/leadstack-vs-${comparison.slug}`;
   return {
     title: comparison.metaTitle,
     description: comparison.metaDescription,
@@ -42,7 +42,7 @@ export function buildComparisonMetadata(slug: string): Metadata {
       description: comparison.metaDescription,
       url: canonical,
       type: "article",
-      siteName: "Answer Any Call",
+      siteName: "LeadStack",
     },
     twitter: {
       card: "summary_large_image",
@@ -54,13 +54,13 @@ export function buildComparisonMetadata(slug: string): Metadata {
 }
 
 export function ComparisonRoute({ slug }: { slug: string }) {
-  if (LANDING_VARIANT !== "Answer Any Call") notFound();
+  if (LANDING_VARIANT !== "leadstack") notFound();
   const comparison = getComparison(slug);
   if (!comparison) notFound();
 
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
-    "https://answeranycall.com";
+    "https://leadstack.dev";
 
   return (
     <div className="flex min-h-screen flex-col">

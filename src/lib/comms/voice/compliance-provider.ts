@@ -1,9 +1,9 @@
-﻿import "server-only";
+import "server-only";
 
 /**
  * Pluggable third-party compliance/scrub seam for outbound calling.
  *
- * Answer Any Call's native compliance gate (outbound-compliance.ts) enforces
+ * LeadStack's native compliance gate (outbound-compliance.ts) enforces
  * everything we can do without an external service — opt-out, consent,
  * timezone calling window, rate + per-number frequency caps. A buyer can
  * be located anywhere in the world, so we deliberately do NOT hard-wire

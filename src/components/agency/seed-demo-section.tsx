@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { Database, Loader2, Sparkles, Trash2 } from "lucide-react";
@@ -6,8 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 /**
- * Answer Any Call-demo-only panel. Renders inside Agency -> Settings ONLY when
- * LANDING_VARIANT === "Answer Any Call" (the parent page gates the mount).
+ * LeadStack-demo-only panel. Renders inside Agency -> Settings ONLY when
+ * LANDING_VARIANT === "leadstack" (the parent page gates the mount).
  * Buyer clones never see this UI, AND the API route returns 404 for them
  * too, so the surface is double-gated.
  *
@@ -82,10 +82,10 @@ export function SeedDemoSection() {
           <Database className="h-4 w-4" />
         </span>
         <div>
-          <h2 className="text-sm font-semibold">Demo seed (Answer Any Call-only)</h2>
+          <h2 className="text-sm font-semibold">Demo seed (LeadStack-only)</h2>
           <p className="text-xs text-muted-foreground">
             Populate sub-account #1004 with realistic demo data, or clean it up
-            afterwards. This panel only appears on the Answer Any Call-branded
+            afterwards. This panel only appears on the LeadStack-branded
             deployment; buyer clones never see it.
           </p>
         </div>

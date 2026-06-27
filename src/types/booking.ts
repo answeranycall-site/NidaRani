@@ -146,6 +146,28 @@ export interface BookingPage {
   // ── Confirmation + reminders ──────────────────────────────────
   /** Markdown shown on the confirmation page after a successful booking. */
   confirmationMessage: string;
+  /**
+   * Optional URL the visitor is sent to after a confirmed booking (free
+   * pages only — paid/awaiting-payment holds never redirect so the
+   * PayPal CTA stays visible). The book route appends `booking_id` +
+   * `email` query params for downstream conversion tracking, then the
+   * public confirmation panel auto-navigates after a short countdown.
+   * `null` = stay on the in-app confirmation panel (today's behaviour).
+   *
+   * Optional on the type so legacy booking pages (created before this
+   * field shipped) read as `undefined`; downstream code treats `?? null`
+   * as "no redirect" consistently.
+   */
+  redirectUrl?: string | null;
+  /**
+   * Whether the book route appends `booking_id` + `email` query params to
+   * {@link redirectUrl}. On (default) powers pixel Advanced Matching /
+   * conversion de-dup on the destination page; off sends the visitor to
+   * the bare URL so the booker's email never lands in the destination's
+   * referrer / logs / history. Only meaningful when `redirectUrl` is set.
+   * Optional so legacy docs read as `undefined` → treated as `true`.
+   */
+  redirectAppendParams?: boolean;
   /** Master toggle for the T-24h + T-1h reminder pipeline. */
   remindersEnabled: boolean;
   /**
@@ -208,6 +230,8 @@ export type BookingPageFormData = Pick<
   | "accentColor"
   | "meetingUrl"
   | "confirmationMessage"
+  | "redirectUrl"
+  | "redirectAppendParams"
   | "remindersEnabled"
   | "reminderOffsetsMinutes"
   | "payment"

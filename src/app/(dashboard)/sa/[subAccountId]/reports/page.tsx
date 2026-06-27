@@ -20,7 +20,8 @@ import {
   DonutChart,
   FunnelChart,
 } from "@/components/reports/charts";
-import { PIPELINE_STAGES, type Deal } from "@/types/deals";
+import { type Deal } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import type { Contact } from "@/types/contacts";
 import { cn } from "@/lib/utils";
 
@@ -121,10 +122,11 @@ export default function ReportsPage() {
 
   // Pipeline funnel (all deals, current state — not filtered, since the
   // funnel is a "right now" view, not a historical one)
+  const stages = usePipelineStages();
   const funnelData = useMemo(() => {
     const counts = new Map<string, number>();
     const values = new Map<string, number>();
-    for (const s of PIPELINE_STAGES) {
+    for (const s of stages) {
       counts.set(s.id, 0);
       values.set(s.id, 0);
     }
@@ -143,13 +145,13 @@ export default function ReportsPage() {
       won: "bg-emerald-500",
       lost: "bg-rose-500",
     };
-    return PIPELINE_STAGES.map((s) => ({
+    return stages.map((s) => ({
       label: s.label,
       value: counts.get(s.id) ?? 0,
       secondary: formatCurrency(values.get(s.id) ?? 0, currency),
       tone: stageTones[s.id],
     }));
-  }, [deals, currency]);
+  }, [deals, currency, stages]);
 
   // Deals won over time — bucketed daily over the selected range
   const wonTimeline = useMemo(() => {

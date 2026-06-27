@@ -9,6 +9,8 @@ import {
   parseContactCreate,
   serializeContactForApi,
 } from "@/lib/api/serializers/contacts";
+import { loadCustomFieldDefs } from "@/lib/custom-fields/load-defs";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 
 /**
@@ -92,6 +94,16 @@ export const POST = withApiAuth(async ({ body, ctx }) => {
   }
   const input = parsed.value!;
 
+  // Validate any custom_fields against the sub-account's contact definitions.
+  const cfDefs = await loadCustomFieldDefs(ctx.subAccountId, "contact");
+  const cf = validateCustomFieldValues(
+    (body as Record<string, unknown>).custom_fields,
+    cfDefs,
+  );
+  if (!cf.ok) {
+    return apiError(ctx, "invalid_request", "invalid_body", cf.error!);
+  }
+
   const db = getAdminDb();
   const ref = db.collection("contacts").doc();
   const now = new Date();
@@ -105,6 +117,7 @@ export const POST = withApiAuth(async ({ body, ctx }) => {
     tags: input.tags,
     pipelineStage: input.pipelineStage,
     territoryId: input.territoryId ?? GLOBAL_TERRITORY_ID,
+    customFields: cf.value,
     attribution: null,
     emailOptedOut: false,
     smsOptedOut: false,

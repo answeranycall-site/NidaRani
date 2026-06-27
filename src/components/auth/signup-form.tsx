@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -167,7 +167,7 @@ export function SignupForm() {
           {existingAccount && (
             <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
               <p className="font-medium text-amber-700 dark:text-amber-400">
-                You already have a Answer Any Call account.
+                You already have a LeadStack account.
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Sign in with{" "}

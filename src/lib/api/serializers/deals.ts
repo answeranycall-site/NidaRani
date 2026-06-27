@@ -2,6 +2,8 @@ import "server-only";
 
 import type { Timestamp } from "firebase-admin/firestore";
 import type { DealPriority, PipelineStageId } from "@/types/deals";
+import type { CustomFieldValue } from "@/types/custom-fields";
+import { customFieldsForApi } from "@/lib/api/serializers/contacts";
 
 /**
  * Public-API wire shape for Deal. Frozen contract.
@@ -37,6 +39,7 @@ export interface DealApiObject {
   contact_id: string | null;
   lost_reason: string | null;
   territory_id: string | null;
+  custom_fields: Record<string, CustomFieldValue> | null;
   created_at: string;
   updated_at: string;
   stage_changed_at: string | null;
@@ -78,6 +81,7 @@ export function serializeDealForApi(
     contact_id: (data.contactId as string | null) ?? null,
     lost_reason: (data.lostReason as string | null) ?? null,
     territory_id: (data.territoryId as string | null) ?? null,
+    custom_fields: customFieldsForApi(data.customFields),
     created_at: tsToIso(data.createdAt),
     updated_at: tsToIso(data.updatedAt),
     stage_changed_at: tsToIsoOrNull(data.stageChangedAt),

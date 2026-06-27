@@ -12,6 +12,7 @@ const LABELS: Record<Exclude<ContactSource, "">, string> = {
   "website-form": "Website Form",
   "web-chat": "Web Chat",
   "booking-page": "Booking",
+  community: "Community",
   website: "Website",
   referral: "Referral",
   ads: "Ads",
@@ -27,6 +28,8 @@ const STYLES: Record<Exclude<ContactSource, "">, string> = {
     "bg-violet-500/10 text-violet-700 dark:bg-violet-400/15 dark:text-violet-300",
   "booking-page":
     "bg-teal-500/10 text-teal-700 dark:bg-teal-400/15 dark:text-teal-300",
+  community:
+    "bg-orange-500/10 text-orange-700 dark:bg-orange-400/15 dark:text-orange-300",
   website:
     "bg-sky-500/10 text-sky-700 dark:bg-sky-400/15 dark:text-sky-300",
   referral:

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { FieldValue, type Timestamp } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -42,7 +42,7 @@ const REDACT_HEADERS = new Set([
   "set-cookie",
   "proxy-authorization",
   "x-api-key",
-  "Answer Any Call-signature",
+  "leadstack-signature",
   "idempotency-key",
 ]);
 

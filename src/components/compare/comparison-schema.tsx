@@ -1,10 +1,10 @@
-﻿import type { Comparison } from "@/types/comparisons";
+import type { Comparison } from "@/types/comparisons";
 
 /**
  * Server-rendered JSON-LD for a competitor comparison page.
  *
  * Emits three structured-data blocks Google understands:
- *   - SoftwareApplication (Answer Any Call itself)
+ *   - SoftwareApplication (LeadStack itself)
  *   - FAQPage (every FAQ Q+A — eligible for rich FAQ snippets in SERP)
  *   - BreadcrumbList (helps SERP show a Home › Compare › X path)
  *
@@ -20,16 +20,16 @@ export function ComparisonSchema({
   comparison: Comparison;
   baseUrl: string;
 }) {
-  const url = `${baseUrl}/aac-vs-${comparison.slug}`;
+  const url = `${baseUrl}/leadstack-vs-${comparison.slug}`;
 
   const softwareApplication = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: "Answer Any Call",
+    name: "LeadStack",
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     description:
-      "Answer Any Call is an all-in-one agency CRM you self-host and brand as your own. Contacts, pipeline, calendar, booking pages, quotes, automations, bulk email, public REST API, and AI agents (Web Chat, SMS, Voice) in one codebase you own outright.",
+      "LeadStack is an all-in-one agency CRM you self-host and brand as your own. Contacts, pipeline, calendar, booking pages, quotes, automations, bulk email, public REST API, and AI agents (Web Chat, SMS, Voice) in one codebase you own outright.",
     url: baseUrl,
     offers: {
       "@type": "Offer",
@@ -64,7 +64,7 @@ export function ComparisonSchema({
       {
         "@type": "ListItem",
         position: 2,
-        name: `Answer Any Call vs ${comparison.competitorName}`,
+        name: `LeadStack vs ${comparison.competitorName}`,
         item: url,
       },
     ],

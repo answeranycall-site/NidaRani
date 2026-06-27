@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -52,11 +52,12 @@ const TITLES: Array<[RegExp, string]> = [
   [/^\/sa\/[^/]+\/forms\/[^/]+/, "Form builder"],
   [/^\/sa\/[^/]+\/forms/, "Forms"],
   [/^\/sa\/[^/]+\/website/, "Website"],
-  [/^\/sa\/[^/]+\/automations\/templates\/new/, "New template"],
-  [/^\/sa\/[^/]+\/automations\/templates\/[^/]+/, "Edit template"],
-  [/^\/sa\/[^/]+\/automations\/templates/, "Templates"],
-  [/^\/sa\/[^/]+\/automations\/settings/, "Automation settings"],
-  [/^\/sa\/[^/]+\/automations/, "Automations"],
+  [/^\/sa\/[^/]+\/templates\/new/, "New template"],
+  [/^\/sa\/[^/]+\/templates\/[^/]+/, "Edit template"],
+  [/^\/sa\/[^/]+\/templates/, "Templates"],
+  [/^\/sa\/[^/]+\/workflows\/[^/]+\/runs/, "Workflow runs"],
+  [/^\/sa\/[^/]+\/workflows\/[^/]+/, "Edit workflow"],
+  [/^\/sa\/[^/]+\/workflows/, "Workflows"],
   [/^\/sa\/[^/]+\/ai-agents\/sms/, "AI Agents · SMS"],
   [/^\/sa\/[^/]+\/ai-agents\/voice/, "AI Agents · Voice"],
   [/^\/sa\/[^/]+\/ai-agents\/email/, "AI Agents · Email"],
@@ -71,7 +72,7 @@ function titleFor(pathname: string): string {
   for (const [re, label] of TITLES) {
     if (re.test(pathname)) return label;
   }
-  return "Answer Any Call";
+  return "LeadStack";
 }
 
 function activeSubAccountFromPath(pathname: string): string | null {

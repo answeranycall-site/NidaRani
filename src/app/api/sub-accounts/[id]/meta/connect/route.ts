@@ -7,20 +7,25 @@ import { requireSubAccountAdmin } from "@/lib/auth/require-tenancy";
 import {
   buildMetaOAuthUrl,
   metaAppConfigured,
+  metaRedirectUri,
+  metaScopeList,
   signMetaState,
 } from "@/lib/comms/meta";
 import type { SubAccountDoc } from "@/types";
 
 /**
- * Kick off the BETA Facebook/Instagram connect flow.
+ * Kick off the Facebook/Instagram connect flow — ONE shared connection that
+ * powers both the inbox and the Social Planner.
  *
  *   GET /api/sub-accounts/[id]/meta/connect
  *
- * Sub-account admin only. Guards in order: agency gate
- * (`metaInboxEnabledByAgency`) must be on, and the deployment must have a Meta
- * app configured. On success redirects the admin's browser to Facebook Login;
- * any guard miss redirects back to Settings with a `?meta=…` status the
- * settings card surfaces as a toast. The callback completes the handshake.
+ * Sub-account admin only. Allowed when EITHER the inbox gate
+ * (`metaInboxEnabledByAgency`) OR the Social gate
+ * (`socialPlannerEnabledByAgency`) is on, and the deployment has a Meta app
+ * configured. The requested scopes include publishing only when the Social
+ * gate is on. On success redirects to Facebook Login; any guard miss redirects
+ * back to Settings with a `?meta=…` status. The callback completes the
+ * handshake and records the granted capabilities.
  */
 
 function appBase(request: Request): string {
@@ -45,9 +50,11 @@ export async function GET(
   const snap = await getAdminDb().doc(`subAccounts/${id}`).get();
   const sa = snap.exists ? (snap.data() as SubAccountDoc) : null;
 
-  // Agency gate — never start a connect for a sub-account the agency hasn't
-  // unlocked, even if the route is hit directly.
-  if (sa?.metaInboxEnabledByAgency !== true) {
+  // Agency gate — allow when EITHER feature is unlocked. Publishing scopes are
+  // only requested when the Social Planner gate is on.
+  const inboxOn = sa?.metaInboxEnabledByAgency === true;
+  const socialOn = sa?.socialPlannerEnabledByAgency === true;
+  if (!inboxOn && !socialOn) {
     settingsUrl.searchParams.set("meta", "gate_off");
     return NextResponse.redirect(settingsUrl);
   }
@@ -57,8 +64,21 @@ export async function GET(
     return NextResponse.redirect(settingsUrl);
   }
 
+  // ONE shared redirect URI for the whole deployment (see metaRedirectUri).
+  // The sub-account travels in the signed `state`, not the URL path.
+  const redirectUri = metaRedirectUri();
+  if (!redirectUri) {
+    settingsUrl.searchParams.set("meta", "not_configured");
+    return NextResponse.redirect(settingsUrl);
+  }
+
   const nonce = crypto.randomBytes(16).toString("hex");
   const state = signMetaState(id, nonce);
-  const redirectUri = `${appBase(request)}/api/sub-accounts/${id}/meta/callback`;
-  return NextResponse.redirect(buildMetaOAuthUrl({ redirectUri, state }));
+  return NextResponse.redirect(
+    buildMetaOAuthUrl({
+      redirectUri,
+      state,
+      scope: metaScopeList({ publish: socialOn }),
+    }),
+  );
 }

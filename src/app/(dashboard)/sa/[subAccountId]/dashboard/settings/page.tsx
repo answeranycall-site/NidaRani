@@ -15,6 +15,9 @@ import { SubAccountBrandingSection } from "@/components/settings/sub-account-bra
 import { SubAccountContactSection } from "@/components/settings/sub-account-contact-section";
 import { SubAccountMembersSection } from "@/components/settings/sub-account-members-section";
 import { SubAccountTerritoriesSection } from "@/components/settings/sub-account-territories-section";
+import { SubAccountCustomFieldsSection } from "@/components/settings/sub-account-custom-fields-section";
+import { SubAccountPipelineSection } from "@/components/settings/sub-account-pipeline-section";
+import { GhlImportWizard } from "@/components/import/ghl-import-wizard";
 import { SubAccountSmsSection } from "@/components/settings/sub-account-sms-section";
 import { SubAccountMetaSection } from "@/components/settings/sub-account-meta-section";
 import { SubAccountEmailDomainSection } from "@/components/settings/sub-account-email-domain-section";
@@ -132,6 +135,8 @@ export default function SettingsPage() {
           <TabsTrigger value="admin">Admin</TabsTrigger>
           <TabsTrigger value="messaging">Messaging</TabsTrigger>
           <TabsTrigger value="api">API</TabsTrigger>
+          <TabsTrigger value="custom-fields">Custom Fields</TabsTrigger>
+          <TabsTrigger value="import">Importer</TabsTrigger>
         </TabsList>
 
         {/* ---------- Admin: contact, branding, plan, members, territories,
@@ -144,11 +149,11 @@ export default function SettingsPage() {
               link pages, and PDFs. Independent of agency-level branding. */}
           <SubAccountBrandingSection />
 
-          {/* Subscription — admin only, and only on the Answer Any Call-branded
+          {/* Subscription — admin only, and only on the LeadStack-branded
               deployment. Buyer clones (LANDING_VARIANT === "custom") collect
               payment off-system and provision sub-accounts by invite, so this
               panel is hidden there. */}
-          {role === "admin" && LANDING_VARIANT === "Answer Any Call" && (
+          {role === "admin" && LANDING_VARIANT === "leadstack" && (
             <section className="rounded-2xl border bg-card p-5">
               <div className="mb-4 flex items-center gap-2">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -199,6 +204,10 @@ export default function SettingsPage() {
               the regions they cover. Off by default. */}
           <SubAccountTerritoriesSection />
 
+          {/* Pipeline — rename + reorder deal stages (labels/order only;
+              ids + won/lost terminals are fixed). */}
+          <SubAccountPipelineSection />
+
           {/* Calendar sync — per-sub-account .ics subscription URL. */}
           <SubAccountCalendarSyncSection />
 
@@ -241,6 +250,17 @@ export default function SettingsPage() {
               </Button>
             </div>
           </section>
+        </TabsContent>
+
+        {/* ---------- Custom Fields: operator-defined fields on contacts + deals
+            (the migration-target schema; also useful standalone) ---------- */}
+        <TabsContent value="custom-fields" className="mt-6 space-y-6">
+          <SubAccountCustomFieldsSection />
+        </TabsContent>
+
+        {/* ---------- Import: GoHighLevel migration wizard ---------- */}
+        <TabsContent value="import" className="mt-6 space-y-6">
+          <GhlImportWizard />
         </TabsContent>
 
         {/* ---------- Messaging: SMS/WhatsApp sender, email domain, reviews ---------- */}

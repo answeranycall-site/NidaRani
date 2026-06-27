@@ -9,6 +9,8 @@ import {
   parseDealCreate,
   serializeDealForApi,
 } from "@/lib/api/serializers/deals";
+import { loadCustomFieldDefs } from "@/lib/custom-fields/load-defs";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 
 const DEFAULT_LIMIT = 20;
@@ -118,6 +120,16 @@ export const POST = withApiAuth(async ({ body, ctx }) => {
     );
   }
 
+  // Validate any custom_fields against the sub-account's deal definitions.
+  const cfDefs = await loadCustomFieldDefs(ctx.subAccountId, "deal");
+  const cf = validateCustomFieldValues(
+    (body as Record<string, unknown>).custom_fields,
+    cfDefs,
+  );
+  if (!cf.ok) {
+    return apiError(ctx, "invalid_request", "invalid_body", cf.error!);
+  }
+
   const ref = db.collection("deals").doc();
   const now = new Date();
   await ref.set({
@@ -128,6 +140,7 @@ export const POST = withApiAuth(async ({ body, ctx }) => {
     stageId: input.stage,
     priority: input.priority,
     lostReason: null,
+    customFields: cf.value,
     territoryId:
       input.territoryId ?? contactData.territoryId ?? GLOBAL_TERRITORY_ID,
     agencyId: ctx.agencyId,

@@ -9,6 +9,8 @@ import {
   parseDealPatch,
   serializeDealForApi,
 } from "@/lib/api/serializers/deals";
+import { loadCustomFieldDefs } from "@/lib/custom-fields/load-defs";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 import type { WebhookEventType } from "@/types/webhooks";
 
 /**
@@ -63,6 +65,21 @@ export const PATCH = withApiAuth<{ id: string }>(async ({ body, params, ctx }) =
   if (patch.priority !== undefined) writePatch.priority = patch.priority;
   if (patch.lostReason !== undefined) writePatch.lostReason = patch.lostReason;
   if (patch.territoryId !== undefined) writePatch.territoryId = patch.territoryId;
+
+  if ((body as Record<string, unknown>).custom_fields !== undefined) {
+    const cfDefs = await loadCustomFieldDefs(
+      existing.subAccountId as string,
+      "deal",
+    );
+    const cf = validateCustomFieldValues(
+      (body as Record<string, unknown>).custom_fields,
+      cfDefs,
+    );
+    if (!cf.ok) {
+      return apiError(ctx, "invalid_request", "invalid_body", cf.error!);
+    }
+    writePatch.customFields = cf.value;
+  }
 
   const stageChanged = patch.stage !== undefined && patch.stage !== previousStage;
   if (patch.stage !== undefined) {

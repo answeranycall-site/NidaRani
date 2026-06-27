@@ -143,6 +143,31 @@ export function StatusTab() {
           )}
           Refresh
         </Button>
+
+        {/* Colour key — the dot semantics are correct but not self-evident, so
+            spell them out (esp. that gray = optional/off, not broken). */}
+        <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-t pt-3 text-[11px] text-muted-foreground">
+          <LegendItem
+            colorClass="bg-emerald-500"
+            label="Healthy"
+            title="Configured and reachable."
+          />
+          <LegendItem
+            colorClass="bg-amber-500"
+            label="Needs attention"
+            title="Partially set up or degraded — e.g. a credential present but a sender domain / webhook not finished."
+          />
+          <LegendItem
+            colorClass="bg-rose-500"
+            label="Action required"
+            title="A required integration is missing, or a configured one failed its live check."
+          />
+          <LegendItem
+            colorClass="bg-muted-foreground/40"
+            label="Optional / off"
+            title="An optional integration that isn't configured. Not an error — this feature is simply turned off."
+          />
+        </div>
       </div>
 
       {error && (
@@ -227,7 +252,7 @@ function HealthCard({
         className={`flex w-full items-center gap-3 p-3 text-left transition-colors hover:bg-muted/30 ${tone.bg}`}
         aria-expanded={expanded}
       >
-        <TrafficLight status={health.status} required={health.required} />
+        <StatusLight status={health.status} required={health.required} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{health.label}</p>
           <p className="truncate text-xs text-muted-foreground">
@@ -267,47 +292,53 @@ function SubCheckRow({ check }: { check: SubCheck }) {
   );
 }
 
+/** One swatch + label in the colour key under the panel header. */
+function LegendItem({
+  colorClass,
+  label,
+  title,
+}: {
+  colorClass: string;
+  label: string;
+  title: string;
+}) {
+  return (
+    <span className="flex items-center gap-1.5" title={title}>
+      <span className={`h-2 w-2 shrink-0 rounded-full ${colorClass}`} />
+      {label}
+    </span>
+  );
+}
+
 /**
- * macOS-style three-dot traffic light. Only the dot matching the current
- * status is fully saturated; the other two are dimmed to ~15% opacity so
- * the rendered status is unmistakable at a glance.
+ * Single status dot — one of four colours matching the legend: green
+ * (healthy), amber (needs attention), red (action required: error or a
+ * required integration missing), gray (optional / off).
  */
-function TrafficLight({
+function StatusLight({
   status,
   required,
 }: {
   status: HealthStatus;
   required: boolean;
 }) {
-  const active = activeLight(status, required);
-  const dot = "h-2.5 w-2.5 rounded-full transition-colors";
   return (
     <span
-      className="flex shrink-0 items-center gap-1"
+      className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusDotClass(status, required)}`}
       aria-label={`Status: ${status}`}
-    >
-      <span
-        className={`${dot} ${active === "red" ? "bg-rose-500" : "bg-rose-500/15"}`}
-      />
-      <span
-        className={`${dot} ${active === "amber" ? "bg-amber-500" : "bg-amber-500/15"}`}
-      />
-      <span
-        className={`${dot} ${active === "green" ? "bg-emerald-500" : "bg-emerald-500/15"}`}
-      />
-    </span>
+    />
   );
 }
 
-function activeLight(
-  status: HealthStatus,
-  required: boolean,
-): "red" | "amber" | "green" | null {
-  if (status === "ok") return "green";
-  if (status === "partial") return "amber";
-  if (status === "error") return "red";
-  if (status === "missing") return required ? "red" : null;
-  return null; // skipped → all dimmed
+/** Background colour class for the single status dot — matches the legend. */
+function statusDotClass(status: HealthStatus, required: boolean): string {
+  if (status === "ok") return "bg-emerald-500";
+  if (status === "partial") return "bg-amber-500";
+  if (status === "error") return "bg-rose-500";
+  if (status === "missing") {
+    return required ? "bg-rose-500" : "bg-muted-foreground/40";
+  }
+  return "bg-muted-foreground/40"; // skipped → gray
 }
 
 function StatusDot({

@@ -7,7 +7,7 @@ import { withApiAuth } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/responses";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { serializeContactForApi } from "@/lib/api/serializers/contacts";
-import { fireTriggers } from "@/lib/automations/triggers";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 import type { FormField } from "@/types/forms";
 
@@ -18,7 +18,7 @@ import type { FormField } from "@/types/forms";
  *   Body: { values: { [field_id]: string }, attribution?: {...} }
  *
  * Use case: agencies that host their own landing pages or use a different
- * form builder, but want the captured leads to land in their Answer Any Call
+ * form builder, but want the captured leads to land in their LeadStack
  * sub-account with the same downstream automation as a hosted form.
  *
  * Auth: a key with scope `forms-ingest` OR `admin`. forms-ingest is
@@ -39,7 +39,7 @@ import type { FormField } from "@/types/forms";
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, Answer Any Call-Version",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, Idempotency-Key, LeadStack-Version",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -155,17 +155,13 @@ export const POST = withApiAuth<{ formId: string }>(
     // Speed-to-Lead + any other configured automations. Live mode only —
     // test submissions must never SMS / email a real person.
     if (ctx.mode === "live") {
-      try {
-        await fireTriggers({
-          agencyId: ctx.agencyId,
-          subAccountId: ctx.subAccountId,
-          triggerType: "form_submit",
-          contactId: contactRef.id,
-          context: { formId: params.formId },
-        });
-      } catch (err) {
-        console.warn("[v1/forms] fireTriggers failed", err);
-      }
+      void fireWorkflowTrigger({
+        agencyId: ctx.agencyId,
+        subAccountId: ctx.subAccountId,
+        type: "form.submitted",
+        contactId: contactRef.id,
+        context: { formId: params.formId },
+      });
     }
 
     const created = await contactRef.get();

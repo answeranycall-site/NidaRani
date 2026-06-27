@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 /**
  * Project-wide log redaction for API key secrets.
@@ -22,7 +22,7 @@
  */
 
 const SECRET_RE = /lsk_(live|test)_([0-9A-HJKMNP-TV-Z]{8})_[0-9A-HJKMNP-TV-Z]{32}/g;
-const REDACTED_TAG = "__Answer Any Call_redacted_console__";
+const REDACTED_TAG = "__leadstack_redacted_console__";
 
 function redactString(input: unknown): unknown {
   if (typeof input !== "string") return input;

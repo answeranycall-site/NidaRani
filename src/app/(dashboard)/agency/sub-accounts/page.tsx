@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getFirebaseDb } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { SubAccountManageDialog } from "@/components/agency/sub-account-manage-dialog";
+import { SnapshotsSection } from "@/components/agency/snapshots-section";
 import type { SubAccountDoc } from "@/types";
 
 export default function SubAccountsListPage() {
@@ -152,6 +153,16 @@ export default function SubAccountsListPage() {
           </tbody>
         </table>
       </section>
+
+      {isAgencyOwner && (
+        <SnapshotsSection
+          subs={subs.map((s) => ({
+            id: s.id,
+            name: s.name,
+            accountNumber: s.accountNumber,
+          }))}
+        />
+      )}
 
       <SubAccountManageDialog
         subAccount={managing}

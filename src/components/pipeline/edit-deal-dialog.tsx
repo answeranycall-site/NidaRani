@@ -14,14 +14,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSubAccount } from "@/context/sub-account-context";
 import { ContactPicker } from "@/components/quotes/contact-picker";
+import { CustomFieldInputs } from "@/components/custom-fields/custom-field-inputs";
+import { subscribeToCustomFields } from "@/lib/firestore/custom-fields";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 import {
   DEAL_PRIORITIES,
-  PIPELINE_STAGES,
   type Deal,
   type DealPriority,
   type PipelineStageId,
 } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import type { Contact } from "@/types/contacts";
+import type { CustomFieldDef, CustomFieldValue } from "@/types/custom-fields";
 import { GLOBAL_TERRITORY_ID, type TerritoryDoc } from "@/types";
 
 interface EditDealDialogProps {
@@ -39,8 +43,9 @@ export function EditDealDialog({
   contacts,
   territories,
 }: EditDealDialogProps) {
-  const { subAccount, isAdmin } = useSubAccount();
+  const { subAccountId, subAccount, isAdmin } = useSubAccount();
   const scopingOn = subAccount?.territoryScopingEnabled === true;
+  const stages = usePipelineStages();
   // Changing the contact re-homes the deal's territory, which is an
   // admin-only action when scoping is on. Collaborators see it read-only.
   const canEditContact = !scopingOn || isAdmin;
@@ -51,6 +56,8 @@ export function EditDealDialog({
   const [stageId, setStageId] = useState<PipelineStageId>("new");
   const [priority, setPriority] = useState<DealPriority>("medium");
   const [contactId, setContactId] = useState("");
+  const [cfDefs, setCfDefs] = useState<CustomFieldDef[]>([]);
+  const [cfValues, setCfValues] = useState<Record<string, CustomFieldValue>>({});
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -62,9 +69,27 @@ export function EditDealDialog({
       setStageId(deal.stageId);
       setPriority(deal.priority ?? "medium");
       setContactId(deal.contactId);
+      setCfValues(
+        (deal.customFields ?? {}) as Record<string, CustomFieldValue>,
+      );
       setErrors({});
     }
   }, [open, deal]);
+
+  // Live custom-field definitions for deals (only while the sheet is open).
+  useEffect(() => {
+    if (!open || !subAccountId) {
+      setCfDefs([]);
+      return;
+    }
+    const unsub = subscribeToCustomFields(
+      subAccountId,
+      "deal",
+      setCfDefs,
+      () => {},
+    );
+    return () => unsub();
+  }, [open, subAccountId]);
 
   const selectedContact = contacts.find((c) => c.id === contactId);
 
@@ -90,6 +115,12 @@ export function EditDealDialog({
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
+    const cf = validateCustomFieldValues(cfValues, cfDefs);
+    if (!cf.ok) {
+      toast.error(cf.error);
+      return;
+    }
+
     setSaving(true);
     try {
       // Fields + stage in one PATCH — the server detects the stage change,
@@ -101,6 +132,7 @@ export function EditDealDialog({
         currency,
         priority,
         stageId,
+        customFields: cf.value,
       };
       // Only admins (or scoping-off) may re-home the contact. When they do,
       // the deal's territory follows the new contact. Collaborators send no
@@ -202,7 +234,7 @@ export function EditDealDialog({
               onChange={(e) => setStageId(e.target.value as PipelineStageId)}
               className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 text-foreground dark:bg-input/30 [&_option]:bg-background [&_option]:text-foreground"
             >
-              {PIPELINE_STAGES.map((s) => (
+              {stages.map((s) => (
                 <option key={s.id} value={s.id} className="bg-background text-foreground">
                   {s.label}
                 </option>
@@ -258,6 +290,20 @@ export function EditDealDialog({
                   · inherited from the contact
                 </span>
               </div>
+            </div>
+          )}
+
+          {cfDefs.length > 0 && (
+            <div className="space-y-4 border-t pt-4">
+              <p className="text-xs font-medium text-muted-foreground">
+                Custom fields
+              </p>
+              <CustomFieldInputs
+                idPrefix="edit-deal-cf"
+                defs={cfDefs}
+                values={cfValues}
+                onChange={setCfValues}
+              />
             </div>
           )}
 

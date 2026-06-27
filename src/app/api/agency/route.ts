@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
+import { invalidateAgencyPolicyCache } from "@/lib/agency/policy";
 import type { MemberStatus, Role } from "@/types";
 
 /**
@@ -24,6 +25,7 @@ interface PatchBody {
   logoUrl?: string | null;
   supportEmail?: string | null;
   primaryDomain?: string | null;
+  sharedSmsAllowed?: boolean;
 }
 
 const URL_RE = /^https?:\/\/.+/i;
@@ -150,6 +152,16 @@ export async function PATCH(request: Request) {
     }
   }
 
+  if (body.sharedSmsAllowed !== undefined) {
+    if (typeof body.sharedSmsAllowed !== "boolean") {
+      return NextResponse.json(
+        { error: "sharedSmsAllowed must be a boolean." },
+        { status: 400 },
+      );
+    }
+    update.sharedSmsAllowed = body.sharedSmsAllowed;
+  }
+
   if (Object.keys(update).length === 1) {
     return NextResponse.json(
       { error: "No fields to update." },
@@ -158,6 +170,12 @@ export async function PATCH(request: Request) {
   }
 
   await getAdminDb().doc(`agencies/${access.agencyId}`).update(update);
+
+  // Drop the cached policy so send paths pick up the new value immediately on
+  // this instance (other serverless instances expire via the 60s TTL).
+  if (body.sharedSmsAllowed !== undefined) {
+    invalidateAgencyPolicyCache(access.agencyId);
+  }
 
   return NextResponse.json({ ok: true });
 }

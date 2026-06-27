@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   CalendarClock,
   Copy,
+  CopyPlus,
   ExternalLink,
   HelpCircle,
   Loader2,
@@ -28,10 +30,12 @@ import type { BookingPage } from "@/types/booking";
  * links but the "New" button is replaced by a locked hint.
  */
 export default function BookingListPage() {
+  const router = useRouter();
   const { subAccountId, saPath, isAdmin } = useSubAccount();
   const [pages, setPages] = useState<BookingPage[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [duplicatingSlug, setDuplicatingSlug] = useState<string | null>(null);
 
   useEffect(() => {
     if (!subAccountId) return;
@@ -55,6 +59,35 @@ export default function BookingListPage() {
   function copyLink(slug: string) {
     void navigator.clipboard.writeText(publicLinkFor(slug));
     toast.success("Public link copied.");
+  }
+
+  async function duplicatePage(slug: string) {
+    if (duplicatingSlug) return;
+    setDuplicatingSlug(slug);
+    try {
+      const res = await fetch(
+        `/api/sub-accounts/${subAccountId}/booking-pages/${slug}/duplicate`,
+        { method: "POST" },
+      );
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        slug?: string;
+        warning?: string | null;
+        error?: string;
+      };
+      if (!res.ok || !body.ok || !body.slug) {
+        toast.error(body.error ?? "Couldn't duplicate the booking page.");
+        return;
+      }
+      toast.success("Booking page duplicated — now editing the copy.");
+      if (body.warning) toast.warning(body.warning);
+      // Land in the new draft's editor so the operator can rename + publish.
+      router.push(saPath(`/booking/${body.slug}`));
+    } catch {
+      toast.error("Couldn't duplicate the booking page. Please try again.");
+    } finally {
+      setDuplicatingSlug(null);
+    }
   }
 
   return (
@@ -147,6 +180,23 @@ export default function BookingListPage() {
                   >
                     <Pencil className="mr-1 h-3.5 w-3.5" />
                     Edit
+                  </Button>
+                )}
+                {isAdmin && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => duplicatePage(p.slug)}
+                    disabled={duplicatingSlug !== null}
+                    title="Duplicate this page as a new draft"
+                  >
+                    {duplicatingSlug === p.slug ? (
+                      <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <CopyPlus className="mr-1 h-3.5 w-3.5" />
+                    )}
+                    Duplicate
                   </Button>
                 )}
                 <Button

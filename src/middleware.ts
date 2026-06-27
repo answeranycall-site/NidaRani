@@ -1,11 +1,6 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { authMiddleware } from "next-firebase-auth-edge/lib/next/middleware";
-
-// Strip UTF-8 BOM that some tooling adds when piping env vars on Windows.
-function stripBom(s: string): string {
-  return s.startsWith("﻿") ? s.slice(1) : s;
-}
 
 const PUBLIC_PATHS = [
   "/",
@@ -21,7 +16,9 @@ const PUBLIC_PATHS = [
   "/f",
   "/api/forms",
   "/api/auth/signup",
-  "/api/automations/step",
+  // Workflow Builder step worker — QStash callback, signature-verified inside
+  // the route.
+  "/api/workflows/step",
   "/api/broadcasts/email/step",
   "/api/checkout",
   "/api/cron/gitpage-heartbeat",
@@ -91,12 +88,6 @@ const PUBLIC_PATHS = [
   // Upstash-Signature header verification inside the route.
   "/api/events/reminder",
   "/api/events/payment",
-  "/api/debug-env",
-  // Custom login/logout route handlers — run in Node.js runtime (not Edge)
-  // so they avoid Edge-specific private-key parsing issues. They call
-  // next-firebase-auth-edge's setAuthCookies / removeAuthCookies directly.
-  "/api/login",
-  "/api/logout",
   "/api/dev-only/danger-wipe-everything",
   "/setup.html",
   // SEO conventions — Next.js serves these as virtual routes from
@@ -108,6 +99,12 @@ const PUBLIC_PATHS = [
   // Firebase Auth. Auth checks happen inside each route/page.
   "/affiliate",
   "/api/affiliate",
+  // Community + Courses (Skool-style) member surface — own session model
+  // (magic-link HMAC cookie scoped to the sub-account), NOT Firebase Auth.
+  // The agency gate + member-session checks happen inside each route/page;
+  // a member session can never resolve into the staff `/sa/*` surface.
+  "/c",
+  "/api/community",
   // Public REST API (v1+). Auth happens INSIDE each route via Bearer-token
   // verification (lib/api/auth.ts), not via session cookie. Sub-account-
   // scoped keys; tenancy enforced in code (Admin SDK writes bypass
@@ -116,7 +113,7 @@ const PUBLIC_PATHS = [
   "/api/v1",
   // Outbound-webhook delivery worker. QStash callback only — signature-
   // verified inside the route via `verifyQStashSignature`. Mirrors the
-  // existing /api/automations/step + /api/broadcasts/email/step paths.
+  // existing /api/broadcasts/email/step + /api/workflows/step paths.
   "/api/webhooks-out",
 ];
 
@@ -132,8 +129,13 @@ const PUBLIC_PATH_PATTERNS: RegExp[] = [
   // 3-day post-purchase Gitpage bonus reminder — QStash callback,
   // signature-verified inside the route.
   /^\/api\/gitpage-reminder\/step$/,
-  // gitpage build poll: /api/sub-accounts/{id}/website/poll
-  /^\/api\/sub-accounts\/[^/]+\/website\/poll$/,
+  // gitpage build poll: /api/sub-accounts/{id}/website/{siteId}/poll
+  /^\/api\/sub-accounts\/[^/]+\/website\/[^/]+\/poll$/,
+  // Social Planner publish callback — QStash callback, signature-verified
+  // inside the route (same security model as /api/workflows/step).
+  /^\/api\/social\/publish\/step$/,
+  // GHL migration drain — QStash callback, signature-verified in the route.
+  /^\/api\/import\/ghl\/step$/,
   // WhatsApp template approval poll: /api/sub-accounts/{id}/whatsapp-templates/poll
   // QStash callback, signature-verified inside the route.
   /^\/api\/sub-accounts\/[^/]+\/whatsapp-templates\/poll$/,
@@ -143,12 +145,12 @@ const PUBLIC_PATH_PATTERNS: RegExp[] = [
   // would block them. The HMAC token in `?t=` is the credential.
   /^\/api\/sub-accounts\/[^/]+\/calendar\.ics$/,
   // Public competitor comparison pages (SEO landing pages, e.g.
-  // /Answer Any Call-vs-gohighlevel). Slug is path-suffixed with a hyphen
+  // /leadstack-vs-gohighlevel). Slug is path-suffixed with a hyphen
   // rather than a slash so the PUBLIC_PATHS prefix-match logic can't
   // see it — regex is the only option here. Read-only public content;
   // no auth required. Each competitor has its own static route under
-  // src/app/Answer Any Call-vs-{slug}/page.tsx; this regex catches them all.
-  /^\/Answer Any Call-vs-[a-z0-9-]+$/,
+  // src/app/leadstack-vs-{slug}/page.tsx; this regex catches them all.
+  /^\/leadstack-vs-[a-z0-9-]+$/,
 ];
 
 function isPublicPath(pathname: string): boolean {
@@ -172,13 +174,13 @@ export default function middleware(request: NextRequest) {
   }
 
   return authMiddleware(request, {
-    loginPath: "/api/__nfae_login",
-    logoutPath: "/api/__nfae_logout",
-    apiKey: stripBom(process.env.NEXT_PUBLIC_FIREBASE_API_KEY ?? ""),
+    loginPath: "/api/login",
+    logoutPath: "/api/logout",
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     cookieName: "__session",
     cookieSignatureKeys: [
-      stripBom(process.env.COOKIE_SECRET_CURRENT ?? ""),
-      stripBom(process.env.COOKIE_SECRET_PREVIOUS ?? ""),
+      process.env.COOKIE_SECRET_CURRENT ?? "",
+      process.env.COOKIE_SECRET_PREVIOUS ?? "",
     ],
     cookieSerializeOptions: {
       path: "/",
@@ -188,10 +190,11 @@ export default function middleware(request: NextRequest) {
       maxAge: 12 * 60 * 60 * 24, // 12 days
     },
     serviceAccount: {
-      projectId: stripBom(process.env.FIREBASE_ADMIN_PROJECT_ID ?? ""),
-      clientEmail: stripBom(process.env.FIREBASE_ADMIN_CLIENT_EMAIL ?? ""),
-      privateKey: stripBom(
-        (process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "").replace(/\\n/g, "\n"),
+      projectId: process.env.FIREBASE_ADMIN_PROJECT_ID ?? "",
+      clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL ?? "",
+      privateKey: (process.env.FIREBASE_ADMIN_PRIVATE_KEY ?? "").replace(
+        /\\n/g,
+        "\n",
       ),
     },
     handleValidToken: async ({ decodedToken }, headers) => {
@@ -235,5 +238,7 @@ export default function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/api/login",
+    "/api/logout",
   ],
 };

@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { Timestamp } from "firebase-admin/firestore";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
@@ -15,7 +15,7 @@ import type { VoiceChannelConfig } from "@/types/ai";
 
 /**
  * Native outbound-call compliance gate. Enforces — with NO third-party
- * dependency — everything Answer Any Call can verify itself before an AI call
+ * dependency — everything LeadStack can verify itself before an AI call
  * is placed: a valid number, voice opt-out, per-call consent, the
  * calling window in the contact's own timezone, an optional country
  * allow-list, and rate / daily / per-number frequency caps. A pluggable

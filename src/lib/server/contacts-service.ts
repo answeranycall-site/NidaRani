@@ -3,6 +3,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import {
   serializeContactForApi,
   type ContactApiObject,
@@ -119,6 +120,14 @@ export async function createContactServerSide(
     type: "contact.created",
     payload: { contact },
   });
+  if (input.mode === "live") {
+    void fireWorkflowTrigger({
+      subAccountId: input.subAccountId,
+      agencyId: input.agencyId,
+      type: "contact.created",
+      contactId: ref.id,
+    });
+  }
 
   return { id: ref.id, contact };
 }
@@ -173,6 +182,21 @@ export async function updateContactServerSide(opts: {
     type: "contact.updated",
     payload: { contact },
   });
+  // contact.tag.added fires once per update when the patch introduces a new
+  // tag (replace-semantics patch → diff against the pre-update tags).
+  if (mode === "live" && opts.patch.tags) {
+    const oldTags: string[] = Array.isArray(existing.tags) ? existing.tags : [];
+    const added = opts.patch.tags.filter((t) => !oldTags.includes(t));
+    if (added.length > 0) {
+      void fireWorkflowTrigger({
+        subAccountId: existing.subAccountId,
+        agencyId: existing.agencyId,
+        type: "contact.tag.added",
+        contactId: opts.contactId,
+        context: { addedTags: added },
+      });
+    }
+  }
 
   return { id: ref.id, contact };
 }
@@ -202,6 +226,14 @@ export async function emitContactCreatedById(opts: {
       type: "contact.created",
       payload: { contact },
     });
+    if (mode === "live") {
+      void fireWorkflowTrigger({
+        subAccountId: opts.subAccountId,
+        agencyId: opts.agencyId,
+        type: "contact.created",
+        contactId: opts.contactId,
+      });
+    }
   } catch (err) {
     console.warn("[contacts-service] emitContactCreatedById failed", err);
   }

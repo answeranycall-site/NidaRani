@@ -1,4 +1,4 @@
-﻿import type { Timestamp, FieldValue } from "firebase/firestore";
+import type { Timestamp, FieldValue } from "firebase/firestore";
 
 /**
  * Voice call = a single inbound phone call answered by the AI voice
@@ -33,7 +33,7 @@ export interface VoiceCall {
   agencyId: string;
   subAccountId: string;
   /** Vapi's call id — same as `id`, kept duplicated for symmetry with
-   *  other Answer Any Call doc types that carry their natural key as a field. */
+   *  other LeadStack doc types that carry their natural key as a field. */
   callId: string;
   /** Caller's phone in E.164 from caller ID. Null for web-call tests
    *  invoked from Vapi's Talk widget. */

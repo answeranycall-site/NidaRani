@@ -2,6 +2,7 @@ import "server-only";
 
 import twilio, { type Twilio } from "twilio";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { agencyAllowsSharedSms } from "@/lib/agency/policy";
 import type { SubAccountDoc, TwilioConfig } from "@/types";
 
 /**
@@ -25,10 +26,6 @@ import type { SubAccountDoc, TwilioConfig } from "@/types";
  * toggle on or off is fully reversible without touching env vars.
  */
 
-function stripBom(s: string): string {
-  return s.charCodeAt(0) === 0xFEFF ? s.slice(1) : s;
-}
-
 let _envClient: Twilio | null = null;
 const _saClientCache = new Map<string, Twilio>();
 
@@ -45,8 +42,8 @@ export interface ResolvedTwilio {
 
 function getEnvTwilio(): Twilio {
   if (!_envClient) {
-    const sid = stripBom(process.env.TWILIO_ACCOUNT_SID ?? "");
-    const token = stripBom(process.env.TWILIO_AUTH_TOKEN ?? "");
+    const sid = process.env.TWILIO_ACCOUNT_SID;
+    const token = process.env.TWILIO_AUTH_TOKEN;
     if (!sid || !token) {
       throw new Error(
         "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are not set. Add them to .env.local to enable shared-mode SMS, or configure a dedicated number on the sub-account.",
@@ -62,10 +59,13 @@ function getEnvTwilio(): Twilio {
  * Dedicated mode is checked separately via `subAccountTwilioIsConfigured`.
  */
 export function smsIsConfigured(): boolean {
+  // `.trim()` so a present-but-blank env var (a stray space/newline pasted into
+  // the dashboard) doesn't read as configured — matches the health check and
+  // stops the send path from attempting a doomed call.
   return (
-    !!process.env.TWILIO_ACCOUNT_SID &&
-    !!process.env.TWILIO_AUTH_TOKEN &&
-    !!process.env.TWILIO_FROM_NUMBER
+    !!process.env.TWILIO_ACCOUNT_SID?.trim() &&
+    !!process.env.TWILIO_AUTH_TOKEN?.trim() &&
+    !!process.env.TWILIO_FROM_NUMBER?.trim()
   );
 }
 
@@ -135,9 +135,13 @@ export async function getTwilioForSubAccount(
   subAccount?: SubAccountDoc | null,
 ): Promise<ResolvedTwilio> {
   let cfg = subAccount?.twilioConfig ?? null;
+  let agencyId = subAccount?.agencyId ?? null;
   if (!subAccount) {
-    const snap = await getAdminDb().doc(`subAccounts/${subAccountId}`).get();
-    cfg = (snap.data() as SubAccountDoc | undefined)?.twilioConfig ?? null;
+    const data = (
+      await getAdminDb().doc(`subAccounts/${subAccountId}`).get()
+    ).data() as SubAccountDoc | undefined;
+    cfg = data?.twilioConfig ?? null;
+    agencyId = data?.agencyId ?? null;
   }
 
   if (subAccountTwilioIsConfigured(cfg) && cfg) {
@@ -155,6 +159,15 @@ export async function getTwilioForSubAccount(
     };
   }
 
+  // No dedicated number — fall back to the shared sender ONLY if the agency
+  // still permits it. When the owner has disabled shared SMS, this sub-account
+  // must bring its own number.
+  if (!(await agencyAllowsSharedSms(agencyId))) {
+    throw new Error(
+      "Shared SMS is disabled by your agency. Configure a dedicated Twilio number for this sub-account (Settings → SMS) to send.",
+    );
+  }
+
   if (!smsIsConfigured()) {
     throw new Error(
       "SMS is not configured. Either set TWILIO_* env vars (shared mode) or enable a dedicated number on the sub-account.",
@@ -163,10 +176,10 @@ export async function getTwilioForSubAccount(
 
   return {
     client: getEnvTwilio(),
-    fromNumber: stripBom(process.env.TWILIO_FROM_NUMBER ?? ""),
+    fromNumber: process.env.TWILIO_FROM_NUMBER!,
     mode: "shared",
-    authToken: stripBom(process.env.TWILIO_AUTH_TOKEN ?? ""),
-    accountSid: stripBom(process.env.TWILIO_ACCOUNT_SID ?? ""),
+    authToken: process.env.TWILIO_AUTH_TOKEN!,
+    accountSid: process.env.TWILIO_ACCOUNT_SID!,
   };
 }
 

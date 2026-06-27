@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import type { NextResponse } from "next/server";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -121,7 +121,7 @@ export async function authenticateApiRequest(
   const requestId = newRequestId();
   // Always set a temporary meta with the latest version — if the header
   // says something invalid we want the rejection response to still echo a
-  // sane Answer Any Call-Version header.
+  // sane LeadStack-Version header.
   const tentativeMeta: ResponseMeta = {
     requestId,
     apiVersion: LATEST_API_VERSION,
@@ -209,7 +209,7 @@ export async function authenticateApiRequest(
   }
 
   // Resolve version. Caller pin (header) > key default > latest.
-  const headerVersion = request.headers.get("Answer Any Call-version");
+  const headerVersion = request.headers.get("leadstack-version");
   const resolved = resolveVersion({
     headerVersion: headerVersion ?? null,
     keyDefaultVersion: candidate.defaultVersion ?? null,

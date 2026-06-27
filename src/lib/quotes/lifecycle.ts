@@ -3,7 +3,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { getAdminDb } from "@/lib/firebase/admin";
-import { fireTriggers } from "@/lib/automations/triggers";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { emitDealCreatedById } from "@/lib/server/deals-service";
 import { computeQuoteTotals } from "@/lib/quotes/calc";
@@ -130,13 +130,15 @@ export async function fireQuoteTrigger(
   quote: Pick<Quote, "agencyId" | "subAccountId" | "contactId">,
   trigger: Extract<AutomationTriggerType, `quote_${string}`>,
 ): Promise<void> {
-  await fireTriggers({
-    agencyId: quote.agencyId,
-    subAccountId: quote.subAccountId,
-    triggerType: trigger,
-    contactId: quote.contactId,
-    context: {},
-  });
+  // Workflow Builder: only quote acceptance is a v1 trigger.
+  if (trigger === "quote_accepted") {
+    void fireWorkflowTrigger({
+      agencyId: quote.agencyId,
+      subAccountId: quote.subAccountId,
+      type: "quote.accepted",
+      contactId: quote.contactId,
+    });
+  }
 }
 
 /**

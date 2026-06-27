@@ -579,6 +579,27 @@ export async function POST(
     type: "booking_page_booked",
   });
 
+  // Post-booking redirect — confirmed (free) bookings only. Paid holds
+  // stay on the in-app confirmation so the PayPal CTA is always shown.
+  // Append booking_id + email so the destination page can de-dupe
+  // conversions + fire pixel Advanced Matching. A malformed stored URL
+  // never breaks a successful booking — it just falls back to no redirect.
+  let redirectUrl: string | null = null;
+  if (!paymentRequired && page.redirectUrl) {
+    try {
+      const u = new URL(page.redirectUrl);
+      // Append tracking params unless the operator opted out (legacy docs
+      // with the field absent default to appending).
+      if (page.redirectAppendParams !== false) {
+        u.searchParams.set("booking_id", created.eventDocRef.id);
+        u.searchParams.set("email", email);
+      }
+      redirectUrl = u.toString();
+    } catch (err) {
+      console.warn("[booking/book] invalid redirectUrl, skipping", err);
+    }
+  }
+
   return NextResponse.json({
     ok: true,
     eventId: created.eventDocRef.id,
@@ -586,6 +607,7 @@ export async function POST(
     paymentUrl: created.paymentLinkUrl ?? null,
     publicEventUrl,
     confirmationMessage: page.confirmationMessage || null,
+    redirectUrl,
   });
 }
 

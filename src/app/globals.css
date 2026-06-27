@@ -1,8 +1,27 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
+
+/* Inline lesson video embeds (rich-text editor + public player share this). */
+.lesson-video {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: #000;
+  margin-block: 1rem;
+}
+.lesson-video iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
 
 @theme inline {
   --color-background: var(--background);
@@ -196,6 +215,27 @@
   animation: progress-fill 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/*
+ * Looping variant for the pricing-card scarcity bar — fills from 0 to its
+ * target width, holds there, then vanishes (snaps instantly back to empty as
+ * the loop restarts), repeating on a 5s cycle to keep drawing the eye to
+ * "how many left". Target width comes from the --progress-target custom
+ * property set inline (the fill's own width is the reduced-motion fallback).
+ */
+@keyframes progress-fill-loop {
+  0% {
+    width: 0%;
+  }
+  40%,
+  100% {
+    width: var(--progress-target, 100%);
+  }
+}
+
+.progress-fill-loop {
+  animation: progress-fill-loop 5s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
 @keyframes progress-sheen {
   0% {
     transform: translateX(-100%);
@@ -211,6 +251,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .progress-fill {
+    animation: none;
+  }
+  .progress-fill-loop {
     animation: none;
   }
   .progress-sheen {

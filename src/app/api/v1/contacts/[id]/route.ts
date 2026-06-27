@@ -10,6 +10,8 @@ import {
   serializeContactForApi,
   type ContactCreateInput,
 } from "@/lib/api/serializers/contacts";
+import { loadCustomFieldDefs } from "@/lib/custom-fields/load-defs";
+import { validateCustomFieldValues } from "@/lib/custom-fields/validation";
 
 /**
  * Public API v1: single-contact routes.
@@ -68,6 +70,20 @@ export const PATCH = withApiAuth<{ id: string }>(async ({ body, params, ctx }) =
     ...patch,
     updatedAt: FieldValue.serverTimestamp(),
   };
+
+  // custom_fields is a full replacement of the value map when provided.
+  if ((body as Record<string, unknown>).custom_fields !== undefined) {
+    const cfDefs = await loadCustomFieldDefs(ctx.subAccountId, "contact");
+    const cf = validateCustomFieldValues(
+      (body as Record<string, unknown>).custom_fields,
+      cfDefs,
+    );
+    if (!cf.ok) {
+      return apiError(ctx, "invalid_request", "invalid_body", cf.error!);
+    }
+    writePatch.customFields = cf.value;
+  }
+
   await ref.set(writePatch, { merge: true });
 
   const fresh = await ref.get();

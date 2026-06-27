@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
@@ -31,7 +31,7 @@ export const runtime = "nodejs";
  * Body: { test?: boolean }  (test defaults to true)
  */
 
-const SAMPLE_CODE = "Answer Any Call-PREVIEW1";
+const SAMPLE_CODE = "LEADSTACK-PREVIEW1";
 // SHARED_FALLBACK_CODE + the exclusion list live in reminder-config.ts so
 // the automated 3-day reminder shares them.
 const HARDCODED_EXCLUSIONS = REMINDER_EXCLUSIONS;

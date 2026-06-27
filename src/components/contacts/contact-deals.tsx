@@ -8,6 +8,7 @@ import { useSubAccount } from "@/context/sub-account-context";
 import { subscribeToDealsForContact } from "@/lib/firestore/deals";
 import { formatCurrency, daysSince } from "@/lib/format";
 import { getStage, type Deal } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import type { Contact } from "@/types/contacts";
 import { NewDealDialog } from "@/components/pipeline/new-deal-dialog";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Button } from "@/components/ui/button";
 export function ContactDeals({ contact }: { contact: Contact }) {
   const { user } = useAuth();
   const { subAccountId, agencyId, saPath } = useSubAccount();
+  const stages = usePipelineStages();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,7 +72,7 @@ export function ContactDeals({ contact }: { contact: Contact }) {
       ) : (
         <ul className="space-y-2">
           {deals.map((deal) => {
-            const stage = getStage(deal.stageId);
+            const stage = getStage(deal.stageId, stages);
             const days = daysSince(deal.stageChangedAt);
             return (
               <li

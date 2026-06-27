@@ -305,6 +305,36 @@ const SAMPLE_PAYLOADS: Record<WebhookEventType, () => unknown> = {
       completed_at: new Date().toISOString(),
     },
   }),
+  "community.member.joined": () => ({
+    groupId: sampleId("grp"),
+    memberId: sampleId("mbr"),
+    via: "open",
+  }),
+  "community.member.approved": () => ({
+    groupId: sampleId("grp"),
+    memberId: sampleId("mbr"),
+  }),
+  "community.purchase.paid": () => ({
+    purchaseId: sampleId("pur"),
+    groupId: sampleId("grp"),
+    memberId: sampleId("mbr"),
+    scope: "course",
+    targetId: sampleId("crs"),
+    amountCents: 4900,
+    currency: "USD",
+  }),
+  "community.lesson.completed": () => ({
+    groupId: sampleId("grp"),
+    courseId: sampleId("crs"),
+    lessonId: sampleId("les"),
+    memberId: sampleId("mbr"),
+    progressPct: 50,
+  }),
+  "community.course.completed": () => ({
+    groupId: sampleId("grp"),
+    courseId: sampleId("crs"),
+    memberId: sampleId("mbr"),
+  }),
 };
 
 export async function POST(

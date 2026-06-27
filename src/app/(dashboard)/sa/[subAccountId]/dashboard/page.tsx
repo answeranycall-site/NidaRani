@@ -29,7 +29,8 @@ import { subscribeToContacts } from "@/lib/firestore/contacts";
 import { subscribeToDeals } from "@/lib/firestore/deals";
 import { subscribeToForms } from "@/lib/firestore/forms";
 import { formatCurrency, daysSince, toDate } from "@/lib/format";
-import { getStage, PIPELINE_STAGES, type Deal } from "@/types/deals";
+import { getStage, type Deal } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import type { Contact } from "@/types/contacts";
 import type { AutomationDoc } from "@/types";
 import type { LeadForm } from "@/types/forms";
@@ -128,12 +129,13 @@ export default function DashboardPage() {
     )
     .slice(0, 5);
 
+  const stages = usePipelineStages();
   const stageCounts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of PIPELINE_STAGES) m.set(s.id, 0);
+    for (const s of stages) m.set(s.id, 0);
     for (const d of deals) m.set(d.stageId, (m.get(d.stageId) ?? 0) + 1);
     return m;
-  }, [deals]);
+  }, [deals, stages]);
   const maxStageCount = Math.max(1, ...Array.from(stageCounts.values()));
 
   const isEmpty = !loading && contacts.length === 0 && deals.length === 0;
@@ -302,7 +304,7 @@ export default function DashboardPage() {
                 </Button>
               </div>
               <div className="space-y-2">
-                {PIPELINE_STAGES.map((s) => {
+                {stages.map((s) => {
                   const count = stageCounts.get(s.id) ?? 0;
                   const pct = (count / maxStageCount) * 100;
                   return (
@@ -340,7 +342,7 @@ export default function DashboardPage() {
                   </div>
                   <ul className="space-y-1">
                     {recentDeals.map((d) => {
-                      const stage = getStage(d.stageId);
+                      const stage = getStage(d.stageId, stages);
                       const c = contactById.get(d.contactId);
                       const days = daysSince(d.stageChangedAt);
                       return (

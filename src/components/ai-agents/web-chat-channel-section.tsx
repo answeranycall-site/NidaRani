@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   useCallback,
@@ -115,7 +115,7 @@ export function WebChatChannelSection() {
 
   const snippet = useMemo(() => {
     const origin =
-      typeof window !== "undefined" ? window.location.origin : "https://answeranycall.com";
+      typeof window !== "undefined" ? window.location.origin : "https://leadstack.dev";
     return `<script src="${origin}/widget.js" data-sa="${subAccountId}" async></script>`;
   }, [subAccountId]);
 
@@ -337,7 +337,7 @@ export function WebChatChannelSection() {
             <p className="text-[11px] text-muted-foreground">
               One hostname per line, no protocol. Only these origins can load
               the widget. Leave empty during testing to allow{" "}
-              <code>localhost</code> + your Answer Any Call domain.
+              <code>localhost</code> + your LeadStack domain.
             </p>
           </div>
 

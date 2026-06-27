@@ -13,7 +13,7 @@ export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  if (LANDING_VARIANT !== "Answer Any Call") {
+  if (LANDING_VARIANT !== "leadstack") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 

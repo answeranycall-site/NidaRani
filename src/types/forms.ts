@@ -1,4 +1,4 @@
-﻿import type { Timestamp, FieldValue } from "firebase/firestore";
+import type { Timestamp, FieldValue } from "firebase/firestore";
 import type { PipelineStageId } from "@/types/deals";
 
 export type FormFieldType =
@@ -55,7 +55,7 @@ export interface FormAppearance {
   theme: "light" | "dark";
   /** Hex string with leading #. Drives the submit button + focus ring. */
   accent: string;
-  /** Hide the Answer Any Call header + "Powered by" footer when embedded. */
+  /** Hide the LeadStack header + "Powered by" footer when embedded. */
   hideChrome: boolean;
   /**
    * Hide the form name + "Fill this out…" tagline above the fields. Use

@@ -1,4 +1,4 @@
-﻿export type AgencyRole = "owner" | "staff";
+export type AgencyRole = "owner" | "staff";
 export type SubAccountRole = "admin" | "collaborator";
 export type SubAccountStatus = "active" | "archived";
 
@@ -17,9 +17,9 @@ export interface AgencyDoc {
   subscriptionPriceId: string | null;
   /**
    * Optional URL of the agency's logo. When set, the dashboard sidebar +
-   * browser tab title swap Answer Any Call's chevron mark + wordmark for the
+   * browser tab title swap LeadStack's chevron mark + wordmark for the
    * agency's brand. The URL is rendered as <img src="…" />, so any public
-   * https URL works (CDN, S3, the agency's own site). Null = Answer Any Call's
+   * https URL works (CDN, S3, the agency's own site). Null = LeadStack's
    * default mark.
    */
   logoUrl: string | null;
@@ -35,6 +35,15 @@ export interface AgencyDoc {
    * CUSTOM_BRAND.primaryDomain.
    */
   primaryDomain: string | null;
+  /**
+   * Agency policy: may sub-accounts fall back to the SHARED (deployment-wide,
+   * env-var) Twilio sender for SMS? Default ON — `undefined`/`true` means
+   * allowed, so legacy agencies are unaffected. When explicitly `false`, the
+   * shared fallback is refused and a sub-account must configure its own
+   * dedicated Twilio number to send SMS. Enforced at the single send chokepoint
+   * (`getTwilioForSubAccount`) and reflected in the workflow builder readiness.
+   */
+  sharedSmsAllowed?: boolean;
 }
 
 export interface SubAccountDoc {
@@ -153,6 +162,50 @@ export interface SubAccountDoc {
    */
   websiteEnabledByAgency?: boolean;
   /**
+   * Agency-controlled gate for the Social Planner (schedule + auto-publish
+   * posts to the connected Facebook Page / Instagram Business via the shared
+   * `metaConfig` connection). Only the agency owner can flip it (PATCH
+   * /api/agency/sub-accounts/[id]/feature-gates). When `false` (or undefined
+   * on legacy docs): the Social Planner sidebar entry renders a "Locked by
+   * your agency" state, the connect/create/publish routes 403, and the whole
+   * surface stays invisible. No tear-down on disable — scheduled posts +
+   * the Meta connection are preserved, so re-enabling resumes instantly.
+   * Defaults to `false` at creation (explicit allowlist). Read `=== true` so
+   * legacy docs stay locked. Posting reuses the same Meta App Review-gated
+   * connection as the inbox, plus the extra publish scopes requested at
+   * connect time. See the "Social Planner v1" plan.
+   */
+  socialPlannerEnabledByAgency?: boolean;
+  /**
+   * Agency-controlled gate for the Community + Courses feature (Skool-style
+   * groups: feed + classroom + gamification, with magic-link members served at
+   * the public `/c/[saId]/...` surface). Only the agency owner can flip it
+   * (PATCH /api/agency/sub-accounts/[id]/feature-gates). When `false` (or
+   * undefined on legacy docs): the Community sidebar entry renders a "Locked by
+   * your agency" state AND every `/c/*` page + community API 404s/403s so a
+   * disabled sub-account's groups are unreachable by direct URL. No tear-down on
+   * disable — members, posts, and courses are preserved, so re-enabling resumes
+   * instantly. Defaults to `false` at creation (explicit allowlist). Read
+   * `=== true` so legacy docs stay locked. See "Community + Courses v1".
+   */
+  communityEnabledByAgency?: boolean;
+  /**
+   * Per-feature "hide instead of lock" overrides for the sidebar-gated features
+   * (Broadcasts, Website, Social Planner, Community). They ONLY take effect when
+   * the matching `*EnabledByAgency` gate is off. Default behavior (field
+   * undefined / `false`) is the legacy one: a disabled feature renders a
+   * greyed-out "Locked" sidebar entry so the tenant can see it exists (an
+   * upsell hook). When set `true`, a disabled feature's sidebar entry is
+   * omitted entirely so the sub-account never knows the feature exists — some
+   * agency owners prefer this. No effect while the feature is enabled. Only the
+   * agency owner can flip these (same PATCH route as the gates). Read `=== true`
+   * so legacy docs keep the visible-Locked behavior.
+   */
+  broadcastsHiddenWhenDisabled?: boolean;
+  websiteHiddenWhenDisabled?: boolean;
+  socialPlannerHiddenWhenDisabled?: boolean;
+  communityHiddenWhenDisabled?: boolean;
+  /**
    * BETA Facebook Messenger + Instagram DM connection. Null/undefined until the
    * sub-account admin connects a Page (only possible when
    * `metaInboxEnabledByAgency` is on). See {@link MetaConfig}.
@@ -168,7 +221,7 @@ export interface SubAccountDoc {
    */
   bookingLink: string | null;
   /**
-   * Single source of truth for the Reply-To header on every email Answer Any Call
+   * Single source of truth for the Reply-To header on every email LeadStack
    * sends on behalf of this sub-account — automation lead-step emails AND
    * manual contact-profile sends. Null falls back to no Reply-To (current
    * default behavior). One address per sub-account by design — keeps
@@ -227,6 +280,32 @@ export interface SubAccountDoc {
   territoryScopingEnabled?: boolean;
   territoryScopingEnabledAt?: Date | null;
   territoryScopingEnabledByUid?: string | null;
+  /**
+   * Optional per-sub-account overrides for the deal pipeline's stage labels +
+   * order. ONLY label/order are editable; ids + won/lost terminals always come
+   * from the canonical {@link PipelineStage} set, so this is a pure display
+   * layer. Absent/undefined (the default for every existing sub-account) →
+   * the canonical stages render unchanged. Set via PATCH
+   * /api/sub-accounts/[id]/pipeline-stages (admin). See "Phase 2 (2A)".
+   */
+  pipelineStages?: import("./deals").PipelineStageOverride[];
+  /**
+   * GHL migration connection (Phase 4). Holds the Private Integration Token +
+   * location id used to pull the account's data. The token is a secret stored
+   * like `twilioConfig.authToken` — server-only, never returned to the client.
+   * Null until connected; cleared on disconnect.
+   */
+  ghlImportConfig?: GhlImportConfig | null;
+}
+
+export interface GhlImportConfig {
+  /** GHL Private Integration Token (pit-...). Server-only — never sent to the browser. */
+  token: string;
+  /** The GHL sub-account (location) id this token is scoped to. */
+  locationId: string;
+  connectedByUid: string | null;
+  connectedAt: Timestamp | FieldValue | null;
+  lastValidatedAt: Timestamp | FieldValue | null;
 }
 
 export interface AccountContact {
@@ -289,8 +368,8 @@ export interface TwilioConfig {
 
 /**
  * BETA Meta (Facebook Messenger + Instagram DM) connection for one sub-account.
- * Null/undefined = not connected. Populated by the OAuth callback
- * (/api/sub-accounts/[id]/meta/callback) after the sub-account admin connects a
+ * Null/undefined = not connected. Populated by the shared OAuth callback
+ * (/api/meta/callback) after the sub-account admin connects a
  * Facebook Page; both Messenger and IG DM ride this single connection. Gated by
  * the agency `metaInboxEnabledByAgency` flag — nothing here is read or written
  * unless that gate is on. Strictly additive; absent on every existing doc.
@@ -312,6 +391,22 @@ export interface MetaConfig {
   instagramBusinessAccountId: string | null;
   /** Linked IG @handle, shown in the settings card. Null when no IG account. */
   instagramUsername: string | null;
+  /**
+   * What the currently-stored Page token can actually do, derived from the
+   * permissions Meta GRANTED at connect time (via /me/permissions) intersected
+   * with the agency gates that were on. This is the single source of truth that
+   * keeps the inbox and Social Planner from disagreeing about one shared
+   * connection:
+   *   - `inbox`   — true when the inbox gate is on AND `pages_messaging` was
+   *                 granted (Messenger/IG DM send+receive).
+   *   - `publish` — true when the Social gate is on AND `pages_manage_posts`
+   *                 was granted (Social Planner posting).
+   * Optional so legacy connections (made before capability tracking) read as
+   * undefined; helpers treat missing `inbox` as true (back-compat — the inbox
+   * worked) and missing `publish` as false (must reconnect via the unified
+   * card to gain posting). Reconnecting always refreshes this.
+   */
+  capabilities?: { inbox: boolean; publish: boolean };
   connectedByUid: string | null;
   connectedAt: Timestamp | FieldValue | null;
 }

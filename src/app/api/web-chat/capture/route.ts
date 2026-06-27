@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { getChannelConfig } from "@/lib/comms/ai/agent";
@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
  *   - Skip: stamp captureSkipped=true on the session so the bot stops
  *     asking. No Contact created.
  *
- * Like /message: no origin gate (iframe is on Answer Any Call's domain), so
+ * Like /message: no origin gate (iframe is on LeadStack's domain), so
  * gated by channel-enabled + rate limits + sessionId validity.
  */
 

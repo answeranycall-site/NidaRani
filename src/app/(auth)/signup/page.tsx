@@ -1,4 +1,4 @@
-﻿import { Suspense } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { SignupForm } from "@/components/auth/signup-form";
 import { LogoMark } from "@/components/brand/logo-mark";
@@ -10,7 +10,7 @@ export default function SignupPage() {
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2">
             <LogoMark size={24} idSuffix="-signup" />
-            <h1 className="text-2xl font-bold">Answer Any Call</h1>
+            <h1 className="text-2xl font-bold">LeadStack</h1>
           </Link>
           <p className="mt-2 text-sm text-muted-foreground">
             Start closing with the CRM your team will actually use.

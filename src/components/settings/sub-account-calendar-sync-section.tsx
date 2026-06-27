@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 
 /**
  * Calendar subscription panel — the .ics feed URL operators paste into
- * Google Calendar / Apple Calendar / Outlook to see their Answer Any Call
+ * Google Calendar / Apple Calendar / Outlook to see their LeadStack
  * bookings alongside other meetings.
  *
  * Read-only subscription, one-way push. External calendar polls our
@@ -138,7 +138,7 @@ export function SubAccountCalendarSyncSection() {
                   <strong>Add calendar</strong>.
                 </>,
                 <>
-                  Your Answer Any Call bookings appear within a few hours. Google
+                  Your LeadStack bookings appear within a few hours. Google
                   polls subscribed calendars on its own schedule (typically
                   8&ndash;24 hours).
                 </>,

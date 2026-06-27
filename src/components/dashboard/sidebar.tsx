@@ -17,7 +17,7 @@ import {
   Settings,
   LogOut,
   Building2,
-  Zap,
+  Workflow,
   Globe,
   Compass,
   Lock,
@@ -26,6 +26,8 @@ import {
   Package,
   ScrollText,
   MessagesSquare,
+  Share2,
+  GraduationCap,
 } from "lucide-react";
 import { getFirebaseDb } from "@/lib/firebase/client";
 import { signOutUser } from "@/lib/firebase/auth";
@@ -83,9 +85,17 @@ const SUB_ACCOUNT_NAV: NavItem[] = [
   { href: "/products", label: "Products", icon: Package, enabled: true },
   { href: "/quotes", label: "Quotes", icon: FileSignature, enabled: true },
   { href: "/website", label: "Website", icon: Globe, enabled: true },
-  { href: "/automations", label: "Automations", icon: Zap, enabled: true },
+  { href: "/workflows", label: "Workflows", icon: Workflow, enabled: true },
   { href: "/ai-agents", label: "AI Agents", icon: Bot, enabled: true },
   { href: "/broadcasts", label: "Broadcasts", icon: Send, enabled: true },
+  { href: "/templates", label: "Templates", icon: FileText, enabled: true },
+  { href: "/social", label: "Social Planner", icon: Share2, enabled: true },
+  {
+    href: "/community",
+    label: "Community",
+    icon: GraduationCap,
+    enabled: true,
+  },
   { href: "/reports", label: "Reports", icon: BarChart3, enabled: true },
   { href: "/logs", label: "Logs", icon: ScrollText, enabled: true },
   {
@@ -123,11 +133,22 @@ function SidebarContent() {
   // than the sidebar entry.
   const [broadcastsGate, setBroadcastsGate] = useState<boolean | null>(null);
   const [websiteGate, setWebsiteGate] = useState<boolean | null>(null);
+  const [socialGate, setSocialGate] = useState<boolean | null>(null);
+  const [communityGate, setCommunityGate] = useState<boolean | null>(null);
+  // Per-feature "hide instead of lock" overrides. Only consulted when the
+  // matching gate is off — when true the entry is omitted entirely instead of
+  // rendering a greyed "Locked" row, so the tenant never knows it exists.
+  const [broadcastsHidden, setBroadcastsHidden] = useState(false);
+  const [websiteHidden, setWebsiteHidden] = useState(false);
+  const [socialHidden, setSocialHidden] = useState(false);
+  const [communityHidden, setCommunityHidden] = useState(false);
   useEffect(() => {
     const linkSubIdLocal = activeSubId ?? memberships[0]?.subAccountId ?? null;
     if (!linkSubIdLocal) {
       setBroadcastsGate(null);
       setWebsiteGate(null);
+      setSocialGate(null);
+      setCommunityGate(null);
       return;
     }
     return onSnapshot(
@@ -136,10 +157,18 @@ function SidebarContent() {
         const data = snap.data();
         setBroadcastsGate(data?.broadcastsEnabledByAgency === true);
         setWebsiteGate(data?.websiteEnabledByAgency === true);
+        setSocialGate(data?.socialPlannerEnabledByAgency === true);
+        setCommunityGate(data?.communityEnabledByAgency === true);
+        setBroadcastsHidden(data?.broadcastsHiddenWhenDisabled === true);
+        setWebsiteHidden(data?.websiteHiddenWhenDisabled === true);
+        setSocialHidden(data?.socialPlannerHiddenWhenDisabled === true);
+        setCommunityHidden(data?.communityHiddenWhenDisabled === true);
       },
       () => {
         setBroadcastsGate(null);
         setWebsiteGate(null);
+        setSocialGate(null);
+        setCommunityGate(null);
       },
     );
   }, [activeSubId, memberships]);
@@ -268,7 +297,25 @@ function SidebarContent() {
               // returns 403 either way.
               const gateLocked =
                 (item.href === "/broadcasts" && broadcastsGate === false) ||
-                (item.href === "/website" && websiteGate === false);
+                (item.href === "/website" && websiteGate === false) ||
+                (item.href === "/social" && socialGate === false) ||
+                (item.href === "/community" && communityGate === false);
+              // When the agency owner opted to hide (not just lock) a disabled
+              // feature, omit the entry entirely so the tenant never sees it.
+              const gateHidden =
+                (item.href === "/broadcasts" &&
+                  broadcastsGate === false &&
+                  broadcastsHidden) ||
+                (item.href === "/website" &&
+                  websiteGate === false &&
+                  websiteHidden) ||
+                (item.href === "/social" &&
+                  socialGate === false &&
+                  socialHidden) ||
+                (item.href === "/community" &&
+                  communityGate === false &&
+                  communityHidden);
+              if (gateHidden) return null;
               if (!item.enabled || gateLocked) {
                 const lockedByGate = gateLocked;
                 return (

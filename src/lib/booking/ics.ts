@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ICS (RFC 5545) calendar invite generator. Pure — no IO, no library.
  * Attached to confirmation emails so attendees can one-click add the
  * meeting to their own calendar (Apple, Google, Outlook all read .ics).
@@ -85,7 +85,7 @@ export function generateIcs(input: IcsInput): string {
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    `PRODID:-//Answer Any Call//Booking//${input.domain}//EN`,
+    `PRODID:-//LeadStack//Booking//${input.domain}//EN`,
     "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
     "BEGIN:VEVENT",

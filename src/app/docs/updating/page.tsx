@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LogoMark } from "@/components/brand/logo-mark";
@@ -15,9 +15,9 @@ import { LogoMark } from "@/components/brand/logo-mark";
  */
 
 export const metadata = {
-  title: "Keeping your app up to date — Answer Any Call",
+  title: "Keeping your app up to date — LeadStack",
   description:
-    "How to pull the latest official Answer Any Call build into your own customised version of the app — without losing your changes.",
+    "How to pull the latest official LeadStack build into your own customised version of the app — without losing your changes.",
 };
 
 export default function UpdatingDocsPage() {
@@ -27,7 +27,7 @@ export default function UpdatingDocsPage() {
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2 text-lg font-bold">
             <LogoMark size={20} idSuffix="-docs" />
-            Answer Any Call
+            LeadStack
           </Link>
           <Button render={<Link href="/" />} variant="outline" size="sm">
             Back to home
@@ -43,7 +43,7 @@ export default function UpdatingDocsPage() {
           Keeping your app up to date with the org build
         </h1>
         <p className="mt-3 text-base text-muted-foreground">
-          How to pull the latest official Answer Any Call build into your own
+          How to pull the latest official LeadStack build into your own
           customised version of the app — without losing the changes you&apos;ve
           made.
         </p>
@@ -63,7 +63,7 @@ export default function UpdatingDocsPage() {
                 <tr className="border-t">
                   <td className="px-4 py-3 font-semibold">Org repo</td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    The official Answer Any Call build. A read-only{" "}
+                    The official LeadStack build. A read-only{" "}
                     <em>snapshot</em> you don&apos;t push to.
                   </td>
                   <td className="px-4 py-3">
@@ -104,7 +104,7 @@ export default function UpdatingDocsPage() {
 
         <Section title="One-time setup (do this once per machine)" id="setup">
           <CodeBlock>{`# 1. Add the org repo as a second remote called "upstream"
-git remote add upstream https://github.com/Claude-Code-Pro-Camp/Answer Any Call-agency.git
+git remote add upstream https://github.com/Claude-Code-Pro-Camp/leadstack-agency.git
 
 # 2. Fetch its current snapshot
 git fetch upstream

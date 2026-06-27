@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 interface CreateReferralInput {
   refCode: string;
@@ -12,7 +12,7 @@ type CreateReferralOutcome =
   | { status: "skipped"; reason: string };
 
 // Stub — see publish/README.md. Never called at runtime in the buyer's
-// clone (gated upstream by LANDING_VARIANT === "Answer Any Call" in the Stripe
+// clone (gated upstream by LANDING_VARIANT === "leadstack" in the Stripe
 // webhook), but kept typed so webhooks.ts still type-checks.
 export async function createReferral(
   _input: CreateReferralInput,

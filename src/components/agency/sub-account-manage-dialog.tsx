@@ -12,6 +12,8 @@ import {
   MessagesSquare,
   PhoneOutgoing,
   Send,
+  Share2,
+  GraduationCap,
 } from "lucide-react";
 import {
   Dialog,
@@ -57,6 +59,16 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const initialWhatsapp = subAccount?.whatsappEnabledByAgency === true;
   const initialMetaInbox = subAccount?.metaInboxEnabledByAgency === true;
   const initialWebsite = subAccount?.websiteEnabledByAgency === true;
+  const initialSocial = subAccount?.socialPlannerEnabledByAgency === true;
+  const initialCommunity = subAccount?.communityEnabledByAgency === true;
+  // "Hide instead of lock" overrides for the sidebar-gated features.
+  const initialBroadcastsHidden =
+    subAccount?.broadcastsHiddenWhenDisabled === true;
+  const initialWebsiteHidden = subAccount?.websiteHiddenWhenDisabled === true;
+  const initialSocialHidden =
+    subAccount?.socialPlannerHiddenWhenDisabled === true;
+  const initialCommunityHidden =
+    subAccount?.communityHiddenWhenDisabled === true;
   const hasLiveDomain = !!subAccount?.resendConfig;
   const [emailDomainEnabled, setEmailDomainEnabled] = useState(initialEmail);
   const [apiAccessEnabled, setApiAccessEnabled] = useState(initialApi);
@@ -66,7 +78,39 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const [whatsappEnabled, setWhatsappEnabled] = useState(initialWhatsapp);
   const [metaInboxEnabled, setMetaInboxEnabled] = useState(initialMetaInbox);
   const [websiteEnabled, setWebsiteEnabled] = useState(initialWebsite);
+  const [socialPlannerEnabled, setSocialPlannerEnabled] =
+    useState(initialSocial);
+  const [communityEnabled, setCommunityEnabled] = useState(initialCommunity);
+  const [broadcastsHidden, setBroadcastsHidden] = useState(
+    initialBroadcastsHidden,
+  );
+  const [websiteHidden, setWebsiteHidden] = useState(initialWebsiteHidden);
+  const [socialHidden, setSocialHidden] = useState(initialSocialHidden);
+  const [communityHidden, setCommunityHidden] = useState(
+    initialCommunityHidden,
+  );
   const [saving, setSaving] = useState(false);
+  // Whether the deployment has Meta app creds (META_APP_ID/SECRET). null while
+  // loading. The FB/IG inbox + Social Planner gates depend on it, so they're
+  // grayed out when it's false. Fetched once when the dialog first opens.
+  const [metaConfigured, setMetaConfigured] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!open || metaConfigured !== null) return;
+    let cancelled = false;
+    void fetch("/api/agency/deployment-config")
+      .then((r) => r.json())
+      .then((d: { metaConfigured?: boolean }) => {
+        if (!cancelled) setMetaConfigured(d.metaConfigured === true);
+      })
+      .catch(() => {
+        // On failure, don't block the agency owner — assume configured.
+        if (!cancelled) setMetaConfigured(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, metaConfigured]);
 
   // Re-sync local state every time the dialog opens or the target sub-account
   // changes, so consecutive opens don't show stale toggle state.
@@ -79,6 +123,12 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       setWhatsappEnabled(initialWhatsapp);
       setMetaInboxEnabled(initialMetaInbox);
       setWebsiteEnabled(initialWebsite);
+      setSocialPlannerEnabled(initialSocial);
+      setCommunityEnabled(initialCommunity);
+      setBroadcastsHidden(initialBroadcastsHidden);
+      setWebsiteHidden(initialWebsiteHidden);
+      setSocialHidden(initialSocialHidden);
+      setCommunityHidden(initialCommunityHidden);
     }
   }, [
     open,
@@ -89,6 +139,12 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialWhatsapp,
     initialMetaInbox,
     initialWebsite,
+    initialSocial,
+    initialCommunity,
+    initialBroadcastsHidden,
+    initialWebsiteHidden,
+    initialSocialHidden,
+    initialCommunityHidden,
     subAccount?.id,
   ]);
 
@@ -103,6 +159,12 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const whatsappDirty = whatsappEnabled !== initialWhatsapp;
   const metaInboxDirty = metaInboxEnabled !== initialMetaInbox;
   const websiteDirty = websiteEnabled !== initialWebsite;
+  const socialDirty = socialPlannerEnabled !== initialSocial;
+  const communityDirty = communityEnabled !== initialCommunity;
+  const broadcastsHiddenDirty = broadcastsHidden !== initialBroadcastsHidden;
+  const websiteHiddenDirty = websiteHidden !== initialWebsiteHidden;
+  const socialHiddenDirty = socialHidden !== initialSocialHidden;
+  const communityHiddenDirty = communityHidden !== initialCommunityHidden;
   const dirty =
     emailDirty ||
     apiDirty ||
@@ -110,7 +172,18 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     outboundDirty ||
     whatsappDirty ||
     metaInboxDirty ||
-    websiteDirty;
+    websiteDirty ||
+    socialDirty ||
+    communityDirty ||
+    broadcastsHiddenDirty ||
+    websiteHiddenDirty ||
+    socialHiddenDirty ||
+    communityHiddenDirty;
+
+  // Meta features can't work without app creds on the deployment. Gray out the
+  // two Meta gates when unconfigured — but still allow turning an already-on
+  // gate OFF (don't trap a legacy enabled state).
+  const metaUnconfigured = metaConfigured === false;
 
   async function handleSave() {
     if (!subAccount) return;
@@ -127,6 +200,12 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         whatsappEnabled?: boolean;
         metaInboxEnabled?: boolean;
         websiteEnabled?: boolean;
+        socialPlannerEnabled?: boolean;
+        communityEnabled?: boolean;
+        broadcastsHiddenWhenDisabled?: boolean;
+        websiteHiddenWhenDisabled?: boolean;
+        socialPlannerHiddenWhenDisabled?: boolean;
+        communityHiddenWhenDisabled?: boolean;
       } = {};
       if (emailDirty) payload.emailDomainEnabled = emailDomainEnabled;
       if (apiDirty) payload.apiAccessEnabled = apiAccessEnabled;
@@ -135,6 +214,16 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       if (whatsappDirty) payload.whatsappEnabled = whatsappEnabled;
       if (metaInboxDirty) payload.metaInboxEnabled = metaInboxEnabled;
       if (websiteDirty) payload.websiteEnabled = websiteEnabled;
+      if (socialDirty) payload.socialPlannerEnabled = socialPlannerEnabled;
+      if (communityDirty) payload.communityEnabled = communityEnabled;
+      if (broadcastsHiddenDirty)
+        payload.broadcastsHiddenWhenDisabled = broadcastsHidden;
+      if (websiteHiddenDirty)
+        payload.websiteHiddenWhenDisabled = websiteHidden;
+      if (socialHiddenDirty)
+        payload.socialPlannerHiddenWhenDisabled = socialHidden;
+      if (communityHiddenDirty)
+        payload.communityHiddenWhenDisabled = communityHidden;
 
       const res = await fetch(
         `/api/agency/sub-accounts/${subAccount.id}/feature-gates`,
@@ -206,6 +295,35 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             : "Website builder disabled. New builds blocked; existing site preserved.",
         );
       }
+      if (socialDirty) {
+        parts.push(
+          socialPlannerEnabled
+            ? "Social Planner enabled."
+            : "Social Planner disabled. Scheduled posts + Meta connection preserved.",
+        );
+      }
+      if (communityDirty) {
+        parts.push(
+          communityEnabled
+            ? "Community enabled."
+            : "Community disabled. Members, posts, and courses preserved; the public pages go offline.",
+        );
+      }
+      // "Hide instead of lock" changes. Only meaningful while the feature is
+      // off; mention the current effect so the agency owner knows what the
+      // tenant will see.
+      const hiddenChanges: string[] = [];
+      if (broadcastsHiddenDirty)
+        hiddenChanges.push(`Broadcasts ${broadcastsHidden ? "hidden" : "shown as Locked"}`);
+      if (websiteHiddenDirty)
+        hiddenChanges.push(`Website ${websiteHidden ? "hidden" : "shown as Locked"}`);
+      if (socialHiddenDirty)
+        hiddenChanges.push(`Social Planner ${socialHidden ? "hidden" : "shown as Locked"}`);
+      if (communityHiddenDirty)
+        hiddenChanges.push(`Community ${communityHidden ? "hidden" : "shown as Locked"}`);
+      if (hiddenChanges.length > 0) {
+        parts.push(`When disabled: ${hiddenChanges.join(", ")}.`);
+      }
       toast.success(parts.join(" "));
       onOpenChange(false);
     } catch (err) {
@@ -259,6 +377,11 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             disabled={saving}
             icon={<Send className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />}
             title="Broadcasts"
+            hideOption={{
+              hidden: broadcastsHidden,
+              onHiddenChange: setBroadcastsHidden,
+              disabled: saving,
+            }}
           >
             When enabled, this sub-account can send bulk email broadcasts (up to
             25,000 recipients per send) to filtered audiences. Disabling locks
@@ -272,6 +395,11 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             disabled={saving}
             icon={<Globe className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />}
             title="Website"
+            hideOption={{
+              hidden: websiteHidden,
+              onHiddenChange: setWebsiteHidden,
+              disabled: saving,
+            }}
           >
             When enabled, this sub-account can build and publish a marketing
             site through the website builder (gitpage.site). Builds draw on your
@@ -313,9 +441,10 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
           <GateToggle
             checked={metaInboxEnabled}
             onChange={setMetaInboxEnabled}
-            disabled={saving}
+            disabled={saving || (metaUnconfigured && !initialMetaInbox)}
             icon={<MessagesSquare className="h-3.5 w-3.5 text-pink-600 dark:text-pink-400" />}
-            title="Facebook + Instagram inbox (beta)"
+            title="Facebook + Instagram inbox"
+            beta
           >
             When enabled, this sub-account can connect a Facebook Page +
             Instagram business account so Messenger and IG DMs land in the
@@ -325,6 +454,60 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             Disabling silences and hides the channels; nothing is torn down, so
             re-enabling resumes instantly. Leave off for any client that doesn&apos;t
             actively use Facebook/Instagram messaging.
+            {metaUnconfigured && (
+              <span className="mt-1 block font-medium text-amber-600 dark:text-amber-400">
+                Unavailable — set <code>META_APP_ID</code> and{" "}
+                <code>META_APP_SECRET</code> on the deployment to enable.
+              </span>
+            )}
+          </GateToggle>
+
+          <GateToggle
+            checked={socialPlannerEnabled}
+            onChange={setSocialPlannerEnabled}
+            disabled={saving || (metaUnconfigured && !initialSocial)}
+            icon={<Share2 className="h-3.5 w-3.5 text-fuchsia-600 dark:text-fuchsia-400" />}
+            title="Social Planner"
+            beta
+            hideOption={{
+              hidden: socialHidden,
+              onHiddenChange: setSocialHidden,
+              disabled: saving,
+            }}
+          >
+            When enabled, this sub-account can connect a Facebook Page +
+            Instagram business account and schedule posts that auto-publish at
+            the chosen time. <strong>Beta</strong> — posting reuses the same
+            Meta connection as the inbox plus extra publish permissions
+            (requires Meta App Review). Disabling locks the Social Planner
+            sidebar entry and 403s the connect/publish routes; scheduled posts
+            and the connection are preserved, so re-enabling resumes instantly.
+            {metaUnconfigured && (
+              <span className="mt-1 block font-medium text-amber-600 dark:text-amber-400">
+                Unavailable — set <code>META_APP_ID</code> and{" "}
+                <code>META_APP_SECRET</code> on the deployment to enable.
+              </span>
+            )}
+          </GateToggle>
+
+          <GateToggle
+            checked={communityEnabled}
+            onChange={setCommunityEnabled}
+            disabled={saving}
+            icon={<GraduationCap className="h-3.5 w-3.5 text-orange-600 dark:text-orange-400" />}
+            title="Community + Courses"
+            hideOption={{
+              hidden: communityHidden,
+              onHiddenChange: setCommunityHidden,
+              disabled: saving,
+            }}
+          >
+            When enabled, this sub-account can run Skool-style community groups —
+            a member feed, courses, and a leaderboard at a branded public link
+            (<code>/c/…</code>). Members sign in with a magic link and become
+            CRM contacts. Disabling locks the Community sidebar entry AND takes
+            the public group pages offline; members, posts, and courses are
+            preserved, so re-enabling resumes instantly.
           </GateToggle>
         </div>
 
@@ -373,36 +556,79 @@ function GateToggle({
   disabled,
   icon,
   title,
+  beta,
   children,
+  hideOption,
 }: {
   checked: boolean;
   onChange: (value: boolean) => void;
   disabled: boolean;
   icon: React.ReactNode;
   title: string;
+  /** When true, renders a fuchsia "Beta" pill after the title. */
+  beta?: boolean;
   children: React.ReactNode;
+  /**
+   * Optional "hide instead of lock" secondary control. Only the three
+   * sidebar-gated features pass this. The sub-checkbox is only shown while the
+   * feature is OFF (`!checked`) — there's no Locked state to hide when it's on.
+   * Its `disabled` is independent of the main toggle's: hiding the Locked row is
+   * pure presentation, so it stays available even when the feature itself can't
+   * be enabled (e.g. a Meta feature with no app creds on the deployment).
+   */
+  hideOption?: {
+    hidden: boolean;
+    onHiddenChange: (value: boolean) => void;
+    disabled?: boolean;
+  };
 }) {
   return (
-    <label
+    <div
       className={cn(
-        "flex cursor-pointer items-start gap-3 rounded-lg border bg-card p-3 transition-colors",
+        "rounded-lg border bg-card transition-colors",
         checked ? "border-primary/40 bg-primary/5" : "hover:bg-muted/40",
       )}
     >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        disabled={disabled}
-        className="mt-0.5 h-4 w-4 cursor-pointer"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          {icon}
-          {title}
+      <label className="flex cursor-pointer items-start gap-3 p-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
+          className="mt-0.5 h-4 w-4 cursor-pointer"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            {icon}
+            {title}
+            {beta && (
+              <span className="rounded-full bg-fuchsia-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-fuchsia-600 dark:text-fuchsia-400">
+                Beta
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{children}</p>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{children}</p>
-      </div>
-    </label>
+      </label>
+      {hideOption && !checked && (
+        <label className="flex cursor-pointer items-start gap-2 border-t border-dashed px-3 py-2 pl-10 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={hideOption.hidden}
+            onChange={(e) => hideOption.onHiddenChange(e.target.checked)}
+            disabled={hideOption.disabled}
+            className="mt-0.5 h-3.5 w-3.5 cursor-pointer"
+          />
+          <span>
+            <span className="font-medium text-foreground">
+              Hide from the sub-account entirely
+            </span>{" "}
+            — omit the sidebar entry instead of showing a greyed{" "}
+            <span className="font-medium">Locked</span> item, so they never know
+            the feature exists.
+          </span>
+        </label>
+      )}
+    </div>
   );
 }

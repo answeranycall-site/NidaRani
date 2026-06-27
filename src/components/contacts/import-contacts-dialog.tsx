@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -203,7 +203,7 @@ export function ImportContactsDialog({
             — we&apos;ll auto-match the columns. Need a starting point?{" "}
             <a
               href="/contacts-template.csv"
-              download="Answer Any Call-contacts-template.csv"
+              download="leadstack-contacts-template.csv"
               className="text-primary underline-offset-4 hover:underline"
             >
               Download the template

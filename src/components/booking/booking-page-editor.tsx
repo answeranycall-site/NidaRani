@@ -122,6 +122,8 @@ export function BookingPageEditor({ mode, initial }: Props) {
         accentColor: initial.accentColor,
         meetingUrl: initial.meetingUrl ?? null,
         confirmationMessage: initial.confirmationMessage,
+        redirectUrl: initial.redirectUrl ?? null,
+        redirectAppendParams: initial.redirectAppendParams ?? true,
         remindersEnabled: initial.remindersEnabled,
         reminderOffsetsMinutes: initial.reminderOffsetsMinutes,
         payment: initial.payment,
@@ -625,6 +627,48 @@ export function BookingPageEditor({ mode, initial }: Props) {
             placeholder="Looking forward to chatting! Add the calendar invite to your calendar to lock it in."
           />
         </Field>
+        <Field
+          label="Redirect URL (optional)"
+          htmlFor="redirectUrl"
+          hint="After a confirmed booking, send visitors here (e.g. a thank-you or upsell page). We briefly show the confirmation, then redirect — appending ?booking_id & email for tracking. Paid booking pages never redirect. Leave blank to stay on the confirmation screen."
+        >
+          <Input
+            id="redirectUrl"
+            type="url"
+            inputMode="url"
+            value={form.redirectUrl ?? ""}
+            onChange={(e) =>
+              set(
+                "redirectUrl",
+                e.target.value.trim().length > 0 ? e.target.value.trim() : null,
+              )
+            }
+            maxLength={1000}
+            placeholder="https://yourdomain.com/thank-you"
+          />
+        </Field>
+        {form.redirectUrl && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border bg-background p-3">
+            <input
+              type="checkbox"
+              checked={form.redirectAppendParams ?? true}
+              onChange={(e) => set("redirectAppendParams", e.target.checked)}
+              className="mt-0.5 h-4 w-4 cursor-pointer"
+            />
+            <div>
+              <p className="text-sm font-medium">
+                Append booking details to the redirect URL
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Adds <code>?booking_id</code> and <code>email</code> so your
+                thank-you page can fire conversion pixels and de-dup
+                bookings. Turn off to send visitors to the bare URL — the
+                booker&apos;s email won&apos;t appear in the destination&apos;s
+                address bar, referrer, or logs.
+              </p>
+            </div>
+          </label>
+        )}
         <label className="flex cursor-pointer items-start gap-3 rounded-lg border bg-background p-3">
           <input
             type="checkbox"

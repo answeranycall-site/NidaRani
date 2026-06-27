@@ -1,10 +1,10 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "API reference",
   description:
-    "Public REST API for the Answer Any Call CRM platform — authentication, resources, webhooks.",
+    "Public REST API for the LeadStack CRM platform — authentication, resources, webhooks.",
 };
 
 /**
@@ -23,10 +23,10 @@ export default function ApiDocsPage() {
           API Reference · v2026-06-15
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">
-          Answer Any Call public API
+          LeadStack public API
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          REST + outbound webhooks for the Answer Any Call CRM. Sub-account-scoped
+          REST + outbound webhooks for the LeadStack CRM. Sub-account-scoped
           Bearer auth, idempotent writes, signed webhooks, request log
           observability.
         </p>
@@ -84,7 +84,7 @@ e.g. lsk_live_AB12CD34_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}</Pre>
       <Section id="versioning" title="Versioning">
         <p>
           Versions are date-coded. Pin a request with{" "}
-          <Code>Answer Any Call-Version: 2026-06-15</Code>. If omitted, the
+          <Code>LeadStack-Version: 2026-06-15</Code>. If omitted, the
           request resolves to the version stamped on your key at mint time
           — so existing integrations don&apos;t break when we release a new
           version.
@@ -267,7 +267,7 @@ e.g. lsk_live_AB12CD34_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`}</Pre>
         <p>
           Each request carries{" "}
           <Code>
-            Answer Any Call-Signature: t=&lt;unix_ts&gt;,v1=&lt;hmac_hex&gt;
+            LeadStack-Signature: t=&lt;unix_ts&gt;,v1=&lt;hmac_hex&gt;
           </Code>
           . Verify it before trusting the payload.
         </p>

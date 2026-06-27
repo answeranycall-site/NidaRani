@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { NextResponse } from "next/server";
 import { verifyQStashSignature } from "@/lib/automations/qstash";
@@ -143,9 +143,9 @@ export async function POST(request: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "User-Agent": "Answer Any Call-Webhooks/1.0",
-        "Answer Any Call-Signature": signed.header,
-        "Answer Any Call-Version": LATEST_API_VERSION,
+        "User-Agent": "LeadStack-Webhooks/1.0",
+        "LeadStack-Signature": signed.header,
+        "LeadStack-Version": LATEST_API_VERSION,
         "Webhook-Event-Id": event.id,
         "Webhook-Event-Type": event.type,
       },

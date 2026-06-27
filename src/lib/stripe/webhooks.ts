@@ -1,4 +1,4 @@
-﻿import type Stripe from "stripe";
+import type Stripe from "stripe";
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
@@ -182,13 +182,13 @@ async function handleFoundersCheckout(session: Stripe.Checkout.Session) {
   // try/catch so any Firestore issue is logged and swallowed.
   //
   // Variant gate: the liveVisitors collection only exists on the
-  // Answer Any Call-branded demo. Buyer clones (LANDING_VARIANT === "custom")
+  // LeadStack-branded demo. Buyer clones (LANDING_VARIANT === "custom")
   // skip this entirely — no doc writes, no map collateral. Founders
-  // checkout itself is Answer Any Call-only, so this is defensive belt+braces.
+  // checkout itself is leadstack-only, so this is defensive belt+braces.
   try {
     const liveSid = session.metadata?.liveVisitorSid;
     if (
-      LANDING_VARIANT === "Answer Any Call" &&
+      LANDING_VARIANT === "leadstack" &&
       liveSid &&
       /^[A-Za-z0-9_-]{8,64}$/.test(liveSid)
     ) {
@@ -217,10 +217,10 @@ async function handleFoundersCheckout(session: Stripe.Checkout.Session) {
   // purchase counters on the same `appConfig/landingMetrics` doc the
   // pageView + ctaClick counters live on. Best-effort: a metric write
   // failure must not fail the welcome email / affiliate flow downstream.
-  // Only runs on the Answer Any Call variant (the test only exists there).
+  // Only runs on the leadstack variant (the test only exists there).
   // Always increments the aggregate `purchases` counter; the per-variant
   // bump only fires when we have a verified heroVariant.
-  if (LANDING_VARIANT === "Answer Any Call") {
+  if (LANDING_VARIANT === "leadstack") {
     try {
       const updates: Record<string, FieldValue | Date> = {
         purchases: FieldValue.increment(1),
@@ -240,19 +240,19 @@ async function handleFoundersCheckout(session: Stripe.Checkout.Session) {
     }
   }
 
-  // Affiliate program — only runs on the Answer Any Call-branded variant. Buyer
+  // Affiliate program — only runs on the LeadStack-branded variant. Buyer
   // clones (LANDING_VARIANT === "custom") skip this whole block; their
   // welcome email goes out without affiliate copy and no Firestore writes
   // hit the affiliates/referrals collections.
   let buyerAffiliateCode: string | null = null;
   let referralOutcome: string | null = null;
   // Gitpage Agency code mint — same gate as affiliate. Buyer clones get
-  // no Gitpage bonus (the offer is Answer Any Call-specific). Mint is best-
+  // no Gitpage bonus (the offer is LeadStack-specific). Mint is best-
   // effort: a failure logs + stores the error string but doesn't break
   // the rest of the welcome flow.
   let gitpageAgencyCode: string | null = null;
   let gitpageAgencyCodeError: string | null = null;
-  if (LANDING_VARIANT === "Answer Any Call") {
+  if (LANDING_VARIANT === "leadstack") {
     try {
       const buyerAffiliate = await ensureAffiliateAccount({
         email,
@@ -328,11 +328,11 @@ async function handleFoundersCheckout(session: Stripe.Checkout.Session) {
   });
 
   // Schedule the 3-day-after-purchase Gitpage bonus reminder (QStash).
-  // Fires for every Answer Any Call-variant buyer — those with a personal code
+  // Fires for every leadstack-variant buyer — those with a personal code
   // get it, those without get the shared LSAGENCY fallback. Best-effort:
   // a scheduling failure must not break the purchase flow. The step route
   // is idempotent (skips if already reminded / excluded / no email).
-  if (LANDING_VARIANT === "Answer Any Call" && qstashIsConfigured()) {
+  if (LANDING_VARIANT === "leadstack" && qstashIsConfigured()) {
     try {
       await publishCallback({
         pathname: "/api/gitpage-reminder/step",

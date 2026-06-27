@@ -1,15 +1,15 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import { ArchitectureDiagram } from "@/components/docs/architecture-diagram";
 
 export const metadata: Metadata = {
   title: "Architecture",
   description:
-    "How Answer Any Call hangs together — eight product domains in one tube-map view.",
+    "How LeadStack hangs together — eight product domains in one tube-map view.",
 };
 
 /**
  * Public architecture diagram page — the "London Tube map" view of
- * Answer Any Call's surface area. Lives at /docs/architecture and is reachable
+ * LeadStack's surface area. Lives at /docs/architecture and is reachable
  * without authentication because `/docs` is in the middleware's
  * PUBLIC_PATHS allowlist.
  *
@@ -25,7 +25,7 @@ export default function ArchitecturePage() {
           Architecture · one-page view
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">
-          Answer Any Call — what&apos;s in the box
+          LeadStack — what&apos;s in the box
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
           Eight product domains drawn as tube lines. Every line passes

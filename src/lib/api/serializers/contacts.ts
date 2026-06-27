@@ -1,11 +1,12 @@
-﻿import "server-only";
+import "server-only";
 
 import type { Timestamp } from "firebase-admin/firestore";
 import type { ContactAttribution } from "@/types/contacts";
+import type { CustomFieldValue } from "@/types/custom-fields";
 
 /**
  * Public-API wire shape for Contact. Frozen contract — every change here
- * is a breaking API change that must ship as a new `Answer Any Call-Version`.
+ * is a breaking API change that must ship as a new `LeadStack-Version`.
  *
  * Conventions (Stripe-style):
  *   - snake_case field names (vs internal camelCase)
@@ -38,6 +39,7 @@ export interface ContactApiObject {
   territory_id: string | null;
   email_opted_out: boolean;
   sms_opted_out: boolean;
+  custom_fields: Record<string, CustomFieldValue> | null;
   attribution: ContactAttributionApiObject | null;
   location: ContactLocationApiObject | null;
   created_at: string;
@@ -79,6 +81,16 @@ function emptyToNull(s: string | null | undefined): string | null {
   if (s === null || s === undefined) return null;
   const t = String(s).trim();
   return t.length === 0 ? null : t;
+}
+
+/** Custom-field value map for the wire — null when empty/absent. */
+export function customFieldsForApi(
+  v: unknown,
+): Record<string, CustomFieldValue> | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  return Object.keys(v as object).length > 0
+    ? (v as Record<string, CustomFieldValue>)
+    : null;
 }
 
 function serializeAttribution(
@@ -134,6 +146,7 @@ export function serializeContactForApi(
     territory_id: (data.territoryId as string | null) ?? null,
     email_opted_out: !!data.emailOptedOut,
     sms_opted_out: !!data.smsOptedOut,
+    custom_fields: customFieldsForApi(data.customFields),
     attribution: serializeAttribution(
       data.attribution as ContactAttribution | null,
     ),
@@ -167,6 +180,8 @@ export interface ContactCreateInput {
   tags: string[];
   pipelineStage: string | null;
   territoryId: string | null;
+  /** Validated against the sub-account's contact field defs in the route. */
+  customFields?: Record<string, CustomFieldValue> | null;
 }
 
 export interface ParseResult<T> {

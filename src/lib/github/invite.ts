@@ -1,9 +1,9 @@
-﻿import "server-only";
+import "server-only";
 
 // Stub — see publish/README.md. Typed no-op for the buyer's clone.
 // The real implementation lives in main and powers the post-payment
 // auto-invite flow on /thank-you, which is itself stubbed in the
-// buyer's tree (Answer Any Call-marketing-only).
+// buyer's tree (LeadStack-marketing-only).
 
 export type AddToTeamResult =
   | { status: "invited" }

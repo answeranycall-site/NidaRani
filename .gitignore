@@ -57,11 +57,3 @@ docs/plans/
 # temporary worktree used by publish.ps1 — lives one dir above the repo,
 # so it's normally invisible to git status; entry kept for intent.
 leadstack-pub-tmp/
-
-.vercel
-
-# personal data files — not part of the project
-al_pdfs/
-TN_Delinquent_Tax/
-*.csv
-*.docx

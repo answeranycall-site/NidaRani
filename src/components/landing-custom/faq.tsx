@@ -9,7 +9,7 @@ const faqs = [
   {
     question: "How do I get started?",
     answer:
-      "Most people have the core app live in under an hour. We use a “bring your own accounts” model — you connect your own services, so you stay in control of your data and costs. Everything’s optional except the essentials, and the app keeps working even before the rest is set up. To start, you only need a login & database service. From there, add payments, email, messaging (SMS), background jobs, AI, a website builder, and maps as you switch features on. Optional extras include website-knowledge for AI, voice calling, ad tracking, and live chat. Your setup assistant walks you through each one.",
+      "No coding required. We use a byo accounts model — you connect your own services, so you stay in control of your data and costs. Budget around a couple of hours if it's your first time and this isn't something you do every day (faster if it is). To start, you only need a login & database service. From there, add payments, email, messaging (SMS), background jobs, AI, a website builder, and maps as you switch features on. Optional extras include website-knowledge for AI, voice calling, ad tracking, and live chat. Your setup assistant walks you through each one.",
   },
   {
     question: "How do imports work?",

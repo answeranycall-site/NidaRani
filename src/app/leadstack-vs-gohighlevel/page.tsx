@@ -1,11 +1,11 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import {
   ComparisonRoute,
   buildComparisonMetadata,
 } from "@/components/compare/render-comparison-route";
 
 /**
- * /Answer Any Call-vs-gohighlevel — public SEO comparison page.
+ * /leadstack-vs-gohighlevel — public SEO comparison page.
  *
  * Pure server component. All body copy is rendered on the server and
  * lands in the initial HTML response (verified post-build with curl).

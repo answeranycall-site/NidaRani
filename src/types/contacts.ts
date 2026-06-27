@@ -20,6 +20,7 @@ export type ContactSource =
   | "website-form"
   | "web-chat"
   | "booking-page"
+  | "community"
   | "website"
   | "referral"
   | "ads"
@@ -67,6 +68,13 @@ export interface Contact {
   tags: string[];
   pipelineStage: string | null;
   attribution: ContactAttribution | null;
+  /**
+   * Operator-defined custom field values, keyed by the custom-field
+   * definition's `key` (see {@link CustomFieldDef}). Optional/absent on legacy
+   * docs and contacts with no custom fields set. Validated server-side against
+   * the sub-account's field definitions on create/update.
+   */
+  customFields?: Record<string, import("./custom-fields").CustomFieldValue> | null;
   // Tenancy keys (replace the legacy ownerId).
   agencyId: string;
   subAccountId: string;
@@ -159,6 +167,7 @@ export type ContactFormData = Pick<
   "name" | "email" | "phone" | "company" | "address" | "source" | "tags"
 > & {
   territoryId?: string | null;
+  customFields?: Record<string, import("./custom-fields").CustomFieldValue> | null;
 };
 
 export type ActivityType =
