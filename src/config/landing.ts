@@ -1,10 +1,10 @@
-﻿/**
+**
  * Landing-page configuration.
  *
  * The repo ships with two complete landing pages:
  *
- *   - "custom"    â€" a generic agency-CRM landing the buyer brands as
- *     their own. THIS IS THE DEFAULT â€" every new clone should be
+ *   - "custom"    — a generic agency-CRM landing the buyer brands as
+ *     their own. THIS IS THE DEFAULT — every new clone should be
  *     branded for the buyer's business, so the custom variant renders
  *     at "/" out of the box and CUSTOM_BRAND below should be edited
  *     first.
@@ -13,11 +13,11 @@
  *     prospects see a "Talk to us" mailto CTA (uses CUSTOM_BRAND.
  *     supportEmail), the owner takes payment off-system, provisions
  *     a sub-account, then invites the client via the in-app invite
- *     flow. Pricing tiers + section are hidden by default â€" see the
+ *     flow. Pricing tiers + section are hidden by default — see the
  *     CUSTOM_BRAND.pricing block below for how to re-enable real
  *     self-serve resale.
  *
- *   - "leadstack" â€" the LeadStack-branded marketing landing that sells
+ *   - "leadstack" — the LeadStack-branded marketing landing that sells
  *     LeadStack itself (used on the leadstack.dev demo site). Only flip
  *     back to this if you're running the public LeadStack demo.
  *
@@ -53,7 +53,7 @@ export interface CustomBrand {
 
 /**
  * The brand object actually passed to the custom landing components at
- * render time. Resolved on the server by lib/landing/resolve-brand.ts â€"
+ * render time. Resolved on the server by lib/landing/resolve-brand.ts —
  * agency doc fields take precedence, CUSTOM_BRAND fills the gaps. `logoUrl`
  * is nullable because "no logo set" is a meaningful state (renders the
  * default gradient mark instead of an <img>).
@@ -70,7 +70,7 @@ export interface ResolvedBrand {
 /**
  * Brand fields used by the "custom" landing variant. Ignored entirely when
  * LANDING_VARIANT is "leadstack". Edit these to brand the white-label
- * landing for your own business â€" the values below are placeholder
+ * landing for your own business — the values below are placeholder
  * defaults so the page renders cleanly out of the box.
  */
 export const CUSTOM_BRAND: CustomBrand = {
