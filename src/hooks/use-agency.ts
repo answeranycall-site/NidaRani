@@ -35,7 +35,7 @@ interface AgencyData {
 export function useAgency(): AgencySummary {
   const { agencyId } = useAuth();
   const [data, setData] = useState<AgencyData>({
-    name: "LeadStack",
+    name: "Answer Any Call",
     logoUrl: null,
     supportEmail: null,
     primaryDomain: null,
@@ -54,7 +54,7 @@ export function useAgency(): AgencySummary {
         if (snap.exists()) {
           const d = snap.data() as Partial<AgencyDoc>;
           setData({
-            name: (d.name as string) || "LeadStack",
+            name: (d.name as string) || "Answer Any Call",
             logoUrl: (d.logoUrl as string | null) ?? null,
             supportEmail: (d.supportEmail as string | null) ?? null,
             primaryDomain: (d.primaryDomain as string | null) ?? null,

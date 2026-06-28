@@ -1,63 +1,31 @@
-/**
- * Logo for the custom landing variant.
- *
- * CRM-inspired mark: three nodes connected on a diagonal pipeline path,
- * inside a rounded mint-gradient square. Reads as contact journey / lead
- * progression / pipeline stages — on-brand for any CRM.
- *
- * `idSuffix` is required when more than one instance of this logo renders
- * on the same page (e.g. navbar + footer) so the SVG `<linearGradient>` IDs
- * don't collide. Pick something stable per call site like "-nav" or
- * "-footer".
- *
- * Drop in your own logo by replacing the contents of this component —
- * the navbar + footer import it and don't need to change.
- */
 export function Logo({
   size = 24,
-  idSuffix = "",
 }: {
   size?: number;
   idSuffix?: string;
 }) {
-  const gradientId = `custom-logo-grad${idSuffix}`;
   return (
     <svg
       width={size}
-      height={size}
-      viewBox="0 0 24 24"
+      height={Math.round(size * 0.8)}
+      viewBox="0 0 110 88"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       className="shrink-0"
     >
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="oklch(0.72 0.16 165)" />
-          <stop offset="100%" stopColor="oklch(0.74 0.13 185)" />
-        </linearGradient>
-      </defs>
-      <rect
-        x="1.5"
-        y="1.5"
-        width="21"
-        height="21"
-        rx="6"
-        fill={`url(#${gradientId})`}
-      />
-      {/* pipeline connector */}
       <path
-        d="M 6.5 17 L 12 12 L 17.5 7"
-        stroke="white"
-        strokeWidth="1.5"
+        fill="#1B3A6B"
+        d="M8 22C8 14 14 8 22 8L28 8C32 8 36 11 37 15L39 25C40 29 38 34 34 35L31 37C34 46 42 54 51 57L53 54C55 50 59 48 63 49L73 52C77 53 80 57 80 62L80 68C80 76 74 82 66 82C38 82 8 52 8 24Z"
+      />
+      <path
+        d="M54 40L63 40L67 25L74 55L79 33L84 46L91 40L104 40"
+        stroke="#29B6E2"
+        strokeWidth="5"
         strokeLinecap="round"
-        opacity="0.45"
+        strokeLinejoin="round"
         fill="none"
       />
-      {/* three pipeline nodes */}
-      <circle cx="6.5" cy="17" r="2" fill="white" />
-      <circle cx="12" cy="12" r="2" fill="white" />
-      <circle cx="17.5" cy="7" r="2" fill="white" />
     </svg>
   );
 }

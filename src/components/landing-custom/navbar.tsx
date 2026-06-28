@@ -69,7 +69,7 @@ export function Navbar({ brand }: { brand: ResolvedBrand }) {
           ) : (
             <Logo size={24} idSuffix="-nav" />
           )}
-          <span className="bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 bg-clip-text text-transparent">
+          <span className="bg-gradient-to-r from-blue-800 via-blue-600 to-sky-400 bg-clip-text text-transparent">
             {brand.name}
           </span>
         </Link>

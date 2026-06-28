@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import type { ResolvedBrand } from "@/config/landing";
 
 export function CTA({ brand }: { brand: ResolvedBrand }) {
   return (
     <section className="relative overflow-hidden py-24">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.72_0.16_165)_/_14%,transparent_60%)]" />
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.60_0.14_232)_/_14%,transparent_60%)]" />
 
       <div className="container mx-auto px-4 text-center">
         <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tighter sm:text-5xl">
@@ -20,7 +21,7 @@ export function CTA({ brand }: { brand: ResolvedBrand }) {
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Button
-            render={<a href={`mailto:${brand.supportEmail}`} />}
+            render={<Link href="/login" />}
             size="lg"
             className="px-6 text-base"
           >

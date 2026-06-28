@@ -1,58 +1,32 @@
-/**
- * LeadStack logo mark — the "Chevron Stack" variant.
- *
- * Three offset chevron-tipped bars alternating direction. Top points left,
- * middle right, bottom left — chevron tips trace the directional flow of an S
- * while alternating alignment gives the stacked-cards reading.
- *
- * Use `<LogoMark size={20} />` next to the "LeadStack" wordmark, or alone as
- * a brand glyph.
- */
-
 interface LogoMarkProps {
-  /** Square pixel size. Defaults to 20 (matches sidebar usage). */
   size?: number;
   className?: string;
-  /** Optional unique suffix when multiple instances render in one document — keeps the gradient defs from colliding across SSR + hydration. */
   idSuffix?: string;
 }
 
-export function LogoMark({ size = 20, className, idSuffix = "" }: LogoMarkProps) {
-  const id1 = `ls-mark-1${idSuffix}`;
-  const id2 = `ls-mark-2${idSuffix}`;
-  const id3 = `ls-mark-3${idSuffix}`;
+export function LogoMark({ size = 20, className }: LogoMarkProps) {
   return (
     <svg
       width={size}
-      height={size}
-      viewBox="0 0 64 64"
+      height={Math.round(size * 0.8)}
+      viewBox="0 0 110 88"
+      fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       aria-hidden="true"
     >
-      <defs>
-        <linearGradient id={id1} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#6366f1" />
-          <stop offset="100%" stopColor="#7c3aed" />
-        </linearGradient>
-        <linearGradient id={id2} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#8b5cf6" />
-          <stop offset="100%" stopColor="#a855f7" />
-        </linearGradient>
-        <linearGradient id={id3} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor="#c026d3" />
-          <stop offset="100%" stopColor="#ec4899" />
-        </linearGradient>
-      </defs>
-
-      {/* Top chevron — points LEFT, right-aligned */}
-      <path d="M 56 8 L 18 8 L 8 16 L 18 24 L 56 24 Z" fill={`url(#${id1})`} />
-
-      {/* Middle chevron — points RIGHT, left-aligned */}
-      <path d="M 8 28 L 46 28 L 56 36 L 46 44 L 8 44 Z" fill={`url(#${id2})`} />
-
-      {/* Bottom chevron — points LEFT, right-aligned */}
-      <path d="M 56 48 L 18 48 L 8 56 L 18 60 L 56 60 Z" fill={`url(#${id3})`} />
+      <path
+        fill="#1B3A6B"
+        d="M8 22C8 14 14 8 22 8L28 8C32 8 36 11 37 15L39 25C40 29 38 34 34 35L31 37C34 46 42 54 51 57L53 54C55 50 59 48 63 49L73 52C77 53 80 57 80 62L80 68C80 76 74 82 66 82C38 82 8 52 8 24Z"
+      />
+      <path
+        d="M54 40L63 40L67 25L74 55L79 33L84 46L91 40L104 40"
+        stroke="#29B6E2"
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
     </svg>
   );
 }
