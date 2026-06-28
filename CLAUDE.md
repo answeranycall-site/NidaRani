@@ -150,6 +150,7 @@ src/
         quotes/                   List + new + [id] detail/edit (operator-facing quote flow)
         reports/                  Date-range KPIs + funnel + charts
         automations/              Recipe list + activity logs + settings + templates
+        workflows/                Workflow Builder list + [workflowId] builder + [workflowId]/runs log
         broadcasts/               Bulk-email list + [id] detail (live status)
         social/                   Social Planner — content calendar + post list + composer + Connections tab (agency-gated)
         website/                  gitpage.site builder (long sectioned form)
@@ -185,6 +186,7 @@ src/
       comms/email/send/           Send email (Resend, shared-sender)
       comms/sms/send/             Send SMS (Twilio, env-var or per-SA dedicated)
       automations/step/           QStash callback — executes one Speed-to-Lead step
+      workflows/step/             QStash callback — advances one Workflow Builder node (signature-verified)
       broadcasts/email/send/      Initiate bulk email (validate + fan out to QStash)
       broadcasts/email/step/      QStash callback — sends one recipient's email
       u/[token]/                  POST unsubscribe (flips contact.emailOptedOut)
@@ -202,6 +204,10 @@ src/
       web-chat/message/           POST visitor message → bot reply. Rate-limited.
       web-chat/capture/           POST inline-form submit → Contact + Task + escalation email
       sub-accounts/[id]/
+        workflows/                GET list + POST create workflow
+        workflows/[workflowId]/   GET + PATCH + DELETE workflow
+        workflows/[workflowId]/runs/  GET run history for a workflow
+        workflows/[workflowId]/test/  POST dry-run enrollment on a specific contact
         quotes/                   POST create draft quote (issues atomic per-SA sequence number)
         quotes/[quoteId]/send/    POST send/re-send quote (issues fresh HMAC token, sends email)
         quotes/[quoteId]/mark-paid/  POST flip accepted → paid (manual; no payment collection in v1)
@@ -223,6 +229,7 @@ src/
     quotes/              quote-builder (line-item editor + live totals), quote-list (filter chips + search), quote-detail (view/edit + Send/Mark-paid/Delete), quote-status-badge, public-quote-view (recipient accept/decline + reason picker)
     reports/             SVG chart primitives
     automations/         Recipe attach UI, template editor, history viewer
+    workflows/           Workflow Builder: workflow-builder.tsx (step list + node config), workflows-list.tsx, workflow-runs.tsx, conditions-editor.tsx, node-config-dialog.tsx, test-dialog.tsx, workflow-status-badge.tsx
     ai-agents/           Channel nav tabs + AgentProfileSection (persona+KB) + SMS/WebChat channel sections + WebChatSessionsList + WebChatSessionThread
     web-chat/            ChatWindow component rendered inside the embed iframe (self-contained, immune to host CSS)
     social/              Social Planner: social-content-calendar (month grid of posts), social-post-composer (caption + image URL + FB/IG targets + schedule dialog), social-connections (read-only status + deep link to Settings)
@@ -241,6 +248,7 @@ src/
     firestore/           CRUD helpers per collection (contacts, deals, tasks, events, forms, quotes, activities, users, mail, web-chat-sessions, social-posts)
     quotes/              calc.ts (pure money math + isQuoteExpired), token.ts (HMAC + nonce public-share token, only SHA-256 hash persisted), number.ts (atomic Q-YYYY-NNNN sequence per sub-account), email.ts (recipient email subject + text + html), lifecycle.ts (recordQuoteActivity + fireQuoteTrigger + autoCreateDealForAcceptedQuote — side-effects swallow errors so they can't break the primary write)
     automations/         triggers, executor, qstash, merge-tags, unsubscribe-token, seed-templates, template-presets
+    workflows/           engine.ts (fireWorkflowTrigger + runStep + enrollForTest), conditions.ts (evalConditionGroup), catalog.ts (labels + defaultConfig + nodeSummary), builder-tree.ts
     broadcasts/          audience.ts (filter resolution for bulk email recipients)
     contacts/            location.ts (IP geo via ipapi.co + phone country-code parsing + country centroids)
     landing/             resolve-brand.ts (server-side: merges agency doc over CUSTOM_BRAND for the custom landing)
@@ -309,6 +317,8 @@ firebase.json            Deploys firestore.rules only
 | `subAccounts/{id}/counters/quoteNumbers` | server-only | Per-sub-account sequence counter for the year-prefixed `Q-YYYY-NNNN` quote number generator. `{ year: number, seq: number, updatedAt }`. Atomic increment via Firestore transaction in `lib/quotes/number.ts::issueQuoteNumber()`. Never touched by clients — the resulting number returns in the create-quote API response. |
 | `quotes/{id}` | sub-account read/create/update/delete | Operator-built quote. Carries tenancy (`agencyId`, `subAccountId`, `createdByUid`), `contactId`, `quoteNumber` (e.g. `Q-2026-0001`), `status` (draft → sent → viewed → accepted/declined/expired → paid), `currency`, `lineItems[]`, `globalDiscount`, `globalTaxPercent`, `termsAndNotes`, `billedToOrganization`, `validUntil`, `autoCreateDealOnAccept`, lifecycle stamps (`sentAt`, `viewedAt`, `acceptedAt`, `declinedAt`, `declineReason`, `declineNote`, `paidAt`), and `publicTokenHash` (SHA-256 of the most recent HMAC-signed public token — raw token never persisted). Edits allowed on sent quotes per v1 spec. |
 | `socialPosts/{id}` | sub-account read; server-only write | Social Planner post (top-level, like `quotes`). Carries tenancy (`agencyId`, `subAccountId`, `createdByUid`), `caption`, `imageUrl`, `targets` (`("facebook"\|"instagram")[]`), `status` (draft → scheduled → publishing → published/failed), `scheduledAt`, `publishedAt`, per-target `results[]` (`{platform, status, externalId, error}`), and `qstashMessageId`. Reads stream to the content calendar via `subscribeToSocialPosts`; all writes go through Admin-SDK routes (rules are read-only for members, mirrors `products`). |
+| `workflows/{workflowId}` | server-only (rules: `allow read, write: if false`) | Workflow Builder definition. Carries tenancy, `name`, `status` (`draft\|active\|paused`), `trigger` (type + filters + optional formId/toStage), `startNodeId`, `nodes: Record<string, WorkflowNode>` (inline graph), `stats: { enrolled, completed }`. All reads/writes go through Admin-SDK routes. |
+| `workflowRuns/{runId}` | server-only (rules: `allow read, write: if false`) | One enrollment doc per contact-per-workflow-firing. Carries `workflowId`, `contactId`, `status` (`running\|waiting\|completed\|failed\|exited`), `currentNodeId`, `history[]` (audit log: nodeId, type, at, result string), `context` (trigger payload snapshot — formId, formName, formData for form-submitted runs; toStage for stage-change runs; `test: true` for dry-runs), `qstashMessageId`. Written by the engine; never by clients. |
 
 ## Key Architecture
 - **Firebase Client SDK** (`lib/firebase/client.ts`) — browser only
@@ -336,6 +346,94 @@ LeadStack ships one named recipe — **Speed-to-Lead** (internal `recipeType: "i
 - **Opt-out compliance** — every email body must include `{{unsubscribeLink}}` (template editor enforces). The link is HMAC-signed (`AUTOMATIONS_TOKEN_SECRET`) and resolves to `/u/[token]` which POSTs `/api/u/[token]` to flip `contact.emailOptedOut = true`. Twilio inbound STOP/START is parsed by `/api/webhooks/twilio/inbound` (signature-verified against `TWILIO_AUTH_TOKEN`); matching contacts (lookup by phone) get `smsOptedOut` flipped. Twilio's webhook URL needs `/api/webhooks/twilio/inbound` configured under the number's "A MESSAGE COMES IN" setting.
 - **Idempotency** — QStash retries on 5xx. The executor's first action is `if (execution.history.some(h => h.stepIndex === stepIndex)) return` so retries don't double-send.
 - **Local dev** — QStash needs a public callback URL. Run `ngrok http 3000` and set `NEXT_PUBLIC_APP_URL` to the ngrok HTTPS URL while testing automations.
+
+## Workflow Builder (v1)
+
+A general-purpose automation engine that replaces the legacy single-recipe `automations` system. A **workflow** is a TRIGGER + a linear graph of NODES (with optional if/else branching). A **run** is one contact's enrollment walking that graph, advanced node by node via QStash. Accessible from the sidebar **Workflows** entry at `/sa/[subAccountId]/workflows`.
+
+### Triggers (6)
+
+| Trigger type | Description |
+|---|---|
+| `form.submitted` | Form submission — optionally narrowed to a specific form id |
+| `contact.created` | Any new contact minted in the sub-account |
+| `contact.tag.added` | A tag is added to a contact |
+| `pipeline.stage.changed` | A deal moves to a stage — optionally narrowed to a specific target stage |
+| `booking.created` | A booking page appointment is booked |
+| `quote.accepted` | A recipient accepts a quote on the public `/q/[token]` page |
+
+Each trigger carries a `filters: ConditionGroup` (AND list of conditions on the contact) applied before enrollment. An empty filter group enrolls every contact that hits the trigger.
+
+### Node types (13)
+
+| Node | What it does |
+|---|---|
+| `send_email` | Sends an email to the contact via Resend. Skips opted-out / no-email contacts. Supports merge tags + `{{unsubscribeLink}}`. |
+| `send_sms` | Sends an SMS via the sub-account's dedicated Twilio number (or shared env creds when the agency permits). Skips opted-out / no-phone contacts. |
+| `whatsapp_template` | Sends a pre-approved WhatsApp template via Twilio. Requires the agency WhatsApp gate + a configured sender + an approved template doc. |
+| `wait` | Pauses the run for a configurable number of seconds. QStash delivers the next step after the delay. |
+| `if_else` | Evaluates a `ConditionGroup` against the live contact; branches to `whenTrue` or `whenFalse` next-node. |
+| `add_tag` | Appends a tag to the contact (`FieldValue.arrayUnion`). |
+| `remove_tag` | Removes a tag from the contact (`FieldValue.arrayRemove`). |
+| `move_stage` | Sets the contact's `pipelineStage` field. |
+| `update_field` | Sets a whitelisted contact field or any `customFields.*` key. The whitelist (`WRITABLE_FIELDS`) prevents clobbering tenancy/system keys. |
+| `create_task` | Creates a follow-up Task linked to the contact, due in configurable days. Title supports merge tags. |
+| `notify` | Sends an internal email notification to the agency owner, the sub-account's account contact, or a custom address. |
+| `webhook` | POSTs `{ type, contact, form: { id, name, fields } }` JSON to any HTTPS URL (10s timeout). The `form.fields` object carries the form answers snapshot captured at enrollment. |
+| `goal` | Ends the run immediately (used to model a success goal mid-graph). |
+
+### Conditions (used in triggers and if/else nodes)
+
+`ConditionGroup` is an AND list of `Condition` objects in v1 (OR/nested groups are a v2 add). Evaluated by [src/lib/workflows/conditions.ts](src/lib/workflows/conditions.ts)::`evalConditionGroup()`.
+
+| Operator | Meaning |
+|---|---|
+| `equals` / `not_equals` | String equality on any contact field |
+| `contains` | Case-insensitive substring match |
+| `is_set` / `not_set` | Field presence check |
+| `has_tag` | Contact's `tags[]` array includes the value |
+| `in_stage` | Contact's `pipelineStage` matches the value |
+| `source_is` | Contact's `source` matches the value |
+
+Fields may be top-level contact keys (e.g. `"email"`, `"company"`) or nested custom fields as `"customFields.<key>"`.
+
+### Data model
+
+- **`workflows/{workflowId}`** — top-level collection (like `quotes`). Carries tenancy, `name`, `status` (`draft | active | paused`), `trigger`, `startNodeId`, `nodes: Record<string, WorkflowNode>` (the graph stored inline — node counts are bounded), `stats: { enrolled, completed }`.
+- **`workflowRuns/{runId}`** — one doc per contact enrollment. Carries `workflowId`, `contactId`, `status` (`running | waiting | completed | failed | exited`), `currentNodeId`, `history[]` (audit log of every node executed), `context` (trigger payload snapshot, e.g. form answers for the Webhook step), `qstashMessageId`.
+
+Both collections are **server-only** in Firestore rules (`allow read, write: if false`) — all reads/writes go through Admin-SDK routes.
+
+### Files
+
+- Types: [src/types/workflows.ts](src/types/workflows.ts)
+- Engine: [src/lib/workflows/engine.ts](src/lib/workflows/engine.ts) — `fireWorkflowTrigger()` (enrollment dispatcher) + `runStep()` (node executor) + `enrollForTest()` (dry-run)
+- Conditions: [src/lib/workflows/conditions.ts](src/lib/workflows/conditions.ts) — `evalConditionGroup()`
+- Catalog: [src/lib/workflows/catalog.ts](src/lib/workflows/catalog.ts) — `TRIGGER_LABELS`, `NODE_LABELS`, `ADDABLE_TYPES`, `CONDITION_OPS`, `defaultConfig()`, `nodeSummary()`
+- Builder tree: [src/lib/workflows/builder-tree.ts](src/lib/workflows/builder-tree.ts)
+- UI: [src/components/workflows/](src/components/workflows/) — `workflow-builder.tsx` (step list + node config), `workflows-list.tsx` (list + create), `workflow-runs.tsx` (run history), `conditions-editor.tsx`, `node-config-dialog.tsx`, `test-dialog.tsx`, `workflow-status-badge.tsx`
+- Pages: [src/app/(dashboard)/sa/[subAccountId]/workflows/page.tsx](src/app/(dashboard)/sa/[subAccountId]/workflows/page.tsx), `[workflowId]/page.tsx` (builder), `[workflowId]/runs/page.tsx` (run log)
+- API routes: `GET|POST /api/sub-accounts/[id]/workflows` (list + create), `GET|PATCH|DELETE /api/sub-accounts/[id]/workflows/[workflowId]` (read + update + delete), `GET /api/sub-accounts/[id]/workflows/[workflowId]/runs`, `POST /api/sub-accounts/[id]/workflows/[workflowId]/test` (dry-run enrollment)
+- Step worker: [src/app/api/workflows/step/route.ts](src/app/api/workflows/step/route.ts) — QStash signature-verified callback that calls `runStep()`. Public path in middleware (`/api/workflows/step`); security is the Upstash signature.
+
+### How `fireWorkflowTrigger` is called
+
+The engine entry point `fireWorkflowTrigger({ subAccountId, agencyId, type, contactId, context? })` is called from every state-changing route that maps to a trigger type:
+- Form submission → `type: "form.submitted"`, context carries `formId` + `formName` + `formData` (field label → answer map)
+- Contact created → `type: "contact.created"`
+- Pipeline stage change → `type: "pipeline.stage.changed"`, context carries `toStage`
+- Booking created → `type: "booking.created"`
+- Quote accepted → `type: "quote.accepted"`
+
+The function never throws — a workflow problem cannot break the action that triggered it.
+
+### Workflow vs. legacy automations
+
+The legacy `automations` collection + `Speed-to-Lead` recipe still exists and still fires on form submission for backwards compat. The new `workflows` engine runs in parallel — both can be active at the same time on the same sub-account. The `automations` system is now effectively deprecated in favour of the Workflow Builder; new automations should be built as workflows. The `automationsPaused` boolean on `SubAccountDoc` pauses the entire workflow engine for that sub-account (existing `automations` engine has its own separate enabled flag per recipe).
+
+### Setup contract
+
+**No new env vars.** Reuses `QSTASH_*` (step scheduling), `RESEND_API_KEY` + `EMAIL_FROM` (send_email + notify nodes), `TWILIO_*` or per-sub-account Twilio creds (send_sms), Firebase (storage). The `workflows` + `workflowRuns` Firestore rules ship in `firestore.rules` — run `firebase deploy --only firestore:rules,firestore:indexes` after pulling.
 
 ## Bulk email broadcasts (v1)
 
