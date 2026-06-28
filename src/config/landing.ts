@@ -1,4 +1,4 @@
-**
+/**
  * Landing-page configuration.
  *
  * The repo ships with two complete landing pages:

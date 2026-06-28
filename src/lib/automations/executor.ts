@@ -5,7 +5,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { sendEmail, emailIsConfigured, tenantFrom } from "@/lib/comms/resend";
 import { sendSms, smsIsConfigured } from "@/lib/comms/twilio";
 import { resolveMergeTags } from "./merge-tags";
-import { publishStep } from "./qstash";
+import { publishCallback } from "./qstash";
 import { buildUnsubscribeUrl } from "./unsubscribe-token";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { computeWindowDeferralSeconds } from "@/lib/time/window";
@@ -208,11 +208,11 @@ export async function executeStep(input: ExecuteStepInput): Promise<void> {
   const deferralSeconds = computeSendWindowDeferral(sendWindow);
   if (deferralSeconds > 0) {
     const nonce = `wnd-${Date.now()}`;
-    const result = await publishStep({
-      executionId: execution.id,
-      stepIndex: input.stepIndex,
+    const result = await publishCallback({
+      pathname: "/api/automations/step",
+      body: { executionId: execution.id, stepIndex: input.stepIndex },
       delaySeconds: deferralSeconds,
-      nonce,
+      deduplicationId: `auto_${execution.id}_${input.stepIndex}_${nonce}`,
     });
     if (!result) {
       await markFailed(
@@ -364,10 +364,11 @@ async function scheduleOrComplete(
     await markCompleted(execRef);
     return;
   }
-  const result = await publishStep({
-    executionId: execution.id,
-    stepIndex: justRanIndex + 1,
+  const result = await publishCallback({
+    pathname: "/api/automations/step",
+    body: { executionId: execution.id, stepIndex: justRanIndex + 1 },
     delaySeconds: next.delaySeconds,
+    deduplicationId: `auto_${execution.id}_${justRanIndex + 1}`,
   });
   if (!result) {
     await markFailed(execRef, "automation_disabled", "QStash publish failed");

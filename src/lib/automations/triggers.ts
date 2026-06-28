@@ -2,7 +2,7 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
-import { publishStep, qstashIsConfigured } from "./qstash";
+import { publishCallback, qstashIsConfigured } from "./qstash";
 import type {
   AutomationDoc,
   AutomationTriggerType,
@@ -127,10 +127,11 @@ async function startExecution(input: StartExecutionInput): Promise<void> {
     return;
   }
 
-  const result = await publishStep({
-    executionId: ref.id,
-    stepIndex: 0,
+  const result = await publishCallback({
+    pathname: "/api/automations/step",
+    body: { executionId: ref.id, stepIndex: 0 },
     delaySeconds: firstStepDelay,
+    deduplicationId: `auto_${ref.id}_0`,
   });
 
   if (!result) {
