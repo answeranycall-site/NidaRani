@@ -15,6 +15,7 @@ import { ArrowUpDown, ArrowUp, ArrowDown, Mail, Phone, Building2 } from "lucide-
 import type { Contact } from "@/types/contacts";
 import type { TerritoryDoc } from "@/types";
 import { SourceBadge } from "@/components/contacts/source-badge";
+import { Badge } from "@/components/ui/badge";
 import { formatContactDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useSubAccount } from "@/context/sub-account-context";
@@ -100,6 +101,23 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
         header: "Source",
         enableSorting: false,
         cell: ({ row }) => <SourceBadge source={row.original.source} />,
+      },
+      {
+        accessorKey: "tags",
+        header: "Tags",
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.tags && row.original.tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {row.original.tags.map((tag) => (
+                <Badge key={tag} variant="outline" className="text-xs">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
       },
       ...(showTerritoryCol
         ? [
@@ -274,6 +292,15 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
                       <Building2 className="h-3.5 w-3.5 shrink-0" />
                       {c.company}
                     </p>
+                  )}
+                  {c.tags && c.tags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {c.tags.map((tag) => (
+                        <Badge key={tag} variant="outline" className="text-xs">
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <SourceBadge source={c.source} />
