@@ -31,7 +31,7 @@ import type { FormField } from "@/types/forms";
  *   - Maps `values` onto the form's fields (via field.mapsTo) to
  *     populate the new contact's standard fields.
  *   - Creates a Contact (mode-tagged) + a form_submitted activity.
- *   - Fires the configured Speed-to-Lead automation via fireTriggers().
+ *   - Fires any `form.submitted` Workflow via fireWorkflowTrigger() (live mode only).
  *   - Emits the `form.submitted` webhook event.
  *   - Returns the created contact + submission id.
  */

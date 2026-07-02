@@ -76,6 +76,7 @@ A small set of optional booleans on `SubAccountDoc` that **only the agency owner
 | `outboundVoiceEnabledByAgency` | The Outbound Voice channel — operator-initiated AI calls: the contact-profile click-to-call button, the test-call, and bulk voice campaigns (`/api/comms/voice/call`, `/api/comms/voice/test-call`, `/api/comms/voice/campaign/*`) | `false` | No — the sub-account's voice channel config + provisioned Vapi assistant/number (shared with inbound Voice) are preserved. While off: the call + campaign routes 403, the contact-profile call button + AI Agents → Outbound Voice section show a "Locked by your agency" state. Re-enable resumes instantly. Inbound Voice is unaffected — outbound is independently gated because it spends Vapi minutes proactively and carries dialing-compliance risk. |
 | `metaInboxEnabledByAgency` | **Beta master switch** for the Facebook Messenger + Instagram DM unified-inbox channels (both ride one Meta connection, so they flip together) | `false` | No tear-down — while off the inbox surface is **inert and invisible** everywhere. Ships off so an agency lights it up only for a sub-account that has a connected Meta account and volunteers to beta-test. Re-enabling resumes instantly. |
 | `socialPlannerEnabledByAgency` | **Beta master switch** for the Social Planner (schedule + auto-publish posts to the connected Facebook Page / Instagram Business) — the sidebar entry, the connect/create/publish routes, and posting scopes at connect time | `false` | No tear-down — scheduled posts + the Meta connection are preserved. While off: the Social Planner sidebar entry renders a "Locked by your agency" state and the connect/create/publish routes 403. **Shares the same `metaConfig` connection as the inbox** — it does NOT add a second connection (see "Social Planner v1"). Re-enabling resumes instantly. |
+| `missedCallTextBackEnabledByAgency` | Missed Call Text Back (MCTB) — lets a sub-account point its dedicated Twilio number's Voice URL at LeadStack's forward-then-auto-text handler (`/api/webhooks/twilio/voice` + `.../status`) | `false` (explicit allowlist) | No tear-down beyond the sub-account's own disable, which restores the number's prior Voice URL. While off, the settings card shows a locked state and the config route 403s. |
 
 **Wiring pattern (same shape for every gate):**
 1. **Schema** — optional boolean on `SubAccountDoc` (`*EnabledByAgency`). Read `=== true` so legacy docs missing the field default to off.
@@ -149,7 +150,6 @@ src/
         forms/                    Builder list + [id] editor (drag-order fields, mapsTo)
         quotes/                   List + new + [id] detail/edit (operator-facing quote flow)
         reports/                  Date-range KPIs + funnel + charts
-        automations/              Recipe list + activity logs + settings + templates
         workflows/                Workflow Builder list + [workflowId] builder + [workflowId]/runs log
         broadcasts/               Bulk-email list + [id] detail (live status)
         social/                   Social Planner — content calendar + post list + composer + Connections tab (agency-gated)
@@ -185,7 +185,6 @@ src/
       forms/[id]/submit/          Public form submission (unauthenticated; admin SDK)
       comms/email/send/           Send email (Resend, shared-sender)
       comms/sms/send/             Send SMS (Twilio, env-var or per-SA dedicated)
-      automations/step/           QStash callback — executes one Speed-to-Lead step
       workflows/step/             QStash callback — advances one Workflow Builder node (signature-verified)
       broadcasts/email/send/      Initiate bulk email (validate + fan out to QStash)
       broadcasts/email/step/      QStash callback — sends one recipient's email
@@ -193,6 +192,8 @@ src/
       cron/gitpage-heartbeat/     Daily QStash-scheduled telemetry + status cache
       webhooks/stripe/            Stripe subscription webhook
       webhooks/twilio/inbound/    Inbound SMS (STOP/START opt-out + chat-thread writes + AI auto-reply)
+      webhooks/twilio/voice/      Inbound voice call webhook (TwiML response) + status/ callback
+      sub-accounts/[id]/missed-call/  Missed-call handling config (per sub-account)
       sub-accounts/[id]/
         ai-agent/profile/         GET/PATCH shared agent profile (persona, hours, KB)
         ai-agent/profile/         POST refresh-kb → Firecrawl scrape of websiteUrl
@@ -228,7 +229,7 @@ src/
     forms/               Public form renderer + builder pieces
     quotes/              quote-builder (line-item editor + live totals), quote-list (filter chips + search), quote-detail (view/edit + Send/Mark-paid/Delete), quote-status-badge, public-quote-view (recipient accept/decline + reason picker)
     reports/             SVG chart primitives
-    automations/         Recipe attach UI, template editor, history viewer
+    automations/         template-editor.tsx only (reused by the standalone /templates pages) — the legacy recipe-attach UI was removed; see "Workflow Builder (v1)"
     workflows/           Workflow Builder: workflow-builder.tsx (step list + node config), workflows-list.tsx, workflow-runs.tsx, conditions-editor.tsx, node-config-dialog.tsx, test-dialog.tsx, workflow-status-badge.tsx
     ai-agents/           Channel nav tabs + AgentProfileSection (persona+KB) + SMS/WebChat channel sections + WebChatSessionsList + WebChatSessionThread
     web-chat/            ChatWindow component rendered inside the embed iframe (self-contained, immune to host CSS)
@@ -247,9 +248,11 @@ src/
     firecrawl/           client.ts — agency-level scrape wrapper (/v1/scrape, 30s timeout, FirecrawlError)
     firestore/           CRUD helpers per collection (contacts, deals, tasks, events, forms, quotes, activities, users, mail, web-chat-sessions, social-posts)
     quotes/              calc.ts (pure money math + isQuoteExpired), token.ts (HMAC + nonce public-share token, only SHA-256 hash persisted), number.ts (atomic Q-YYYY-NNNN sequence per sub-account), email.ts (recipient email subject + text + html), lifecycle.ts (recordQuoteActivity + fireQuoteTrigger + autoCreateDealForAcceptedQuote — side-effects swallow errors so they can't break the primary write)
-    automations/         triggers, executor, qstash, merge-tags, unsubscribe-token, seed-templates, template-presets
+    automations/         qstash.ts, merge-tags.ts, unsubscribe-token.ts, seed-templates.ts, template-presets.ts — shared send/scheduling infra reused by Workflow Builder + broadcasts. The old trigger/executor engine (`triggers.ts`, `executor.ts`) was removed; see "Workflow vs. legacy automations"
     workflows/           engine.ts (fireWorkflowTrigger + runStep + enrollForTest), conditions.ts (evalConditionGroup), catalog.ts (labels + defaultConfig + nodeSummary), builder-tree.ts
     broadcasts/          audience.ts (filter resolution for bulk email recipients)
+    products/            sanitize.ts (product-catalog input sanitization)
+    comms/                 missed-call.ts (missed-call handling logic, shared by the Twilio voice status webhook)
     contacts/            location.ts (IP geo via ipapi.co + phone country-code parsing + country centroids)
     landing/             resolve-brand.ts (server-side: merges agency doc over CUSTOM_BRAND for the custom landing)
     gitpage/             client.ts (gitpage REST SDK) + heartbeat.ts (telemetry + status cache)
@@ -297,9 +300,7 @@ firebase.json            Deploys firestore.rules only
 | `forms/{id}/submissions/{id}` | sub-account read, server-write | Inbound submissions; route stamps tenancy from the form doc |
 | `usage/{subAccountId}/users/{uid}` | self/owner read | Email + SMS quotas |
 | `mail/{id}` | server-only | Trigger-Email extension queue |
-| `automations/{id}` | sub-account; admin-write | Recipe configs (one per attached form). Carries `agencyId`, `subAccountId`, `recipeType`, `trigger`, `config`, `enabled` |
 | `message_templates/{id}` | sub-account; admin-write | Reusable email + SMS bodies with merge tags |
-| `automation_executions/{id}` | sub-account read; server-only write | Per-firing run rows; the QStash callback executor mutates these |
 | `contacts/{id}/messages/{id}` | sub-account read; server-only create/delete; client `readAt`-only update | SMS chat thread when the sub-account has dedicated Twilio enabled. Doc id = Twilio MessageSid for natural dedupe on retries. |
 | `contacts/{id}/whatsappMessages/{id}` | sub-account read; server-only create/delete; client `readAt`-only update | WhatsApp chat thread (same model as `messages`). Populated by the WhatsApp inbound webhook + `/api/comms/whatsapp/send` + `/api/comms/whatsapp/send-template`. Doc id = Twilio MessageSid. |
 | `subAccounts/{id}/whatsappTemplates/{id}` | members read; server-only write | WhatsApp message templates (v2). Carries the body + positional variables, Twilio `contentSid`, and the Meta approval `status`. Written by the `whatsapp-templates/*` Admin-SDK routes; status synced live by the QStash approval poll. |
@@ -335,17 +336,11 @@ firebase.json            Deploys firestore.rules only
 - **Site-wide tracking scripts** — [src/app/layout.tsx](src/app/layout.tsx) conditionally loads Meta Pixel (when `NEXT_PUBLIC_META_PIXEL_ID` is set), Google Tag Manager (when `NEXT_PUBLIC_GTM_ID` is set), and Crisp Chat (when `NEXT_PUBLIC_CRISP_WEBSITE_ID` is set). All three follow the same `<Script strategy="afterInteractive">` pattern and ship `<noscript>` fallbacks where applicable (Pixel + GTM). Each is fully optional — leave the env unset to skip. GTM is the documented escape hatch for any tracker Pixel doesn't cover (LinkedIn Insight, TikTok Pixel, Hotjar, custom server-side gtag).
 - **Crisp Chat as the support channel** — Crisp is wired site-wide via `NEXT_PUBLIC_CRISP_WEBSITE_ID`. The codebase deliberately routes every "talk to us" path through [src/lib/crisp.ts](src/lib/crisp.ts)::`openCrispChat()` instead of `mailto:` — pricing checkout-error fallback, the privacy-policy contact line. `openCrispChat()` is a typed no-op when the widget isn't loaded, so buyers who clone without configuring Crisp see broken-feeling but non-crashing buttons; document the env var prominently in their setup.
 
-## Automations (Workflow Recipes v1)
+## Automations — legacy recipe engine (REMOVED)
 
-LeadStack ships one named recipe — **Speed-to-Lead** (internal `recipeType: "instant_response"`) — that fires on form submission and sends up to three steps: SMS to lead, email to lead, and a static-recipient owner notification. v2 will add Lead Nurture, Pipeline Stage Trigger, Stale Lead Revive, and Booking Lifecycle (the last via cal.com / Calendly webhook integration).
+The original "Speed-to-Lead" recipe engine (`automations`/`automation_executions` collections, `lib/automations/triggers.ts` + `executor.ts`, the `sa/[subAccountId]/automations/*` pages, `api/automations/step`) has been removed. It had zero live callers by the time it was pulled — form submission already dispatched exclusively through `fireWorkflowTrigger()` (see "Workflow Builder (v1)" below), so the recipe engine was dead code kept around by stale docs. Anyone rebuilding the equivalent of Speed-to-Lead should create a Workflow with a `form.submitted` trigger and `send_sms` + `send_sms`/`send_email` + `notify` nodes.
 
-- **Trigger** — [src/lib/automations/triggers.ts](src/lib/automations/triggers.ts) `fireTriggers()` is called from [src/app/api/forms/[id]/submit/route.ts](src/app/api/forms/[id]/submit/route.ts) after the contact is created. It queries enabled `automations` matching the trigger type + form id, creates an `automation_executions` row per match, and schedules step 0 via QStash.
-- **Scheduling** — [src/lib/automations/qstash.ts](src/lib/automations/qstash.ts) wraps `@upstash/qstash`. Each step is a separate QStash message that POSTs `/api/automations/step` after the configured delay. Inbound callbacks verify the `Upstash-Signature` header before running anything; without verification keys configured, the route returns 503.
-- **Step executor** — [src/lib/automations/executor.ts](src/lib/automations/executor.ts) loads the execution + automation + contact + template + sub-account + agency owner, runs three pre-flight checks (idempotency via `history`, contact opt-out, send-window), resolves merge tags, sends via Resend or Twilio, appends a history entry + activity row, and either schedules the next step or marks the execution complete. Failures during send are caught and logged to history with `success: false` rather than aborting; QStash 5xx triggers built-in retry.
-- **Send-window** — stored on `subAccounts/{id}.sendWindow = { startHour, endHour, timezone }`. The executor checks current time in the configured zone via `Intl.DateTimeFormat`; outside the window, the same step gets republished to QStash with a fresh `nonce` for the next window start.
-- **Opt-out compliance** — every email body must include `{{unsubscribeLink}}` (template editor enforces). The link is HMAC-signed (`AUTOMATIONS_TOKEN_SECRET`) and resolves to `/u/[token]` which POSTs `/api/u/[token]` to flip `contact.emailOptedOut = true`. Twilio inbound STOP/START is parsed by `/api/webhooks/twilio/inbound` (signature-verified against `TWILIO_AUTH_TOKEN`); matching contacts (lookup by phone) get `smsOptedOut` flipped. Twilio's webhook URL needs `/api/webhooks/twilio/inbound` configured under the number's "A MESSAGE COMES IN" setting.
-- **Idempotency** — QStash retries on 5xx. The executor's first action is `if (execution.history.some(h => h.stepIndex === stepIndex)) return` so retries don't double-send.
-- **Local dev** — QStash needs a public callback URL. Run `ngrok http 3000` and set `NEXT_PUBLIC_APP_URL` to the ngrok HTTPS URL while testing automations.
+The opt-out compliance mechanism this section used to describe is still live, just driven by Workflow Builder now: every email node's body must include `{{unsubscribeLink}}`, HMAC-signed (`AUTOMATIONS_TOKEN_SECRET`), resolving to `/u/[token]` → `POST /api/u/[token]` which flips `contact.emailOptedOut = true`. Twilio inbound STOP/START is still parsed by `/api/webhooks/twilio/inbound` (signature-verified against `TWILIO_AUTH_TOKEN`) and flips `smsOptedOut`.
 
 ## Workflow Builder (v1)
 
@@ -429,7 +424,7 @@ The function never throws — a workflow problem cannot break the action that tr
 
 ### Workflow vs. legacy automations
 
-The legacy `automations` collection + `Speed-to-Lead` recipe still exists and still fires on form submission for backwards compat. The new `workflows` engine runs in parallel — both can be active at the same time on the same sub-account. The `automations` system is now effectively deprecated in favour of the Workflow Builder; new automations should be built as workflows. The `automationsPaused` boolean on `SubAccountDoc` pauses the entire workflow engine for that sub-account (existing `automations` engine has its own separate enabled flag per recipe).
+The legacy `automations` recipe engine has been removed (see "Automations — legacy recipe engine (REMOVED)" above) — Workflow Builder is now the only automation engine. The `automationsPaused` boolean on `SubAccountDoc` pauses the entire workflow engine for that sub-account.
 
 ### Setup contract
 
@@ -507,7 +502,7 @@ Templates are Meta-pre-approved messages — the only compliant way to start or 
 - **Variable → merge-tag mapping:** [src/lib/comms/whatsapp/resolve-template-variables.ts](src/lib/comms/whatsapp/resolve-template-variables.ts) resolves `merge_tag` variables against the contact (reusing the automation `resolveMergeTags` subject); `manual` variables are typed at send time. Sample values are submitted to Meta for review.
 - **UI:** template manager at `/sa/[id]/ai-agents/whatsapp/templates` ([whatsapp-templates-manager.tsx](src/components/ai-agents/whatsapp-templates-manager.tsx)) — gallery + builder + live status list (onSnapshot). The contact WhatsApp thread gains a "Send template" panel ([whatsapp-template-sender.tsx](src/components/contacts/whatsapp-template-sender.tsx)) → `/api/comms/whatsapp/send-template`, the compliant way to message a contact whose 24h window has closed.
 
-**NOT built (later passes, deliberately deferred):** templates in **automations** (a `whatsapp_template` step — also needs the recipe engine extended past `instant_response`) and **broadcasts** (a bulk WhatsApp-template channel mirroring email broadcasts). Also: media/header/button templates (v2 foundation is text-only) and editing of *approved* templates (Meta makes them immutable — create a new one). The session-only v1 inbound/freeform path is untouched — templates are purely additive.
+**NOT built (later passes, deliberately deferred):** templates in **broadcasts** (a bulk WhatsApp-template channel mirroring email broadcasts). Also: media/header/button templates (v2 foundation is text-only) and editing of *approved* templates (Meta makes them immutable — create a new one). The session-only v1 inbound/freeform path is untouched — templates are purely additive.
 
 ### Facebook Messenger + Instagram DM inbox (BETA — two-way)
 
@@ -611,6 +606,10 @@ Both modes share the rest of the pipeline identically: same persona/KB resolutio
 
 **Gates that prevent silent failure.** Enabling voice requires: (1) agent persona prompt non-empty (shared with SMS/Web Chat), (2) `VAPI_API_KEY` + `VAPI_WEBHOOK_SECRET` + `NEXT_PUBLIC_APP_URL` all set, and (3) the active `numberMode`'s phone-number prerequisite — `twilio-byoc` needs `subAccount.twilioConfig.enabled === true`, `vapi-managed` needs a non-empty `vapiPhoneNumberId` on the saved voice block. Any missing gate returns a 400/503 with a friendly error from the channels API; the operator can't bypass via direct API calls.
 
+### Missed Call Text Back (MCTB) — Twilio-native, no Vapi
+
+A separate, simpler voice feature that doesn't touch the AI Voice/Vapi pipeline at all. Agency-gated via `missedCallTextBackEnabledByAgency` (see the feature-gates table). When on, a sub-account can point its dedicated Twilio number's Voice URL at `/api/webhooks/twilio/voice`, which `<Dial>`s the business's real phone; if the dial ends in `no-answer` / `busy` / `failed` / `canceled`, Twilio calls `/api/webhooks/twilio/voice/status`, which invokes [src/lib/comms/missed-call.ts](src/lib/comms/missed-call.ts)::`handleMissedCall()` to auto-text the caller a configurable message, reconcile/create a Contact, and write the exchange into the unified conversation thread. `resolveVoiceRoute()` requires all three of dedicated Twilio enabled + the agency gate + `twilioConfig.missedCall.enabled` before routing a number — strictly additive, never touches the SMS inbound webhook or the Vapi voice pipeline. Configured under Settings → SMS alongside the rest of the sub-account's Twilio setup.
+
 ### Outbound Voice channel — operator-initiated AI calls
 
 Everything above answers calls **coming in**. Outbound Voice flips the direction: the AI proactively **dials contacts**. It reuses the same provisioned Vapi assistant + phone number as inbound Voice (no second number, no second bill) but runs a different persona, a different first message, and — critically — a native **dialing-compliance gate** before any call is placed. Two entry points: a single click-to-call from a contact, and a bulk campaign over a filtered audience. Surfaced at **AI Agents → Outbound Voice** ([src/components/ai-agents/outbound-voice-section.tsx](src/components/ai-agents/outbound-voice-section.tsx)) plus a call button on the contact-profile header.
@@ -667,7 +666,7 @@ Borrowed UX from GHL's Documents/Estimates flow: predefined reasons (`"Too expen
 
 [src/lib/quotes/lifecycle.ts](src/lib/quotes/lifecycle.ts) owns three helpers wired into every state-changing route:
 - `recordQuoteActivity(quote, event, opts?)` — writes a row to `contacts/{contactId}/activities` with type `quote_sent / viewed / accepted / declined / marked_paid`. Renders content using `computeQuoteTotals()` so the timeline reads "Quote Q-2026-0001 (USD $4,200.00) accepted by recipient." Visualised in [src/components/contacts/activity-timeline.tsx](src/components/contacts/activity-timeline.tsx) with brand-consistent icons (`FileSignature`, `Eye`, `CheckCircle2`, `XCircle`, `DollarSign`).
-- `fireQuoteTrigger(quote, trigger)` — dispatches to the existing automations engine via `fireTriggers()`. `AutomationTriggerType` now includes the four quote events. **Caveat:** the only `recipeType` shipped is `instant_response`, which only handles `form_submit` in `computeFirstStepDelay()`. Creating a quote-triggered automation today creates the execution doc but produces no sends until v2 extends the recipe types. Dispatch plumbing is in place; recipe support is the missing piece.
+- `fireQuoteTrigger(quote, trigger)` — dispatches into Workflow Builder via `fireWorkflowTrigger()`, but **only for `quote_accepted`** (mapped to the `quote.accepted` workflow trigger type — the only quote-related trigger Workflow Builder supports in v1). Calls for `quote_sent` / `quote_viewed` / `quote_declined` are no-ops today; a Workflow can't yet react to those three quote events.
 - `autoCreateDealForAcceptedQuote(quote)` — when the operator's per-quote `autoCreateDealOnAccept` checkbox is true (default), creates a Deal at the "Won" stage with the quote total. Stamps the operator's `createdByUid` so the deal appears in the pipeline as if they created it manually. Also writes a `pipeline_moved` activity entry so the timeline reads naturally.
 
 ### Operator UX
@@ -798,7 +797,7 @@ Pages with `priceCents > 0` mint a `holdUntil` window on the event at book time.
 
 [src/lib/booking/lifecycle.ts](src/lib/booking/lifecycle.ts) is the single helper that every state-changing booking route calls. It:
 1. Writes a typed activity row to `contacts/{contactId}/activities` (`event_booked`, `event_rescheduled`, `event_cancelled`, `event_paid`, `event_payment_expired`).
-2. Dispatches into `fireTriggers()` with the matching `AutomationTriggerType` — so the booking events appear alongside form-submit, quote-accept, etc. in the automation engine. (Same caveat as Quotes: the v1 `instant_response` recipe doesn't handle these triggers yet; the dispatch plumbing is in place, recipe support is the missing piece.)
+2. Dispatches into `fireWorkflowTrigger()` with `type: "booking.created"` on a new booking — so a Workflow with a `booking.created` trigger enrolls the contact alongside form-submit, quote-accept, etc.
 3. Returns the lifecycle outcome so the calling route can include it in the response body.
 
 ### Setup contract
@@ -816,7 +815,7 @@ A versioned REST surface under `/api/v1/*` for the sub-account-scoped resources 
   1. Parses the bearer header, looks up the key by prefix + verifies the SHA-256 hash matches the stored hash.
   2. Loads the sub-account doc, checks `apiAccessEnabledByAgency === true` (returns 403 `api_access_disabled` otherwise — see Agency feature gates).
   3. Returns a `{ subAccountId, agencyId, keyId, mode }` context. Every downstream Firestore query filters by `subAccountId` so a leaked key only ever sees its own sub-account.
-- **Test mode** (`lsk_test_*`) lets the buyer's clients exercise the API without firing real automations / SMS / emails — the form-submission route, for example, gates `fireTriggers()` on `ctx.mode === "live"`.
+- **Test mode** (`lsk_test_*`) lets the buyer's clients exercise the API without firing real automations / SMS / emails — the form-submission route, for example, gates `fireWorkflowTrigger()` on `ctx.mode === "live"`.
 
 ### Infrastructure modules
 
@@ -930,7 +929,7 @@ Without these three, `/api/comms/sms/send` returns 503. SMS opt-out (STOP/START)
 | `QSTASH_NEXT_SIGNING_KEY` | same panel — used during key rotation |
 | `AUTOMATIONS_TOKEN_SECRET` | `openssl rand -base64 32`. HMAC-signs unsubscribe links so they can't be forged. Rotating this invalidates all outstanding unsubscribe links. |
 
-Without these, `/api/automations/step` and the website-builder poll route return 503. Automation triggers still fire on form submit (the `automation_executions` row gets created) but step 0 never executes — the form submission itself still works.
+Without these, `/api/workflows/step` and the website-builder poll route return 503. A workflow still enrolls a run on form submit, but the first node never executes — the form submission itself still works.
 
 ### Required for website builder (disables cleanly if missing)
 | Var | Source |
@@ -1356,8 +1355,8 @@ Then restart `pnpm dev` so the new value is picked up. Now go back to Twilio (Ph
    - **Send email** from the contact profile (requires Resend vars). Verify inbox + blue "Email sent" activity.
    - **Send SMS** from the contact profile (requires Twilio vars). Verify phone + violet "SMS sent" activity.
    - **Upgrade** from `/#pricing` → Stripe checkout with test card `4242 4242 4242 4242`.
-   - **Form auto-response** (proves QStash + automations work — needs the tunnel from Phase 3.5):
-     - Sub-account → Forms → open or create a form → Automation panel → attach the **Speed-to-Lead** recipe with an SMS step + an email step containing `{{unsubscribeLink}}`.
+   - **Form auto-response** (proves QStash + Workflow Builder work — needs the tunnel from Phase 3.5):
+     - Sub-account → Workflows → **New workflow** → trigger `form.submitted` (optionally scoped to the test form) → add a `send_sms` node + a `send_email` node whose body includes `{{unsubscribeLink}}` → activate the workflow.
      - Submit the form in an incognito tab using a real phone + email you can check.
      - SMS arrives within ~10s, email within ~30s. The email's "Unsubscribe" link should resolve and flip `contact.emailOptedOut = true`.
    - **Website build** (proves gitpage works — needs the tunnel from Phase 3.5):
@@ -1415,7 +1414,7 @@ Common issues and fixes:
 - **Twilio "unverified number" error** — trial accounts can only SMS phones you've verified in Twilio → Phone Numbers → Verified Caller IDs.
 - **Comms buttons disabled** — contact has no email or no phone. Edit the contact, add the field, save.
 - **Cmd+K doesn't open** — make sure you're on a `/dashboard` / `/contacts` / etc. page (not the public landing page).
-- **Form submit succeeds but no SMS/email auto-response** — QStash isn't configured, signing keys mismatch the region, or `NEXT_PUBLIC_APP_URL` doesn't match the public tunnel. Check Vercel/local logs for `/api/automations/step` returning 503 or 401, and verify `QSTASH_URL` matches the region of `QSTASH_TOKEN`.
+- **Form submit succeeds but no SMS/email auto-response** — QStash isn't configured, signing keys mismatch the region, the workflow isn't `active`, or `NEXT_PUBLIC_APP_URL` doesn't match the public tunnel. Check Vercel/local logs for `/api/workflows/step` returning 503 or 401, and verify `QSTASH_URL` matches the region of `QSTASH_TOKEN`.
 - **Unsubscribe link returns 404** — `AUTOMATIONS_TOKEN_SECRET` was rotated; old links are invalidated by design. The user has to receive a new email; old ones can't be revived.
 - **Twilio STOP not flipping `smsOptedOut`** — Twilio's "A MESSAGE COMES IN" webhook URL isn't pointing at `/api/webhooks/twilio/inbound`, or it points at a stale tunnel hostname after a restart. Refresh the URL in the Twilio console.
 - **Website build hangs at "queued"** — the QStash callback can't reach your app. Check `NEXT_PUBLIC_APP_URL` matches the tunnel/Vercel domain, and that the QStash dashboard shows the poll messages with `DELIVERED` status.
@@ -1441,5 +1440,5 @@ Common issues and fixes:
 - **Quotes "Send" returns 503** — `RESEND_API_KEY` or `EMAIL_FROM` isn't set on the deployment. The Quotes builder still works locally (drafts save fine), only the send is gated. Configure Resend then retry — quote stays in draft state, click Send again.
 - **Public /q/[token] page returns 404** — three things to check, in order. (1) Token is malformed or expired (operator may have re-sent, invalidating this link). (2) `firestore.rules` hasn't deployed since adding the `quotes/{id}` block — run `firebase deploy --only firestore:rules,firestore:indexes`. (3) `AUTOMATIONS_TOKEN_SECRET` was rotated since the email was sent (rotation invalidates every outstanding token by design). Solution: operator re-sends from the quote detail page to mint a fresh token.
 - **Quote accepted but no Deal appeared at "Won"** — either `autoCreateDealOnAccept` was unchecked on the quote (it's per-quote, default on), or the deal write blipped (logged but not surfaced to the recipient — they see "accepted" regardless). Check the contact's pipeline column manually. Operator can create the deal by hand if it's missing — no automated retry in v1.
-- **Quote-triggered automation never fires sends** — known v1 limitation. The trigger types (`quote_sent`, `quote_accepted`, etc.) dispatch correctly into `fireTriggers()` and create the execution doc, but the only `recipeType` shipped is `instant_response` which only handles `form_submit` in `computeFirstStepDelay()`. v2 will either extend instant-response or add a quote-aware recipe. For now, hand-wired automations via direct Firestore edit will register but never send.
+- **Quote-triggered workflow never enrolls for `quote_sent`/`quote_viewed`/`quote_declined`** — known v1 limitation. `fireQuoteTrigger()` only maps `quote_accepted` to a Workflow Builder trigger (`quote.accepted`); the other three quote events are no-ops today. A future pass would extend `types/workflows.ts`'s trigger union to cover them.
 - **Firestore "INTERNAL ASSERTION FAILED (ca9)" in browser console** — the `quotes/{id}` rules block is missing from `firestore.rules` (or wasn't deployed). The Firestore client SDK's onSnapshot stream gets denied and surfaces this opaque error. Run `firebase deploy --only firestore:rules,firestore:indexes` to fix.
