@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   flexRender,
   getCoreRowModel,
@@ -11,14 +12,29 @@ import {
   type ColumnDef,
   type SortingState,
 } from "@tanstack/react-table";
-import { ArrowUpDown, ArrowUp, ArrowDown, Mail, Phone, Building2 } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Mail, Phone, Building2, Trash2, X } from "lucide-react";
 import type { Contact } from "@/types/contacts";
 import type { TerritoryDoc } from "@/types";
 import { SourceBadge } from "@/components/contacts/source-badge";
 import { Badge } from "@/components/ui/badge";
-import { formatContactDate } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useSubAccount } from "@/context/sub-account-context";
+
+interface ContactBlocker {
+  type: string;
+  label: string;
+  count: number;
+}
 
 interface Props {
   contacts: Contact[];
@@ -31,12 +47,22 @@ interface Props {
   territories?: TerritoryDoc[];
 }
 
+type BulkState =
+  | { phase: "checking" }
+  | {
+      phase: "confirm";
+      deletable: Contact[];
+      blocked: { contact: Contact; blockers: ContactBlocker[] }[];
+    }
+  | { phase: "deleting" };
+
 export function ContactsTable({ contacts, search, territories = [] }: Props) {
   const { subAccount, saPath } = useSubAccount();
   const showTerritoryCol = subAccount?.territoryScopingEnabled === true;
-  const [sorting, setSorting] = useState<SortingState>([
-    { id: "createdAt", desc: true },
-  ]);
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkState, setBulkState] = useState<BulkState>({ phase: "checking" });
 
   const territoryById = useMemo(() => {
     const m = new Map<string, TerritoryDoc>();
@@ -44,8 +70,128 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
     return m;
   }, [territories]);
 
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const base = q
+      ? contacts.filter(
+          (c) =>
+            c.name?.toLowerCase().includes(q) ||
+            c.email?.toLowerCase().includes(q) ||
+            c.company?.toLowerCase().includes(q),
+        )
+      : contacts;
+    // No visible "Added" column anymore (replaced by Notes), so the
+    // newest-first default order is applied here instead of via
+    // TanStack sorting state.
+    return [...base].sort(
+      (a, b) => toMillis(b.createdAt) - toMillis(a.createdAt),
+    );
+  }, [contacts, search]);
+
+  const allVisibleSelected =
+    filtered.length > 0 && filtered.every((c) => selected.has(c.id));
+
+  const toggleSelectAllVisible = useCallback(() => {
+    setSelected((prev) => {
+      const allSelected =
+        filtered.length > 0 && filtered.every((c) => prev.has(c.id));
+      if (allSelected) return new Set();
+      const next = new Set(prev);
+      for (const c of filtered) next.add(c.id);
+      return next;
+    });
+  }, [filtered]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  async function openBulkDelete() {
+    setBulkOpen(true);
+    setBulkState({ phase: "checking" });
+    const ids = Array.from(selected);
+    const byId = new Map(contacts.map((c) => [c.id, c]));
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const res = await fetch(`/api/contacts/${id}?check=1`);
+          const data = (await res.json().catch(() => ({}))) as {
+            deletable?: boolean;
+            blockers?: ContactBlocker[];
+          };
+          return { id, deletable: !!data.deletable, blockers: data.blockers ?? [] };
+        } catch {
+          return {
+            id,
+            deletable: false,
+            blockers: [{ type: "error", label: "check failed", count: 1 }],
+          };
+        }
+      }),
+    );
+    const deletable: Contact[] = [];
+    const blocked: { contact: Contact; blockers: ContactBlocker[] }[] = [];
+    for (const r of results) {
+      const c = byId.get(r.id);
+      if (!c) continue;
+      if (r.deletable) deletable.push(c);
+      else blocked.push({ contact: c, blockers: r.blockers });
+    }
+    setBulkState({ phase: "confirm", deletable, blocked });
+  }
+
+  async function confirmBulkDelete() {
+    if (bulkState.phase !== "confirm") return;
+    const targets = bulkState.deletable;
+    setBulkState({ phase: "deleting" });
+    const results = await Promise.all(
+      targets.map(async (c) => {
+        try {
+          const res = await fetch(`/api/contacts/${c.id}`, { method: "DELETE" });
+          return res.ok;
+        } catch {
+          return false;
+        }
+      }),
+    );
+    const succeeded = results.filter(Boolean).length;
+    const failed = results.length - succeeded;
+    if (succeeded > 0) {
+      toast.success(`Deleted ${succeeded} contact${succeeded === 1 ? "" : "s"}.`);
+    }
+    if (failed > 0) {
+      toast.error(
+        `${failed} contact${failed === 1 ? "" : "s"} couldn't be deleted.`,
+      );
+    }
+    setSelected(new Set());
+    setBulkOpen(false);
+  }
+
   const columns = useMemo<ColumnDef<Contact>[]>(
     () => [
+      {
+        id: "select",
+        header: () => (
+          <Checkbox
+            checked={allVisibleSelected}
+            onCheckedChange={toggleSelectAllVisible}
+            aria-label="Select all contacts"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={selected.has(row.original.id)}
+            onCheckedChange={() => toggleSelect(row.original.id)}
+            aria-label={`Select ${row.original.name || "contact"}`}
+          />
+        ),
+      },
       {
         accessorKey: "name",
         header: "Name",
@@ -147,35 +293,32 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
           ]
         : []),
       {
-        accessorKey: "createdAt",
-        header: "Added",
-        enableSorting: true,
-        sortingFn: (a, b) => {
-          const aVal = toMillis(a.original.createdAt);
-          const bVal = toMillis(b.original.createdAt);
-          return aVal - bVal;
-        },
-        cell: ({ row }) => (
-          <span className="text-sm text-muted-foreground">
-            {formatContactDate(row.original.createdAt)}
-          </span>
-        ),
+        accessorKey: "lastNoteSnippet",
+        header: "Notes",
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.lastNoteSnippet ? (
+            <span
+              className="block max-w-[220px] truncate text-sm text-muted-foreground"
+              title={row.original.lastNoteSnippet}
+            >
+              {row.original.lastNoteSnippet}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">—</span>
+          ),
       },
     ],
-    [saPath, showTerritoryCol, territoryById],
+    [
+      saPath,
+      showTerritoryCol,
+      territoryById,
+      allVisibleSelected,
+      selected,
+      toggleSelect,
+      toggleSelectAllVisible,
+    ],
   );
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter((c) => {
-      return (
-        c.name?.toLowerCase().includes(q) ||
-        c.email?.toLowerCase().includes(q) ||
-        c.company?.toLowerCase().includes(q)
-      );
-    });
-  }, [contacts, search]);
 
   const table = useReactTable({
     data: filtered,
@@ -203,6 +346,25 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
 
   return (
     <>
+      {/* Bulk selection bar — desktop only, matches the checkbox column */}
+      {selected.size > 0 && (
+        <div className="mb-2 hidden items-center justify-between rounded-lg border bg-muted/40 px-3 py-2 md:flex">
+          <span className="text-sm font-medium">
+            {selected.size} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
+              <X className="mr-1 h-3.5 w-3.5" />
+              Clear
+            </Button>
+            <Button variant="destructive" size="sm" onClick={openBulkDelete}>
+              <Trash2 className="mr-1 h-3.5 w-3.5" />
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Desktop table */}
       <div className="hidden overflow-hidden rounded-xl border bg-card md:block">
         <table className="w-full text-sm">
@@ -216,7 +378,7 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
                     <th
                       key={header.id}
                       className={cn(
-                        "px-4 py-3 font-semibold",
+                        "px-2.5 py-2 font-semibold",
                         canSort && "cursor-pointer select-none hover:text-foreground",
                       )}
                       onClick={
@@ -249,10 +411,13 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="border-b last:border-b-0 transition-colors hover:bg-muted/30"
+                className={cn(
+                  "border-b last:border-b-0 transition-colors hover:bg-muted/30",
+                  selected.has(row.original.id) && "bg-muted/30",
+                )}
               >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3">
+                  <td key={cell.id} className="px-2.5 py-1.5">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -309,6 +474,59 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
           );
         })}
       </div>
+
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selected.size} contact{selected.size === 1 ? "" : "s"}?</DialogTitle>
+            <DialogDescription>
+              {bulkState.phase === "checking" &&
+                "Checking which contacts are safe to delete…"}
+              {bulkState.phase === "deleting" && "Deleting…"}
+              {bulkState.phase === "confirm" &&
+                (bulkState.blocked.length === 0
+                  ? "This can't be undone."
+                  : `${bulkState.deletable.length} contact${bulkState.deletable.length === 1 ? "" : "s"} will be deleted. ${bulkState.blocked.length} can't be deleted because they're linked to other records.`)}
+            </DialogDescription>
+          </DialogHeader>
+
+          {bulkState.phase === "confirm" && bulkState.blocked.length > 0 && (
+            <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2 text-sm">
+              {bulkState.blocked.map(({ contact, blockers }) => (
+                <li key={contact.id} className="text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    {contact.name || contact.email || "Unnamed"}
+                  </span>{" "}
+                  — linked to{" "}
+                  {blockers.map((b) => `${b.count} ${b.label}`).join(", ")}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={
+                bulkState.phase !== "confirm" ||
+                bulkState.deletable.length === 0
+              }
+              onClick={confirmBulkDelete}
+            >
+              {bulkState.phase === "deleting"
+                ? "Deleting…"
+                : `Delete${
+                    bulkState.phase === "confirm"
+                      ? ` ${bulkState.deletable.length}`
+                      : ""
+                  }`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

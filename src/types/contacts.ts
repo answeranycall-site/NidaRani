@@ -126,6 +126,16 @@ export interface Contact {
   /** Campaign id of that last outbound call (null for click-to-call). */
   lastOutboundCampaignId?: string | null;
   /**
+   * Denormalised preview of the most recent note (truncated to ~140 chars),
+   * written alongside the note doc in the same batch by
+   * `lib/firestore/contacts.ts::addNote()`. Powers the Notes column on the
+   * contacts list without an N+1 read per row. Undefined/null = no notes yet
+   * (including legacy contacts whose existing notes predate this field —
+   * it backfills itself the next time a note is added).
+   */
+  lastNoteSnippet?: string | null;
+  lastNoteAt?: Timestamp | FieldValue | null;
+  /**
    * Stamp of the last Google review request sent to this contact. Powers the
    * cooldown that stops auto-triggers re-asking the same person. Undefined =
    * never asked.

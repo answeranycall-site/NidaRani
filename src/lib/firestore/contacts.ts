@@ -9,6 +9,7 @@ import {
   query,
   orderBy,
   where,
+  writeBatch,
   type QueryConstraint,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -161,20 +162,33 @@ export async function updateContact(
   });
 }
 
+const NOTE_SNIPPET_MAX_LEN = 140;
+
 export async function addNote(
   contactId: string,
   content: string,
   userId: string,
 ): Promise<string> {
-  const ref = await addDoc(
-    collection(getFirebaseDb(), CONTACTS, contactId, "notes"),
-    {
-      content,
-      createdBy: userId,
-      createdAt: serverTimestamp(),
-    },
-  );
-  return ref.id;
+  const db = getFirebaseDb();
+  const noteRef = doc(collection(db, CONTACTS, contactId, "notes"));
+  const batch = writeBatch(db);
+  batch.set(noteRef, {
+    content,
+    createdBy: userId,
+    createdAt: serverTimestamp(),
+  });
+  // Denormalize a preview onto the contact doc so the contacts list can
+  // show a Notes column without an N+1 read per row.
+  batch.update(doc(db, CONTACTS, contactId), {
+    lastNoteSnippet:
+      content.length > NOTE_SNIPPET_MAX_LEN
+        ? `${content.slice(0, NOTE_SNIPPET_MAX_LEN)}…`
+        : content,
+    lastNoteAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  await batch.commit();
+  return noteRef.id;
 }
 
 export function subscribeToNotes(
