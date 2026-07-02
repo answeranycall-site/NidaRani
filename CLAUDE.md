@@ -91,6 +91,24 @@ Adding a new gate: add the field to `SubAccountDoc`, write the default at the tw
 
 `src/config/landing.ts` exports `CUSTOM_BRAND`. The root `app/page.tsx` renders a generic agency-CRM landing the buyer brands as their own product. All copy is pulled from `CUSTOM_BRAND` (`name`, `tagline`, `shortDescription`, `supportEmail`, `primaryDomain`, `pricing.{starter, pro, scale}`). The page renders 5 sections (hero, features, pricing, FAQ, CTA) wrapped in navbar + footer. Edit `CUSTOM_BRAND` before deploy so signups land on the buyer's brand.
 
+## Updating from upstream (vendor + patches)
+
+This deployment's repo has an `upstream` remote pointing at `Claude-Code-Pro-Camp/leadstack-agency` and a local `vendor` branch that is always reset to `upstream/main` — never commit customizations there. **Important:** the upstream template repo resets its `main` branch to a single squashed "Initial commit" on every release (a force-push, no shared history between releases) rather than accumulating commits — so updates can't be a normal `git merge`/fast-forward. The flow is diff-and-reconcile instead:
+
+1. `git fetch upstream` then `git branch -f vendor upstream/main` — vendor now mirrors the new release exactly.
+2. Create an integration branch off `master`/`main` for the update (don't work directly on the shared branch).
+3. `git diff <old-vendor-sha> upstream/main --stat` to see exactly what upstream changed since the last sync (the old vendor tip is still reachable via `git reflog` or the previous vendor commit sha noted in the update's commit message).
+4. For files upstream touched that this deployment never customized, `git checkout upstream/main -- <path>` takes upstream's version wholesale.
+5. For files this deployment customized (tracked in `patches/*.patch` below), reapply each patch with `git apply --3way patches/<name>.patch` against the new upstream content. A clean apply means no conflict; a failed apply means upstream rewrote the same lines — read the patch as a spec of *intent* and re-implement the change by hand on the new code, then regenerate the patch (`git diff vendor <branch> -- <same files> > patches/<name>.patch`).
+6. Re-run `pnpm install`, redeploy Firestore rules/indexes, and typecheck/build before merging the integration branch back.
+
+**Patches on file (`patches/`):**
+- `branding.patch` — the white-label rebrand: `src/config/landing.ts` (`CUSTOM_BRAND`), `public/logo.svg`, `src/components/brand/logo-mark.tsx`, `src/components/landing-custom/{cta,footer,hero,logo,navbar}.tsx`, `src/app/globals.css` (brand color tokens), `src/app/(auth)/{login,signup}/page.tsx`, `src/hooks/use-agency.ts`. Reapply after every update so the buyer's brand doesn't get clobbered by upstream's default LeadStack copy.
+- `auth-login-fix.patch` — **critical, not cosmetic.** Adds `src/app/api/login/route.ts` + `src/app/api/logout/route.ts`. The vendor template's `src/middleware.ts` and `src/lib/firebase/auth.ts` already reference `loginPath: "/api/login"` / `logoutPath: "/api/logout"` and `fetch("/api/login"|"/api/logout")`, but the template itself never ships the two route files that implement them — login is broken out of the box without this patch. The routes force Node.js runtime (`export const runtime = "nodejs"`) to avoid an Edge-runtime private-key parsing bug in `next-firebase-auth-edge`, and strip a UTF-8 BOM that Windows tooling sometimes prepends to piped env vars. Verified still missing from upstream as of the 2026-07 sync — reapply every time until upstream fixes it upstream.
+- `lint-config.patch` — excludes `.cjs` files from ESLint in `eslint.config.mjs` (avoids false-positive lint failures on CommonJS config/script files).
+
+If a patch fails to apply and you're re-implementing by hand, this section plus the patch file itself is the spec — the patch's diff shows exactly which lines changed and why (see each bullet above for the *why*).
+
 ## Tech Stack
 - **Framework:** Next.js 15 (App Router, Turbopack) with TypeScript
 - **Auth:** Firebase Authentication (email/password) + `next-firebase-auth-edge` session cookies + custom claims (`role`, `status`)

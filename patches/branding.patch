@@ -1,0 +1,546 @@
+diff --git a/public/logo.svg b/public/logo.svg
+new file mode 100644
+index 0000000..722815f
+--- /dev/null
++++ b/public/logo.svg
+@@ -0,0 +1,31 @@
++<svg viewBox="0 0 110 88" fill="none" xmlns="http://www.w3.org/2000/svg">
++  <!-- Answer Any Call — phone receiver + EKG heartbeat waveform -->
++  <!-- Phone handset in dark navy blue -->
++  <path fill="#1B3A6B" d="
++    M8 22
++    C8 14 14 8 22 8
++    L28 8
++    C32 8 36 11 37 15
++    L39 25
++    C40 29 38 34 34 35
++    L31 37
++    C34 46 42 54 51 57
++    L53 54
++    C55 50 59 48 63 49
++    L73 52
++    C77 53 80 57 80 62
++    L80 68
++    C80 76 74 82 66 82
++    C38 82 8 52 8 24
++    Z
++  "/>
++  <!-- EKG / heartbeat waveform in bright sky blue -->
++  <path
++    d="M54 40 L63 40 L67 25 L74 55 L79 33 L84 46 L91 40 L104 40"
++    stroke="#29B6E2"
++    stroke-width="5"
++    stroke-linecap="round"
++    stroke-linejoin="round"
++    fill="none"
++  />
++</svg>
+diff --git a/src/app/(auth)/login/page.tsx b/src/app/(auth)/login/page.tsx
+index 9ea6332..5a05118 100644
+--- a/src/app/(auth)/login/page.tsx
++++ b/src/app/(auth)/login/page.tsx
+@@ -10,7 +10,7 @@ export default function LoginPage() {
+         <div className="text-center">
+           <Link href="/" className="inline-flex items-center gap-2">
+             <LogoMark size={24} idSuffix="-login" />
+-            <h1 className="text-2xl font-bold">LeadStack</h1>
++            <h1 className="text-2xl font-bold">Answer Any Call</h1>
+           </Link>
+           <p className="mt-2 text-sm text-muted-foreground">
+             Welcome back. Sign in to your workspace.
+diff --git a/src/app/(auth)/signup/page.tsx b/src/app/(auth)/signup/page.tsx
+index 2299ca2..4e204fe 100644
+--- a/src/app/(auth)/signup/page.tsx
++++ b/src/app/(auth)/signup/page.tsx
+@@ -10,7 +10,7 @@ export default function SignupPage() {
+         <div className="text-center">
+           <Link href="/" className="inline-flex items-center gap-2">
+             <LogoMark size={24} idSuffix="-signup" />
+-            <h1 className="text-2xl font-bold">LeadStack</h1>
++            <h1 className="text-2xl font-bold">Answer Any Call</h1>
+           </Link>
+           <p className="mt-2 text-sm text-muted-foreground">
+             Start closing with the CRM your team will actually use.
+diff --git a/src/app/globals.css b/src/app/globals.css
+index 92d7dd2..7806085 100644
+--- a/src/app/globals.css
++++ b/src/app/globals.css
+@@ -74,7 +74,7 @@
+   --card-foreground: oklch(0.145 0 0);
+   --popover: oklch(1 0 0);
+   --popover-foreground: oklch(0.145 0 0);
+-  --primary: oklch(0.205 0 0);
++  --primary: oklch(0.40 0.16 258);
+   --primary-foreground: oklch(0.985 0 0);
+   --secondary: oklch(0.97 0 0);
+   --secondary-foreground: oklch(0.205 0 0);
+@@ -85,7 +85,7 @@
+   --destructive: oklch(0.577 0.245 27.325);
+   --border: oklch(0.922 0 0);
+   --input: oklch(0.922 0 0);
+-  --ring: oklch(0.708 0 0);
++  --ring: oklch(0.40 0.16 258);
+   --chart-1: oklch(0.809 0.105 251.813);
+   --chart-2: oklch(0.623 0.214 259.815);
+   --chart-3: oklch(0.546 0.245 262.881);
+@@ -94,7 +94,7 @@
+   --radius: 0.625rem;
+   --sidebar: oklch(0.985 0 0);
+   --sidebar-foreground: oklch(0.145 0 0);
+-  --sidebar-primary: oklch(0.205 0 0);
++  --sidebar-primary: oklch(0.40 0.16 258);
+   --sidebar-primary-foreground: oklch(0.985 0 0);
+   --sidebar-accent: oklch(0.97 0 0);
+   --sidebar-accent-foreground: oklch(0.205 0 0);
+diff --git a/src/components/brand/logo-mark.tsx b/src/components/brand/logo-mark.tsx
+index ed11d07..cfd7c58 100644
+--- a/src/components/brand/logo-mark.tsx
++++ b/src/components/brand/logo-mark.tsx
+@@ -1,58 +1,32 @@
+-/**
+- * LeadStack logo mark — the "Chevron Stack" variant.
+- *
+- * Three offset chevron-tipped bars alternating direction. Top points left,
+- * middle right, bottom left — chevron tips trace the directional flow of an S
+- * while alternating alignment gives the stacked-cards reading.
+- *
+- * Use `<LogoMark size={20} />` next to the "LeadStack" wordmark, or alone as
+- * a brand glyph.
+- */
+-
+ interface LogoMarkProps {
+-  /** Square pixel size. Defaults to 20 (matches sidebar usage). */
+   size?: number;
+   className?: string;
+-  /** Optional unique suffix when multiple instances render in one document — keeps the gradient defs from colliding across SSR + hydration. */
+   idSuffix?: string;
+ }
+ 
+-export function LogoMark({ size = 20, className, idSuffix = "" }: LogoMarkProps) {
+-  const id1 = `ls-mark-1${idSuffix}`;
+-  const id2 = `ls-mark-2${idSuffix}`;
+-  const id3 = `ls-mark-3${idSuffix}`;
++export function LogoMark({ size = 20, className }: LogoMarkProps) {
+   return (
+     <svg
+       width={size}
+-      height={size}
+-      viewBox="0 0 64 64"
++      height={Math.round(size * 0.8)}
++      viewBox="0 0 110 88"
++      fill="none"
+       xmlns="http://www.w3.org/2000/svg"
+       className={className}
+       aria-hidden="true"
+     >
+-      <defs>
+-        <linearGradient id={id1} x1="0" y1="0" x2="1" y2="0">
+-          <stop offset="0%" stopColor="#6366f1" />
+-          <stop offset="100%" stopColor="#7c3aed" />
+-        </linearGradient>
+-        <linearGradient id={id2} x1="0" y1="0" x2="1" y2="0">
+-          <stop offset="0%" stopColor="#8b5cf6" />
+-          <stop offset="100%" stopColor="#a855f7" />
+-        </linearGradient>
+-        <linearGradient id={id3} x1="0" y1="0" x2="1" y2="0">
+-          <stop offset="0%" stopColor="#c026d3" />
+-          <stop offset="100%" stopColor="#ec4899" />
+-        </linearGradient>
+-      </defs>
+-
+-      {/* Top chevron — points LEFT, right-aligned */}
+-      <path d="M 56 8 L 18 8 L 8 16 L 18 24 L 56 24 Z" fill={`url(#${id1})`} />
+-
+-      {/* Middle chevron — points RIGHT, left-aligned */}
+-      <path d="M 8 28 L 46 28 L 56 36 L 46 44 L 8 44 Z" fill={`url(#${id2})`} />
+-
+-      {/* Bottom chevron — points LEFT, right-aligned */}
+-      <path d="M 56 48 L 18 48 L 8 56 L 18 60 L 56 60 Z" fill={`url(#${id3})`} />
++      <path
++        fill="#1B3A6B"
++        d="M8 22C8 14 14 8 22 8L28 8C32 8 36 11 37 15L39 25C40 29 38 34 34 35L31 37C34 46 42 54 51 57L53 54C55 50 59 48 63 49L73 52C77 53 80 57 80 62L80 68C80 76 74 82 66 82C38 82 8 52 8 24Z"
++      />
++      <path
++        d="M54 40L63 40L67 25L74 55L79 33L84 46L91 40L104 40"
++        stroke="#29B6E2"
++        strokeWidth="5"
++        strokeLinecap="round"
++        strokeLinejoin="round"
++        fill="none"
++      />
+     </svg>
+   );
+ }
+diff --git a/src/components/landing-custom/cta.tsx b/src/components/landing-custom/cta.tsx
+index 9dd5cdb..c337da1 100644
+--- a/src/components/landing-custom/cta.tsx
++++ b/src/components/landing-custom/cta.tsx
+@@ -1,10 +1,11 @@
++import Link from "next/link";
+ import { Button } from "@/components/ui/button";
+ import type { ResolvedBrand } from "@/config/landing";
+ 
+ export function CTA({ brand }: { brand: ResolvedBrand }) {
+   return (
+     <section className="relative overflow-hidden py-24">
+-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.72_0.16_165)_/_14%,transparent_60%)]" />
++      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,oklch(0.60_0.14_232)_/_14%,transparent_60%)]" />
+ 
+       <div className="container mx-auto px-4 text-center">
+         <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tighter sm:text-5xl">
+@@ -20,7 +21,7 @@ export function CTA({ brand }: { brand: ResolvedBrand }) {
+         </p>
+         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+           <Button
+-            render={<a href={`mailto:${brand.supportEmail}`} />}
++            render={<Link href="/login" />}
+             size="lg"
+             className="px-6 text-base"
+           >
+diff --git a/src/components/landing-custom/footer.tsx b/src/components/landing-custom/footer.tsx
+index d29fe13..2d5ba48 100644
+--- a/src/components/landing-custom/footer.tsx
++++ b/src/components/landing-custom/footer.tsx
+@@ -19,7 +19,7 @@ export function Footer({ brand }: { brand: ResolvedBrand }) {
+               ) : (
+                 <Logo size={20} idSuffix="-footer" />
+               )}
+-              <span className="bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 bg-clip-text text-transparent">
++              <span className="bg-gradient-to-r from-blue-800 via-blue-600 to-sky-400 bg-clip-text text-transparent">
+                 {brand.name}
+               </span>
+             </Link>
+diff --git a/src/components/landing-custom/hero.tsx b/src/components/landing-custom/hero.tsx
+index a7f0e4b..0f5c5ec 100644
+--- a/src/components/landing-custom/hero.tsx
++++ b/src/components/landing-custom/hero.tsx
+@@ -1,3 +1,4 @@
++import Link from "next/link";
+ import { Sparkles } from "lucide-react";
+ import { Button } from "@/components/ui/button";
+ import type { ResolvedBrand } from "@/config/landing";
+@@ -5,8 +6,8 @@ import type { ResolvedBrand } from "@/config/landing";
+ export function Hero({ brand }: { brand: ResolvedBrand }) {
+   return (
+     <section className="relative overflow-hidden py-20 md:py-28">
+-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,oklch(0.72_0.16_165)_/_18%,transparent_55%)]" />
+-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_bottom_left,oklch(0.74_0.13_185)_/_14%,transparent_55%)]" />
++      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_top,oklch(0.60_0.14_232)_/_18%,transparent_55%)]" />
++      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_bottom_left,oklch(0.65_0.10_215)_/_14%,transparent_55%)]" />
+       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[1px] bg-gradient-to-r from-transparent via-foreground/10 to-transparent" />
+ 
+       <div
+@@ -20,16 +21,16 @@ export function Hero({ brand }: { brand: ResolvedBrand }) {
+ 
+       <div className="container mx-auto px-4">
+         <div className="mx-auto max-w-3xl text-center">
+-          <div className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-3 py-1 text-xs font-medium">
+-            <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+-            <span className="bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 bg-clip-text text-transparent">
++          <div className="mx-auto mb-8 inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/5 px-3 py-1 text-xs font-medium">
++            <Sparkles className="h-3.5 w-3.5 text-blue-500" />
++            <span className="bg-gradient-to-r from-blue-700 via-blue-500 to-sky-400 bg-clip-text text-transparent">
+               {brand.tagline}
+             </span>
+           </div>
+ 
+           <h1 className="text-balance text-4xl font-semibold tracking-tighter sm:text-5xl md:text-6xl lg:text-[5rem] lg:leading-[1.04]">
+             The CRM your team will{" "}
+-            <span className="inline-block bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 bg-clip-text pr-1 font-serif font-normal text-transparent">
++            <span className="inline-block bg-gradient-to-r from-blue-700 via-blue-500 to-sky-400 bg-clip-text pr-1 font-serif font-normal text-transparent">
+               actually use
+             </span>
+             .
+@@ -41,7 +42,7 @@ export function Hero({ brand }: { brand: ResolvedBrand }) {
+ 
+           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+             <Button
+-              render={<a href={`mailto:${brand.supportEmail}`} />}
++              render={<Link href="/login" />}
+               size="lg"
+               className="px-6 text-base"
+             >
+diff --git a/src/components/landing-custom/logo.tsx b/src/components/landing-custom/logo.tsx
+index 48afd53..ee695f9 100644
+--- a/src/components/landing-custom/logo.tsx
++++ b/src/components/landing-custom/logo.tsx
+@@ -1,63 +1,31 @@
+-/**
+- * Logo for the custom landing variant.
+- *
+- * CRM-inspired mark: three nodes connected on a diagonal pipeline path,
+- * inside a rounded mint-gradient square. Reads as contact journey / lead
+- * progression / pipeline stages — on-brand for any CRM.
+- *
+- * `idSuffix` is required when more than one instance of this logo renders
+- * on the same page (e.g. navbar + footer) so the SVG `<linearGradient>` IDs
+- * don't collide. Pick something stable per call site like "-nav" or
+- * "-footer".
+- *
+- * Drop in your own logo by replacing the contents of this component —
+- * the navbar + footer import it and don't need to change.
+- */
+ export function Logo({
+   size = 24,
+-  idSuffix = "",
+ }: {
+   size?: number;
+   idSuffix?: string;
+ }) {
+-  const gradientId = `custom-logo-grad${idSuffix}`;
+   return (
+     <svg
+       width={size}
+-      height={size}
+-      viewBox="0 0 24 24"
++      height={Math.round(size * 0.8)}
++      viewBox="0 0 110 88"
+       fill="none"
+       xmlns="http://www.w3.org/2000/svg"
+       aria-hidden="true"
+       className="shrink-0"
+     >
+-      <defs>
+-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+-          <stop offset="0%" stopColor="oklch(0.72 0.16 165)" />
+-          <stop offset="100%" stopColor="oklch(0.74 0.13 185)" />
+-        </linearGradient>
+-      </defs>
+-      <rect
+-        x="1.5"
+-        y="1.5"
+-        width="21"
+-        height="21"
+-        rx="6"
+-        fill={`url(#${gradientId})`}
++      <path
++        fill="#1B3A6B"
++        d="M8 22C8 14 14 8 22 8L28 8C32 8 36 11 37 15L39 25C40 29 38 34 34 35L31 37C34 46 42 54 51 57L53 54C55 50 59 48 63 49L73 52C77 53 80 57 80 62L80 68C80 76 74 82 66 82C38 82 8 52 8 24Z"
+       />
+-      {/* pipeline connector */}
+       <path
+-        d="M 6.5 17 L 12 12 L 17.5 7"
+-        stroke="white"
+-        strokeWidth="1.5"
++        d="M54 40L63 40L67 25L74 55L79 33L84 46L91 40L104 40"
++        stroke="#29B6E2"
++        strokeWidth="5"
+         strokeLinecap="round"
+-        opacity="0.45"
++        strokeLinejoin="round"
+         fill="none"
+       />
+-      {/* three pipeline nodes */}
+-      <circle cx="6.5" cy="17" r="2" fill="white" />
+-      <circle cx="12" cy="12" r="2" fill="white" />
+-      <circle cx="17.5" cy="7" r="2" fill="white" />
+     </svg>
+   );
+ }
+diff --git a/src/components/landing-custom/navbar.tsx b/src/components/landing-custom/navbar.tsx
+index 7490828..58e7c0f 100644
+--- a/src/components/landing-custom/navbar.tsx
++++ b/src/components/landing-custom/navbar.tsx
+@@ -69,7 +69,7 @@ export function Navbar({ brand }: { brand: ResolvedBrand }) {
+           ) : (
+             <Logo size={24} idSuffix="-nav" />
+           )}
+-          <span className="bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-300 bg-clip-text text-transparent">
++          <span className="bg-gradient-to-r from-blue-800 via-blue-600 to-sky-400 bg-clip-text text-transparent">
+             {brand.name}
+           </span>
+         </Link>
+diff --git a/src/config/landing.ts b/src/config/landing.ts
+index 2a049c5..2d7ace5 100644
+--- a/src/config/landing.ts
++++ b/src/config/landing.ts
+@@ -3,8 +3,8 @@
+  *
+  * The repo ships with two complete landing pages:
+  *
+- *   - "custom"    â€” a generic agency-CRM landing the buyer brands as
+- *     their own. THIS IS THE DEFAULT â€” every new clone should be
++ *   - "custom"    — a generic agency-CRM landing the buyer brands as
++ *     their own. THIS IS THE DEFAULT — every new clone should be
+  *     branded for the buyer's business, so the custom variant renders
+  *     at "/" out of the box and CUSTOM_BRAND below should be edited
+  *     first.
+@@ -13,11 +13,11 @@
+  *     prospects see a "Talk to us" mailto CTA (uses CUSTOM_BRAND.
+  *     supportEmail), the owner takes payment off-system, provisions
+  *     a sub-account, then invites the client via the in-app invite
+- *     flow. Pricing tiers + section are hidden by default â€” see the
++ *     flow. Pricing tiers + section are hidden by default — see the
+  *     CUSTOM_BRAND.pricing block below for how to re-enable real
+  *     self-serve resale.
+  *
+- *   - "leadstack" â€” the LeadStack-branded marketing landing that sells
++ *   - "leadstack" — the LeadStack-branded marketing landing that sells
+  *     LeadStack itself (used on the leadstack.dev demo site). Only flip
+  *     back to this if you're running the public LeadStack demo.
+  *
+@@ -53,7 +53,7 @@ export interface CustomBrand {
+ 
+ /**
+  * The brand object actually passed to the custom landing components at
+- * render time. Resolved on the server by lib/landing/resolve-brand.ts â€”
++ * render time. Resolved on the server by lib/landing/resolve-brand.ts —
+  * agency doc fields take precedence, CUSTOM_BRAND fills the gaps. `logoUrl`
+  * is nullable because "no logo set" is a meaningful state (renders the
+  * default gradient mark instead of an <img>).
+@@ -70,31 +70,31 @@ export interface ResolvedBrand {
+ /**
+  * Brand fields used by the "custom" landing variant. Ignored entirely when
+  * LANDING_VARIANT is "leadstack". Edit these to brand the white-label
+- * landing for your own business â€” the values below are placeholder
++ * landing for your own business — the values below are placeholder
+  * defaults so the page renders cleanly out of the box.
+  */
+ export const CUSTOM_BRAND: CustomBrand = {
+-  /** Displayed in navbar, hero, footer copyright, page title â€” everywhere. */
+-  name: "YourCRM",
++  /** Displayed in navbar, hero, footer copyright, page title — everywhere. */
++  name: "Answer Any Call",
+ 
+   /** One-line positioning, surfaced in hero subtitle + meta description. */
+-  tagline: "All-in-one CRM for modern teams",
++  tagline: "We answer every lead. 24/7. Automatically.",
+ 
+   /**
+    * Short (~140 char) description used under the hero headline. Should
+-   * read like a tweet â€” what the product does, for whom.
++   * read like a tweet — what the product does, for whom.
+    */
+   shortDescription:
+-    "Contacts, pipeline, automations, and a website builder â€” all in one branded workspace your team actually wants to use.",
++    "6 AI employees catch every missed call, reactivate dead leads, and book 2–3 new clients/month. Guaranteed in 90 days.",
+ 
+   /** Used on CTA buttons + the FAQ "talk to us" line + footer. */
+-  supportEmail: "hello@yourbrand.com",
++  supportEmail: "info@answeranycall.com",
+ 
+   /** Used in footer, og:url, canonical. No https://, no trailing slash. */
+-  primaryDomain: "yourbrand.com",
++  primaryDomain: "answeranycall.com",
+ 
+   /**
+-   * Pricing tiers. HIDDEN BY DEFAULT â€” the custom landing is wired for
++   * Pricing tiers. HIDDEN BY DEFAULT — the custom landing is wired for
+    * done-for-you sales (see header comment), not self-serve, so the
+    * Pricing section and the #pricing nav link are not rendered. The
+    * config below is kept as a starting point for buyers who later want
+@@ -110,58 +110,58 @@ export const CUSTOM_BRAND: CustomBrand = {
+    *      page (currently gated on LANDING_VARIANT === "leadstack").
+    *   5. Add a Stripe-driven public signup flow that provisions a
+    *      fresh agency + sub-account + owner membership on
+-   *      checkout.completed â€” today's /api/auth/signup is invite-only
++   *      checkout.completed — today's /api/auth/signup is invite-only
+    *      after the first bootstrap user, so strangers paying through
+    *      Stripe can't currently land anywhere. See CLAUDE.md
+    *      ("Auth & Tenancy Model") for the existing signup contract.
++   *
++   * Add-on: Social Media — $500/mo for 30 days of content creation and
++   * posting across social channels.
+    */
+   pricing: {
+     starter: {
+-      name: "Starter",
+-      priceMonthly: 0,
+-      priceAnnual: 0,
+-      blurb: "For solo operators kicking the tyres.",
++      name: "Essential",
++      priceMonthly: 100,
++      priceAnnual: 100,
++      blurb: "Website, lead capture & instant text alert. $1,000 setup fee.",
+       features: [
+-        "Up to 100 contacts",
+-        "1 sub-account",
+-        "Pipeline + tasks + calendar",
+-        "Forms with public hosted page",
+-        "Community support",
++        "Professional website",
++        "Lead capture forms",
++        "Instant text alert on new leads",
++        "24/7 AI lead response",
++        "Contact management",
+       ],
+-      cta: "Get started free",
++      cta: "Get Started",
+       highlighted: false,
+     },
+     pro: {
+-      name: "Pro",
+-      priceMonthly: 97,
+-      priceAnnual: 77,
+-      blurb: "For growing teams with serious volume.",
++      name: "Growth",
++      priceMonthly: 150,
++      priceAnnual: 150,
++      blurb: "Everything in Essential + missed call text followup + Google review followup. $1,500 setup fee.",
+       features: [
+-        "Unlimited contacts",
+-        "Unlimited sub-accounts",
+-        "Pipeline + Kanban + automations",
+-        "Email + SMS shared sender",
+-        "Built-in website builder",
+-        "Up to 5 team seats",
+-        "Priority email support",
++        "Everything in Essential",
++        "Missed call text-back",
++        "Google review followup automation",
++        "AI pipeline & deal tracking",
++        "SMS + email automations",
+       ],
+-      cta: "Start 14-day trial",
++      cta: "Most Popular",
+       highlighted: true,
+     },
+     scale: {
+-      name: "Scale",
+-      priceMonthly: 297,
+-      priceAnnual: 237,
+-      blurb: "For teams running multi-account workspaces.",
++      name: "Dominate",
++      priceMonthly: 200,
++      priceAnnual: 200,
++      blurb: "Everything in Growth + SEO optimization + Google & AI ranking. $2,000 setup fee.",
+       features: [
+-        "Everything in Pro",
+-        "Unlimited team seats",
+-        "Advanced automations",
+-        "Audit logs + SSO",
+-        "Dedicated onboarding",
+-        "SLA-backed support",
++        "Everything in Growth",
++        "SEO optimization",
++        "Google & AI ranking",
++        "Advanced reporting",
++        "Priority support",
+       ],
+-      cta: "Talk to sales",
++      cta: "Get Started",
+       highlighted: false,
+     },
+   },
+diff --git a/src/hooks/use-agency.ts b/src/hooks/use-agency.ts
+index f869dfa..4f58236 100644
+--- a/src/hooks/use-agency.ts
++++ b/src/hooks/use-agency.ts
+@@ -35,7 +35,7 @@ interface AgencyData {
+ export function useAgency(): AgencySummary {
+   const { agencyId } = useAuth();
+   const [data, setData] = useState<AgencyData>({
+-    name: "LeadStack",
++    name: "Answer Any Call",
+     logoUrl: null,
+     supportEmail: null,
+     primaryDomain: null,
+@@ -54,7 +54,7 @@ export function useAgency(): AgencySummary {
+         if (snap.exists()) {
+           const d = snap.data() as Partial<AgencyDoc>;
+           setData({
+-            name: (d.name as string) || "LeadStack",
++            name: (d.name as string) || "Answer Any Call",
+             logoUrl: (d.logoUrl as string | null) ?? null,
+             supportEmail: (d.supportEmail as string | null) ?? null,
+             primaryDomain: (d.primaryDomain as string | null) ?? null,
