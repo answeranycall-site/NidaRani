@@ -10,6 +10,7 @@ import {
   Mail,
   MessageCircle,
   MessagesSquare,
+  PhoneMissed,
   PhoneOutgoing,
   Send,
   Share2,
@@ -61,6 +62,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const initialWebsite = subAccount?.websiteEnabledByAgency === true;
   const initialSocial = subAccount?.socialPlannerEnabledByAgency === true;
   const initialCommunity = subAccount?.communityEnabledByAgency === true;
+  const initialMissedCall =
+    subAccount?.missedCallTextBackEnabledByAgency === true;
   // "Hide instead of lock" overrides for the sidebar-gated features.
   const initialBroadcastsHidden =
     subAccount?.broadcastsHiddenWhenDisabled === true;
@@ -81,6 +84,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const [socialPlannerEnabled, setSocialPlannerEnabled] =
     useState(initialSocial);
   const [communityEnabled, setCommunityEnabled] = useState(initialCommunity);
+  const [missedCallEnabled, setMissedCallEnabled] = useState(initialMissedCall);
   const [broadcastsHidden, setBroadcastsHidden] = useState(
     initialBroadcastsHidden,
   );
@@ -125,6 +129,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       setWebsiteEnabled(initialWebsite);
       setSocialPlannerEnabled(initialSocial);
       setCommunityEnabled(initialCommunity);
+      setMissedCallEnabled(initialMissedCall);
       setBroadcastsHidden(initialBroadcastsHidden);
       setWebsiteHidden(initialWebsiteHidden);
       setSocialHidden(initialSocialHidden);
@@ -141,6 +146,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialWebsite,
     initialSocial,
     initialCommunity,
+    initialMissedCall,
     initialBroadcastsHidden,
     initialWebsiteHidden,
     initialSocialHidden,
@@ -161,6 +167,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const websiteDirty = websiteEnabled !== initialWebsite;
   const socialDirty = socialPlannerEnabled !== initialSocial;
   const communityDirty = communityEnabled !== initialCommunity;
+  const missedCallDirty = missedCallEnabled !== initialMissedCall;
   const broadcastsHiddenDirty = broadcastsHidden !== initialBroadcastsHidden;
   const websiteHiddenDirty = websiteHidden !== initialWebsiteHidden;
   const socialHiddenDirty = socialHidden !== initialSocialHidden;
@@ -175,6 +182,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     websiteDirty ||
     socialDirty ||
     communityDirty ||
+    missedCallDirty ||
     broadcastsHiddenDirty ||
     websiteHiddenDirty ||
     socialHiddenDirty ||
@@ -202,6 +210,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         websiteEnabled?: boolean;
         socialPlannerEnabled?: boolean;
         communityEnabled?: boolean;
+        missedCallTextBackEnabled?: boolean;
         broadcastsHiddenWhenDisabled?: boolean;
         websiteHiddenWhenDisabled?: boolean;
         socialPlannerHiddenWhenDisabled?: boolean;
@@ -216,6 +225,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       if (websiteDirty) payload.websiteEnabled = websiteEnabled;
       if (socialDirty) payload.socialPlannerEnabled = socialPlannerEnabled;
       if (communityDirty) payload.communityEnabled = communityEnabled;
+      if (missedCallDirty)
+        payload.missedCallTextBackEnabled = missedCallEnabled;
       if (broadcastsHiddenDirty)
         payload.broadcastsHiddenWhenDisabled = broadcastsHidden;
       if (websiteHiddenDirty)
@@ -307,6 +318,13 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
           communityEnabled
             ? "Community enabled."
             : "Community disabled. Members, posts, and courses preserved; the public pages go offline.",
+        );
+      }
+      if (missedCallDirty) {
+        parts.push(
+          missedCallEnabled
+            ? "Missed Call Text Back enabled."
+            : "Missed Call Text Back disabled. The sub-account can no longer re-enable it.",
         );
       }
       // "Hide instead of lock" changes. Only meaningful while the feature is
@@ -508,6 +526,23 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             CRM contacts. Disabling locks the Community sidebar entry AND takes
             the public group pages offline; members, posts, and courses are
             preserved, so re-enabling resumes instantly.
+          </GateToggle>
+
+          <GateToggle
+            checked={missedCallEnabled}
+            onChange={setMissedCallEnabled}
+            disabled={saving}
+            icon={<PhoneMissed className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />}
+            title="Missed Call Text Back"
+          >
+            When enabled, this sub-account can point its dedicated Twilio
+            number&apos;s voice line at LeadStack: inbound calls forward to the
+            business&apos;s phone and, if unanswered, the caller is
+            automatically texted back. Requires a dedicated Twilio number and is
+            mutually exclusive with the AI inbound Voice agent (which answers
+            calls itself). Disabling stops the sub-account re-enabling it; the
+            sub-account&apos;s own toggle restores the number&apos;s prior voice
+            settings.
           </GateToggle>
         </div>
 

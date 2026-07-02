@@ -52,6 +52,10 @@ export type Comparison = {
     heading: string;
     rows: Array<{
       label: string;
+      /** Optional group heading. When a row's category differs from the
+       *  previous row's, the table renders a section divider above it.
+       *  Leave unset on every row for a flat, ungrouped table. */
+      category?: string;
       /** true = check, false = X, string = note (e.g. "Add-on $X/mo"). */
       leadstack: boolean | string;
       competitor: boolean | string;

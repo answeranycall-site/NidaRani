@@ -13,6 +13,7 @@ import {
   Mail,
   MessageSquare,
   MessagesSquare,
+  PhoneMissed,
   PhoneOutgoing,
   Zap,
   Send,
@@ -255,6 +256,11 @@ function activityVisuals(type: ActivityType): {
       return {
         icon: <PhoneOutgoing className="h-3 w-3 text-orange-500" />,
         label: "AI call placed",
+      };
+    case "missed_call":
+      return {
+        icon: <PhoneMissed className="h-3 w-3 text-rose-500" />,
+        label: "Missed call",
       };
     case "automation_started":
       return {

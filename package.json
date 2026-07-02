@@ -7,6 +7,8 @@
     "node": ">=20"
   },
   "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "doctor:firebase": "node scripts/doctor.mjs --live",
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",

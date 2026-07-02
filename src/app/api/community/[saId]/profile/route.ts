@@ -6,8 +6,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 export const dynamic = "force-dynamic";
 
-export const BIO_MAX = 300;
-export const NAME_MAX = 60;
+// Local field caps — not exported: Next 15 forbids non-handler exports from
+// route.ts files (it fails the build's route type-validation). These are only
+// used within this route; the community profile editor keeps its own copy.
+const BIO_MAX = 300;
+const NAME_MAX = 60;
 
 /** Member: update their own display name + bio. */
 export async function PATCH(

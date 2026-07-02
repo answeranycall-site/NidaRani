@@ -194,6 +194,9 @@ export type ActivityType =
   // Operator placed an outbound AI voice call from the contact profile.
   // Written by /api/comms/voice/call after the compliance gate passes.
   | "voice_call_initiated"
+  // An inbound call was forwarded but went unanswered, so Missed Call Text
+  // Back auto-texted the caller. Written by /api/webhooks/twilio/voice/status.
+  | "missed_call"
   // Quote lifecycle — written by the quote API routes + the public
   // /q/[token] page on first view. See lib/quotes/lifecycle.ts.
   | "quote_sent"

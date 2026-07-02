@@ -75,70 +75,270 @@ export const gohighlevelComparison: Comparison = {
   featureTable: {
     heading: "How LeadStack's base license compares to GoHighLevel's base plan",
     rows: [
+      // ── Ownership & economics ───────────────────────────────────────────
       {
-        label: "Unlimited sub-accounts",
-        leadstack: true,
-        competitor: false,
-      },
-      {
-        label: "All-in-one CRM: contacts, pipeline, quotes, booking, calendar",
-        leadstack: true,
-        competitor: true,
-      },
-      {
-        label: "AI Web Chat widget + SMS auto-reply + Voice agent",
-        leadstack: true,
-        competitor: false,
-      },
-      {
-        label: "Google review requests (SMS + WhatsApp, auto + on-demand)",
-        leadstack: true,
-        competitor: true,
-      },
-      {
-        label: "Premium support",
-        leadstack: true,
-        competitor: false,
-      },
-      {
-        label: "Public API + webhooks included (idempotency, versioning)",
-        leadstack: true,
-        competitor: false,
-      },
-      {
-        label: "Full source code access — modify any feature",
-        leadstack: true,
-        competitor: false,
-      },
-      {
-        label: "Self-host on your own cloud account",
-        leadstack: true,
-        competitor: false,
-      },
-      {
+        category: "Ownership & economics",
         label: "Recurring monthly platform fee",
         leadstack: "$0",
         competitor: "$297/month",
       },
       {
-        label: "Client data on your infrastructure",
+        category: "Ownership & economics",
+        label: "Full source code access — modify any feature",
         leadstack: true,
         competitor: false,
       },
       {
+        category: "Ownership & economics",
+        label: "Self-host on your own cloud account",
+        leadstack: true,
+        competitor: false,
+      },
+      {
+        category: "Ownership & economics",
+        label: "Client data on your own infrastructure",
+        leadstack: true,
+        competitor: false,
+      },
+      {
+        category: "Ownership & economics",
+        label: "Unlimited sub-accounts",
+        leadstack: true,
+        competitor: "$297 plan",
+      },
+      {
+        category: "Ownership & economics",
+        label: "White-label every client surface (login, domain, emails, booking, chat)",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Ownership & economics",
+        label: "Premium support",
+        leadstack: true,
+        competitor: "$500/month",
+      },
+
+      // ── CRM & sales ─────────────────────────────────────────────────────
+      {
+        category: "CRM & sales",
+        label: "Contacts — notes, activity timeline, custom fields",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "CSV import + export",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Pipelines / opportunities (drag-and-drop Kanban)",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Tasks",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Calendar",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Quotes / estimates — accept, decline, PDF",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Product catalog",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Invoices + payment links",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "CRM & sales",
+        label: "Territory / team assignment",
+        leadstack: true,
+        competitor: true,
+      },
+
+      // ── Lead capture & sites ────────────────────────────────────────────
+      {
+        category: "Lead capture & sites",
+        label: "Form builder — hosted pages + iframe embed",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Lead capture & sites",
+        label: "Marketing attribution capture (UTM + ad click IDs)",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Lead capture & sites",
+        label: "Funnel / landing page / website builder",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Lead capture & sites",
+        label: "Booking pages — reminders + paid bookings",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Lead capture & sites",
+        label: "Leads map (geographic lead view)",
+        leadstack: true,
+        competitor: false,
+      },
+
+      // ── Conversations & messaging ───────────────────────────────────────
+      {
+        category: "Conversations & messaging",
+        label: "Unified inbox across channels",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Conversations & messaging",
         label: "Per-sub-account dedicated email sending domain",
         leadstack: true,
         competitor: true,
       },
       {
-        label: "Funnel / landing page builder",
+        category: "Conversations & messaging",
+        label: "Dedicated per-client phone number (SMS)",
         leadstack: true,
         competitor: true,
       },
       {
+        category: "Conversations & messaging",
+        label: "WhatsApp messaging",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Conversations & messaging",
+        label: "Facebook Messenger + Instagram DM inbox",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Conversations & messaging",
+        label: "Bulk email broadcasts",
+        leadstack: true,
+        competitor: true,
+      },
+
+      // ── AI ──────────────────────────────────────────────────────────────
+      {
+        category: "AI",
+        label: "AI Web Chat widget",
+        leadstack: "Included",
+        competitor: "$97/mo add-on",
+      },
+      {
+        category: "AI",
+        label: "AI SMS auto-reply",
+        leadstack: "Included",
+        competitor: "$97/mo add-on",
+      },
+      {
+        category: "AI",
+        label: "AI inbound Voice agent",
+        leadstack: "Included",
+        competitor: "Add-on",
+      },
+      {
+        category: "AI",
+        label: "AI outbound Voice — click-to-call + bulk campaigns",
+        leadstack: "Included",
+        competitor: "Add-on",
+      },
+      {
+        category: "AI",
+        label: "Pick any AI model (open gateway, not locked in)",
+        leadstack: true,
+        competitor: false,
+      },
+      {
+        category: "AI",
+        label: "AI knowledge base from the client's website",
+        leadstack: true,
+        competitor: true,
+      },
+
+      // ── Marketing & engagement ──────────────────────────────────────────
+      {
+        category: "Marketing & engagement",
+        label: "Workflow automations",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Marketing & engagement",
         label: "Social post scheduling (Facebook + Instagram)",
         leadstack: true,
         competitor: true,
+      },
+      {
+        category: "Marketing & engagement",
+        label: "Google review requests (SMS + WhatsApp, auto + on-demand)",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Marketing & engagement",
+        label: "Memberships / courses",
+        leadstack: true,
+        competitor: true,
+      },
+      {
+        category: "Marketing & engagement",
+        label: "Communities",
+        leadstack: true,
+        competitor: true,
+      },
+
+      // ── Platform & developer ────────────────────────────────────────────
+      {
+        category: "Platform & developer",
+        label: "Public REST API (idempotency, versioning)",
+        leadstack: "Included",
+        competitor: "Higher tier",
+      },
+      {
+        category: "Platform & developer",
+        label: "Signed outbound webhooks",
+        leadstack: "Included",
+        competitor: "Higher tier",
+      },
+      {
+        category: "Platform & developer",
+        label: "Per-client API keys + rate limits",
+        leadstack: true,
+        competitor: "Partial",
+      },
+      {
+        category: "Platform & developer",
+        label: "One-click migration import from GoHighLevel",
+        leadstack: true,
+        competitor: false,
       },
     ],
   },

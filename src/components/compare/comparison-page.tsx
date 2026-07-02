@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { Check, X, Sparkles, Quote, ChevronRight } from "lucide-react";
 import type { Comparison } from "@/types/comparisons";
@@ -150,20 +151,35 @@ function FeatureTable({ comparison }: { comparison: Comparison }) {
             </tr>
           </thead>
           <tbody>
-            {comparison.featureTable.rows.map((row, i) => (
-              <tr
-                key={row.label}
-                className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}
-              >
-                <td className="px-4 py-3 sm:px-6">{row.label}</td>
-                <td className="px-4 py-3 text-center sm:px-6">
-                  <FeatureCell value={row.leadstack} positive />
-                </td>
-                <td className="px-4 py-3 text-center sm:px-6">
-                  <FeatureCell value={row.competitor} positive={false} />
-                </td>
-              </tr>
-            ))}
+            {comparison.featureTable.rows.map((row, i) => {
+              const prev = comparison.featureTable.rows[i - 1];
+              const showCategory =
+                row.category && row.category !== prev?.category;
+              return (
+                <Fragment key={row.label}>
+                  {showCategory && (
+                    <tr className="bg-muted/50">
+                      <th
+                        scope="colgroup"
+                        colSpan={3}
+                        className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-6"
+                      >
+                        {row.category}
+                      </th>
+                    </tr>
+                  )}
+                  <tr className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}>
+                    <td className="px-4 py-3 sm:px-6">{row.label}</td>
+                    <td className="px-4 py-3 text-center sm:px-6">
+                      <FeatureCell value={row.leadstack} positive />
+                    </td>
+                    <td className="px-4 py-3 text-center sm:px-6">
+                      <FeatureCell value={row.competitor} positive={false} />
+                    </td>
+                  </tr>
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

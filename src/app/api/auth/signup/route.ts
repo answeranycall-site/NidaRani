@@ -234,6 +234,7 @@ export async function POST(request: Request) {
         metaInboxEnabledByAgency: false,
         websiteEnabledByAgency: false,
         communityEnabledByAgency: false,
+        missedCallTextBackEnabledByAgency: false,
         metaConfig: null,
         bookingConfig: null,
         sendWindow: null,

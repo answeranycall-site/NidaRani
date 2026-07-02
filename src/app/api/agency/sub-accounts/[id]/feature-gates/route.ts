@@ -41,6 +41,7 @@ interface PatchBody {
   websiteEnabled?: boolean;
   socialPlannerEnabled?: boolean;
   communityEnabled?: boolean;
+  missedCallTextBackEnabled?: boolean;
   // "Hide instead of lock" overrides for the sidebar-gated features.
   // Only take effect while the matching gate is off. See `*HiddenWhenDisabled`
   // on SubAccountDoc.
@@ -80,6 +81,7 @@ export async function PATCH(
   const wantsWebsite = typeof body.websiteEnabled === "boolean";
   const wantsSocialPlanner = typeof body.socialPlannerEnabled === "boolean";
   const wantsCommunity = typeof body.communityEnabled === "boolean";
+  const wantsMissedCall = typeof body.missedCallTextBackEnabled === "boolean";
   const wantsBroadcastsHidden =
     typeof body.broadcastsHiddenWhenDisabled === "boolean";
   const wantsWebsiteHidden =
@@ -98,6 +100,7 @@ export async function PATCH(
     !wantsWebsite &&
     !wantsSocialPlanner &&
     !wantsCommunity &&
+    !wantsMissedCall &&
     !wantsBroadcastsHidden &&
     !wantsWebsiteHidden &&
     !wantsSocialPlannerHidden &&
@@ -230,6 +233,15 @@ export async function PATCH(
     updates.communityEnabledByAgency = body.communityEnabled;
   }
 
+  if (wantsMissedCall) {
+    // No tear-down here — disabling the gate just prevents the sub-account from
+    // (re-)enabling MCTB. The sub-account's own disable is what restores the
+    // number's Voice URL. If the gate is turned off while MCTB is live, the
+    // config route already refuses re-enables; the operator disables from
+    // Settings to hand the Voice URL back.
+    updates.missedCallTextBackEnabledByAgency = body.missedCallTextBackEnabled;
+  }
+
   // "Hide instead of lock" overrides. Pure presentation flags — they don't
   // change any runtime enforcement (a disabled feature's routes 403 the same
   // way regardless); they only decide whether the sidebar shows a greyed
@@ -266,6 +278,9 @@ export async function PATCH(
       ? { socialPlannerEnabled: body.socialPlannerEnabled }
       : {}),
     ...(wantsCommunity ? { communityEnabled: body.communityEnabled } : {}),
+    ...(wantsMissedCall
+      ? { missedCallTextBackEnabled: body.missedCallTextBackEnabled }
+      : {}),
     ...(wantsBroadcastsHidden
       ? { broadcastsHiddenWhenDisabled: body.broadcastsHiddenWhenDisabled }
       : {}),

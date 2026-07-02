@@ -190,6 +190,16 @@ export interface SubAccountDoc {
    */
   communityEnabledByAgency?: boolean;
   /**
+   * Agency-controlled gate for Missed Call Text Back (MCTB). When `false` (or
+   * undefined on legacy docs) the sub-account can't enable the feature — the
+   * settings card shows a locked state and the config route 403s. When on, the
+   * sub-account admin can point their dedicated Twilio number's Voice URL at our
+   * handler, which forwards the call and auto-texts the caller on a miss. Ships
+   * off (explicit allowlist). No tear-down beyond the sub-account's own
+   * disable (which restores the number's prior Voice URL). Read `=== true`.
+   */
+  missedCallTextBackEnabledByAgency?: boolean;
+  /**
    * Per-feature "hide instead of lock" overrides for the sidebar-gated features
    * (Broadcasts, Website, Social Planner, Community). They ONLY take effect when
    * the matching `*EnabledByAgency` gate is off. Default behavior (field
@@ -364,6 +374,43 @@ export interface TwilioConfig {
    * Twilio's standard signature verification with `authToken`.
    */
   inboundWebhookSecret: string | null;
+  /**
+   * Missed Call Text Back (MCTB). Opt-in per sub-account (agency-gated via
+   * `missedCallTextBackEnabledByAgency`). When enabled, this number's Twilio
+   * Voice URL is pointed at /api/webhooks/twilio/voice, which forwards the
+   * inbound call to `forwardTo` and — if it goes unanswered — auto-texts the
+   * caller. Null/undefined = off (the number's Voice URL is left untouched).
+   * Strictly additive; SMS is unaffected. Mutually exclusive with the AI
+   * inbound Voice channel, which owns the Voice URL via Vapi — the config
+   * route refuses to enable MCTB while that channel is on.
+   */
+  missedCall?: MissedCallConfig | null;
+}
+
+export interface MissedCallConfig {
+  /** Master toggle. When true the number's Voice URL points at our handler. */
+  enabled: boolean;
+  /**
+   * E.164 number the inbound call is forwarded to (the business's real phone /
+   * cell). Required to enable — a forward-then-text flow needs somewhere to
+   * ring first.
+   */
+  forwardTo: string;
+  /** Seconds to ring `forwardTo` before treating the call as missed (5–60). */
+  ringTimeoutSec: number;
+  /**
+   * SMS sent to the caller when the forward goes unanswered. Supports the same
+   * {{merge}} tags as templates (resolved against the caller's contact).
+   */
+  messageBody: string;
+  /**
+   * The number's Voice URL captured BEFORE MCTB claimed it, so disabling
+   * restores the operator's prior config instead of clobbering it. Null when
+   * the number had no Voice URL set (the common case).
+   */
+  prevVoiceUrl: string | null;
+  /** True once we successfully pointed the number's Voice URL at our endpoint. */
+  voiceWebhookConfigured: boolean;
 }
 
 /**
