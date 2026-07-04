@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAdminDb } from "@/lib/firebase/admin";
+import { cleanEnv } from "@/lib/env";
 
 /**
  * Agency-level health checks. Each integration runs its presence test
@@ -376,9 +377,9 @@ async function checkTwilio(): Promise<IntegrationHealth> {
   }));
 
   if (presence.ok) {
-    const sid = process.env.TWILIO_ACCOUNT_SID!;
-    const token = process.env.TWILIO_AUTH_TOKEN!;
-    const fromNumber = process.env.TWILIO_FROM_NUMBER!;
+    const sid = cleanEnv(process.env.TWILIO_ACCOUNT_SID);
+    const token = cleanEnv(process.env.TWILIO_AUTH_TOKEN);
+    const fromNumber = cleanEnv(process.env.TWILIO_FROM_NUMBER);
     const auth = Buffer.from(`${sid}:${token}`).toString("base64");
 
     const ping = await withTimeout(async () => {

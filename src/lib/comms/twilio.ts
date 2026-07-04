@@ -3,6 +3,7 @@ import "server-only";
 import twilio, { type Twilio } from "twilio";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { agencyAllowsSharedSms } from "@/lib/agency/policy";
+import { cleanEnv } from "@/lib/env";
 import type { SubAccountDoc, TwilioConfig } from "@/types";
 
 /**
@@ -42,8 +43,8 @@ export interface ResolvedTwilio {
 
 function getEnvTwilio(): Twilio {
   if (!_envClient) {
-    const sid = process.env.TWILIO_ACCOUNT_SID;
-    const token = process.env.TWILIO_AUTH_TOKEN;
+    const sid = cleanEnv(process.env.TWILIO_ACCOUNT_SID);
+    const token = cleanEnv(process.env.TWILIO_AUTH_TOKEN);
     if (!sid || !token) {
       throw new Error(
         "TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN are not set. Add them to .env.local to enable shared-mode SMS, or configure a dedicated number on the sub-account.",
@@ -59,13 +60,13 @@ function getEnvTwilio(): Twilio {
  * Dedicated mode is checked separately via `subAccountTwilioIsConfigured`.
  */
 export function smsIsConfigured(): boolean {
-  // `.trim()` so a present-but-blank env var (a stray space/newline pasted into
-  // the dashboard) doesn't read as configured — matches the health check and
-  // stops the send path from attempting a doomed call.
+  // cleanEnv() so a present-but-blank env var (a stray space/newline/BOM
+  // pasted into the dashboard) doesn't read as configured — matches the
+  // health check and stops the send path from attempting a doomed call.
   return (
-    !!process.env.TWILIO_ACCOUNT_SID?.trim() &&
-    !!process.env.TWILIO_AUTH_TOKEN?.trim() &&
-    !!process.env.TWILIO_FROM_NUMBER?.trim()
+    !!cleanEnv(process.env.TWILIO_ACCOUNT_SID) &&
+    !!cleanEnv(process.env.TWILIO_AUTH_TOKEN) &&
+    !!cleanEnv(process.env.TWILIO_FROM_NUMBER)
   );
 }
 
@@ -176,10 +177,10 @@ export async function getTwilioForSubAccount(
 
   return {
     client: getEnvTwilio(),
-    fromNumber: process.env.TWILIO_FROM_NUMBER!,
+    fromNumber: cleanEnv(process.env.TWILIO_FROM_NUMBER),
     mode: "shared",
-    authToken: process.env.TWILIO_AUTH_TOKEN!,
-    accountSid: process.env.TWILIO_ACCOUNT_SID!,
+    authToken: cleanEnv(process.env.TWILIO_AUTH_TOKEN),
+    accountSid: cleanEnv(process.env.TWILIO_ACCOUNT_SID),
   };
 }
 
@@ -322,7 +323,7 @@ export async function sendSms({
   to: string;
   body: string;
 }): Promise<{ sid: string }> {
-  const from = process.env.TWILIO_FROM_NUMBER;
+  const from = cleanEnv(process.env.TWILIO_FROM_NUMBER);
   if (!from) {
     throw new Error("TWILIO_FROM_NUMBER is not set.");
   }
