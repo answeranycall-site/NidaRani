@@ -42,6 +42,10 @@ interface PatchBody {
   socialPlannerEnabled?: boolean;
   communityEnabled?: boolean;
   missedCallTextBackEnabled?: boolean;
+  // Inverse-polarity gate: true (default) = this sub-account may use the
+  // agency's shared Twilio sender; false = it must bring its own dedicated
+  // number. See SubAccountDoc.sharedSmsAllowed.
+  sharedSmsAllowed?: boolean;
   // "Hide instead of lock" overrides for the sidebar-gated features.
   // Only take effect while the matching gate is off. See `*HiddenWhenDisabled`
   // on SubAccountDoc.
@@ -82,6 +86,7 @@ export async function PATCH(
   const wantsSocialPlanner = typeof body.socialPlannerEnabled === "boolean";
   const wantsCommunity = typeof body.communityEnabled === "boolean";
   const wantsMissedCall = typeof body.missedCallTextBackEnabled === "boolean";
+  const wantsSharedSms = typeof body.sharedSmsAllowed === "boolean";
   const wantsBroadcastsHidden =
     typeof body.broadcastsHiddenWhenDisabled === "boolean";
   const wantsWebsiteHidden =
@@ -101,6 +106,7 @@ export async function PATCH(
     !wantsSocialPlanner &&
     !wantsCommunity &&
     !wantsMissedCall &&
+    !wantsSharedSms &&
     !wantsBroadcastsHidden &&
     !wantsWebsiteHidden &&
     !wantsSocialPlannerHidden &&
@@ -109,7 +115,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         error:
-          "At least one of `emailDomainEnabled`, `apiAccessEnabled`, `broadcastsEnabled`, `outboundVoiceEnabled`, `whatsappEnabled`, `metaInboxEnabled`, `websiteEnabled`, `socialPlannerEnabled`, `broadcastsHiddenWhenDisabled`, `websiteHiddenWhenDisabled`, or `socialPlannerHiddenWhenDisabled` (boolean) is required.",
+          "At least one of `emailDomainEnabled`, `apiAccessEnabled`, `broadcastsEnabled`, `outboundVoiceEnabled`, `whatsappEnabled`, `metaInboxEnabled`, `websiteEnabled`, `socialPlannerEnabled`, `sharedSmsAllowed`, `broadcastsHiddenWhenDisabled`, `websiteHiddenWhenDisabled`, or `socialPlannerHiddenWhenDisabled` (boolean) is required.",
       },
       { status: 400 },
     );
@@ -242,6 +248,13 @@ export async function PATCH(
     updates.missedCallTextBackEnabledByAgency = body.missedCallTextBackEnabled;
   }
 
+  if (wantsSharedSms) {
+    // No tear-down — this only affects future sends. A sub-account that's
+    // been cut off from shared mode simply gets a friendly error until it
+    // configures its own dedicated Twilio number; nothing existing changes.
+    updates.sharedSmsAllowed = body.sharedSmsAllowed;
+  }
+
   // "Hide instead of lock" overrides. Pure presentation flags — they don't
   // change any runtime enforcement (a disabled feature's routes 403 the same
   // way regardless); they only decide whether the sidebar shows a greyed
@@ -281,6 +294,7 @@ export async function PATCH(
     ...(wantsMissedCall
       ? { missedCallTextBackEnabled: body.missedCallTextBackEnabled }
       : {}),
+    ...(wantsSharedSms ? { sharedSmsAllowed: body.sharedSmsAllowed } : {}),
     ...(wantsBroadcastsHidden
       ? { broadcastsHiddenWhenDisabled: body.broadcastsHiddenWhenDisabled }
       : {}),

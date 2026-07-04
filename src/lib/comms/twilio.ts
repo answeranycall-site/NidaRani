@@ -137,12 +137,14 @@ export async function getTwilioForSubAccount(
 ): Promise<ResolvedTwilio> {
   let cfg = subAccount?.twilioConfig ?? null;
   let agencyId = subAccount?.agencyId ?? null;
+  let sharedSmsAllowedForSub = subAccount?.sharedSmsAllowed;
   if (!subAccount) {
     const data = (
       await getAdminDb().doc(`subAccounts/${subAccountId}`).get()
     ).data() as SubAccountDoc | undefined;
     cfg = data?.twilioConfig ?? null;
     agencyId = data?.agencyId ?? null;
+    sharedSmsAllowedForSub = data?.sharedSmsAllowed;
   }
 
   if (subAccountTwilioIsConfigured(cfg) && cfg) {
@@ -166,6 +168,16 @@ export async function getTwilioForSubAccount(
   if (!(await agencyAllowsSharedSms(agencyId))) {
     throw new Error(
       "Shared SMS is disabled by your agency. Configure a dedicated Twilio number for this sub-account (Settings → SMS) to send.",
+    );
+  }
+
+  // Per-sub-account override: the agency-wide switch above stays on, but this
+  // specific sub-account has been individually cut off (e.g. "graduated" to
+  // needing their own account). Only an explicit `false` blocks — legacy/
+  // undefined reads as allowed.
+  if (sharedSmsAllowedForSub === false) {
+    throw new Error(
+      "Your agency requires this sub-account to use its own Twilio number. Configure a dedicated Twilio number (Settings → SMS) to send.",
     );
   }
 

@@ -200,6 +200,20 @@ export interface SubAccountDoc {
    */
   missedCallTextBackEnabledByAgency?: boolean;
   /**
+   * Agency-controlled gate — the INVERSE polarity of the other gates above.
+   * Defaults to `true` (undefined reads as allowed) so every sub-account can
+   * ride the agency's shared/env-var Twilio sender out of the box. Setting
+   * this to `false` blocks that sub-account (and only that one) from shared
+   * mode: outbound SMS sends throw a friendly "your agency requires you to
+   * configure your own Twilio number" error until they set up dedicated
+   * Twilio (Settings -> SMS). Lets an agency give free shared-sender access
+   * to new sub-accounts, then later force specific ones onto their own
+   * account without affecting anyone else. Distinct from the agency-wide
+   * `AgencyDoc.sharedSmsAllowed` blanket switch, which blocks every
+   * sub-account at once.
+   */
+  sharedSmsAllowed?: boolean;
+  /**
    * Per-feature "hide instead of lock" overrides for the sidebar-gated features
    * (Broadcasts, Website, Social Planner, Community). They ONLY take effect when
    * the matching `*EnabledByAgency` gate is off. Default behavior (field

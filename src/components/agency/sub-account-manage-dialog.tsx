@@ -15,6 +15,7 @@ import {
   Send,
   Share2,
   GraduationCap,
+  ShieldAlert,
 } from "lucide-react";
 import {
   Dialog,
@@ -64,6 +65,9 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const initialCommunity = subAccount?.communityEnabledByAgency === true;
   const initialMissedCall =
     subAccount?.missedCallTextBackEnabledByAgency === true;
+  // Inverse polarity — checked means "require own Twilio" (sharedSmsAllowed
+  // === false), unchecked (default) means shared mode stays available.
+  const initialRequireOwnTwilio = subAccount?.sharedSmsAllowed === false;
   // "Hide instead of lock" overrides for the sidebar-gated features.
   const initialBroadcastsHidden =
     subAccount?.broadcastsHiddenWhenDisabled === true;
@@ -85,6 +89,9 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     useState(initialSocial);
   const [communityEnabled, setCommunityEnabled] = useState(initialCommunity);
   const [missedCallEnabled, setMissedCallEnabled] = useState(initialMissedCall);
+  const [requireOwnTwilio, setRequireOwnTwilio] = useState(
+    initialRequireOwnTwilio,
+  );
   const [broadcastsHidden, setBroadcastsHidden] = useState(
     initialBroadcastsHidden,
   );
@@ -130,6 +137,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       setSocialPlannerEnabled(initialSocial);
       setCommunityEnabled(initialCommunity);
       setMissedCallEnabled(initialMissedCall);
+      setRequireOwnTwilio(initialRequireOwnTwilio);
       setBroadcastsHidden(initialBroadcastsHidden);
       setWebsiteHidden(initialWebsiteHidden);
       setSocialHidden(initialSocialHidden);
@@ -147,6 +155,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialSocial,
     initialCommunity,
     initialMissedCall,
+    initialRequireOwnTwilio,
     initialBroadcastsHidden,
     initialWebsiteHidden,
     initialSocialHidden,
@@ -168,6 +177,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const socialDirty = socialPlannerEnabled !== initialSocial;
   const communityDirty = communityEnabled !== initialCommunity;
   const missedCallDirty = missedCallEnabled !== initialMissedCall;
+  const requireOwnTwilioDirty =
+    requireOwnTwilio !== initialRequireOwnTwilio;
   const broadcastsHiddenDirty = broadcastsHidden !== initialBroadcastsHidden;
   const websiteHiddenDirty = websiteHidden !== initialWebsiteHidden;
   const socialHiddenDirty = socialHidden !== initialSocialHidden;
@@ -183,6 +194,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     socialDirty ||
     communityDirty ||
     missedCallDirty ||
+    requireOwnTwilioDirty ||
     broadcastsHiddenDirty ||
     websiteHiddenDirty ||
     socialHiddenDirty ||
@@ -211,6 +223,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         socialPlannerEnabled?: boolean;
         communityEnabled?: boolean;
         missedCallTextBackEnabled?: boolean;
+        sharedSmsAllowed?: boolean;
         broadcastsHiddenWhenDisabled?: boolean;
         websiteHiddenWhenDisabled?: boolean;
         socialPlannerHiddenWhenDisabled?: boolean;
@@ -227,6 +240,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       if (communityDirty) payload.communityEnabled = communityEnabled;
       if (missedCallDirty)
         payload.missedCallTextBackEnabled = missedCallEnabled;
+      if (requireOwnTwilioDirty)
+        payload.sharedSmsAllowed = !requireOwnTwilio;
       if (broadcastsHiddenDirty)
         payload.broadcastsHiddenWhenDisabled = broadcastsHidden;
       if (websiteHiddenDirty)
@@ -325,6 +340,13 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
           missedCallEnabled
             ? "Missed Call Text Back enabled."
             : "Missed Call Text Back disabled. The sub-account can no longer re-enable it.",
+        );
+      }
+      if (requireOwnTwilioDirty) {
+        parts.push(
+          requireOwnTwilio
+            ? "This sub-account now requires its own Twilio number for SMS."
+            : "This sub-account can use the agency's shared Twilio number again.",
         );
       }
       // "Hide instead of lock" changes. Only meaningful while the feature is
@@ -543,6 +565,22 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             calls itself). Disabling stops the sub-account re-enabling it; the
             sub-account&apos;s own toggle restores the number&apos;s prior voice
             settings.
+          </GateToggle>
+
+          <GateToggle
+            checked={requireOwnTwilio}
+            onChange={setRequireOwnTwilio}
+            disabled={saving}
+            icon={<ShieldAlert className="h-3.5 w-3.5 text-red-600 dark:text-red-400" />}
+            title="Require own Twilio account"
+          >
+            Off by default — every sub-account can send/receive SMS on your
+            agency&apos;s shared Twilio number. Turn this on to cut off just
+            this sub-account: outbound sends fail with a friendly error until
+            they configure their own dedicated Twilio number (Settings →
+            SMS). Doesn&apos;t affect any other sub-account, and doesn&apos;t
+            touch this one&apos;s existing message history if they already
+            have dedicated Twilio configured.
           </GateToggle>
         </div>
 
