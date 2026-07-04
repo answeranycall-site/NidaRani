@@ -7,6 +7,7 @@ import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { serializeContactForApi } from "@/lib/api/serializers/contacts";
 import { emitContactCreatedById } from "@/lib/server/contacts-service";
 import { emitDealCreatedById } from "@/lib/server/deals-service";
+import { phoneMatchVariants } from "@/lib/phone";
 import {
   EMPTY_LOCATION,
   ipFromRequest,
@@ -247,7 +248,7 @@ async function handleSubmit(
       const byPhone = await db
         .collection("contacts")
         .where("subAccountId", "==", subAccountId)
-        .where("phone", "==", matchPhone)
+        .where("phone", "in", phoneMatchVariants(matchPhone, "US"))
         .limit(1)
         .get();
       if (!byPhone.empty) return byPhone.docs[0];

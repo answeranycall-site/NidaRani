@@ -6,6 +6,7 @@ import { callAi, type AiChatMessage } from "@/lib/comms/ai/openrouter";
 import { incrementChannelTokens, resolveAgent } from "@/lib/comms/ai/agent";
 import { buildContactContextBlock } from "@/lib/comms/ai/context";
 import { buildSystemPrompt } from "@/lib/comms/ai/prompt";
+import { phoneMatchVariants } from "@/lib/phone";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -82,7 +83,7 @@ async function findContactByPhone(
   const snap = await getAdminDb()
     .collection("contacts")
     .where("subAccountId", "==", subAccountId)
-    .where("phone", "==", phone)
+    .where("phone", "in", phoneMatchVariants(phone))
     .limit(1)
     .get();
   if (snap.empty) return null;

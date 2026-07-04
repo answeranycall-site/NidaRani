@@ -11,6 +11,7 @@ import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { stripWhatsappPrefix } from "@/lib/comms/twilio";
 import { createContactServerSide } from "@/lib/server/contacts-service";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { phoneMatchVariants } from "@/lib/phone";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -168,7 +169,7 @@ export async function POST(request: Request) {
 
   const matches = await db
     .collection("contacts")
-    .where("phone", "==", from)
+    .where("phone", "in", phoneMatchVariants(from))
     .where("subAccountId", "==", route.subAccountId)
     .limit(5)
     .get();

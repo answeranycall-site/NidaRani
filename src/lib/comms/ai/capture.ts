@@ -3,6 +3,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { emitContactCreatedById } from "@/lib/server/contacts-service";
+import { phoneMatchVariants } from "@/lib/phone";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 
 /**
@@ -185,7 +186,7 @@ export async function reconcileContactFromCapture(
     if (!input.capture.phone) return null;
     const snap = await contactsCol
       .where("subAccountId", "==", input.subAccountId)
-      .where("phone", "==", input.capture.phone)
+      .where("phone", "in", phoneMatchVariants(input.capture.phone, "US"))
       .limit(1)
       .get();
     return snap.empty ? null : snap.docs[0].id;

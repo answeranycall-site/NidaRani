@@ -8,6 +8,7 @@ import { resolveAgent } from "@/lib/comms/ai/agent";
 import { maybeRespondWithAi } from "@/lib/comms/ai/respond";
 import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { phoneMatchVariants } from "@/lib/phone";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -209,10 +210,13 @@ export async function POST(request: Request) {
   // Match contacts.
   // Shared mode: existing behavior — across all contacts (legacy).
   // Dedicated mode: scope to this sub-account so cross-tenant phones don't leak.
+  // `phone` is matched against every plausible format the operator might
+  // have typed it in (see phoneMatchVariants) since it's free text, not
+  // normalized at write time.
   const db = getAdminDb();
   let query = db
     .collection("contacts")
-    .where("phone", "==", from) as FirebaseFirestore.Query;
+    .where("phone", "in", phoneMatchVariants(from)) as FirebaseFirestore.Query;
   if (route.mode === "dedicated" && route.subAccountId) {
     query = query.where("subAccountId", "==", route.subAccountId);
   }
