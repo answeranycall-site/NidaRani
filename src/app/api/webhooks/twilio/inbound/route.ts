@@ -18,15 +18,23 @@ export const dynamic = "force-dynamic";
  *
  *   - Shared mode (legacy): the inbound number matches the env var
  *     TWILIO_FROM_NUMBER. Signature is validated against TWILIO_AUTH_TOKEN.
- *     Behavior is the original v1 — STOP/START handling only, no message
- *     storage.
+ *     Contacts are matched by phone across the whole deployment (no
+ *     subAccountId scoping, since the env var isn't tied to one
+ *     sub-account) — but the matched Contact's own agencyId/subAccountId
+ *     is used to write the message row + Conversations index, same as
+ *     dedicated mode.
  *
  *   - Dedicated mode (opt-in): the inbound number matches a sub-account's
  *     `twilioConfig.fromNumber` AND that sub-account has
  *     `twilioConfig.enabled === true`. Signature is validated against that
- *     sub-account's authToken. STOP/START still flips `smsOptedOut` AND
- *     every inbound message gets persisted to
- *     `contacts/{contactId}/messages` so the chat thread renders.
+ *     sub-account's authToken. Contact lookups are scoped to that
+ *     sub-account.
+ *
+ * Both modes: STOP/START flips `smsOptedOut`, and every inbound message
+ * gets persisted to `contacts/{contactId}/messages` + the Conversations
+ * unified-inbox index. AI auto-reply remains dedicated-mode-only (it needs
+ * the sub-account's own number + persona to reply from) — shared mode is
+ * message-history + opt-out handling, no bot.
  *
  * Resolution order: dedicated wins. If the same number is somehow
  * configured both as a sub-account dedicated number AND in the env var
@@ -189,54 +197,75 @@ export async function POST(request: Request) {
   }
   const matches = await query.limit(5).get();
 
-  // ----- Dedicated-mode message-row write (BEFORE opt-out so the row
-  // captures the actual word the customer sent, even if it's STOP/START) -----
-  if (route.mode === "dedicated" && !matches.empty && route.subAccountId) {
+  // ----- Message-row + Conversations-index write (BOTH modes, BEFORE
+  // opt-out so the row captures the actual word the customer sent, even if
+  // it's STOP/START). In shared mode `route.subAccountId` is null (the env
+  // var isn't tied to one sub-account), so tenancy is read off each matched
+  // contact doc instead — every Contact already carries its own
+  // agencyId/subAccountId regardless of which Twilio mode reached it. -----
+  if (!matches.empty) {
     const docId = messageSid || db.collection("contacts").doc().id;
     const writes = matches.docs.map((d) => {
+      const cdata = d.data() as {
+        name?: string;
+        phone?: string;
+        agencyId?: string;
+        subAccountId?: string;
+      };
+      const contactSubAccountId = route.subAccountId ?? cdata.subAccountId;
+      const contactAgencyId = route.agencyId ?? cdata.agencyId;
       const ref = d.ref.collection("messages").doc(docId);
-      return ref.set(
-        {
-          agencyId: route.agencyId,
-          subAccountId: route.subAccountId,
-          contactId: d.id,
-          direction: "inbound",
-          status: "received",
-          body: bodyRaw,
-          from,
-          to,
-          twilioMessageSid: messageSid || null,
-          sentByUid: null,
-          error: null,
-          readAt: null,
-          createdAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true }, // Twilio retries on the same MessageSid → idempotent
-      );
+      return ref
+        .set(
+          {
+            agencyId: contactAgencyId ?? null,
+            subAccountId: contactSubAccountId ?? null,
+            contactId: d.id,
+            direction: "inbound",
+            status: "received",
+            body: bodyRaw,
+            from,
+            to,
+            twilioMessageSid: messageSid || null,
+            sentByUid: null,
+            error: null,
+            readAt: null,
+            createdAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }, // Twilio retries on the same MessageSid → idempotent
+        )
+        .then(() => ({ d, contactSubAccountId, contactAgencyId, cdata }));
     });
+    let written: {
+      d: (typeof matches.docs)[number];
+      contactSubAccountId: string | undefined;
+      contactAgencyId: string | undefined;
+      cdata: { name?: string; phone?: string };
+    }[] = [];
     try {
-      await Promise.all(writes);
+      written = await Promise.all(writes);
     } catch (err) {
       console.warn("[twilio/inbound] message-row write failed", err);
     }
 
     // Unified-inbox index — one conversation per matched contact.
     await Promise.all(
-      matches.docs.map((d) => {
-        const cdata = d.data() as { name?: string; phone?: string };
-        return upsertConversationForMessage({
-          contactId: d.id,
-          subAccountId: route.subAccountId!,
-          agencyId: route.agencyId ?? "",
-          contactName: cdata.name ?? "",
-          contactPhone: cdata.phone ?? from,
-          channel: "sms",
-          direction: "inbound",
-          body: bodyRaw,
-        });
-      }),
+      written
+        .filter((w) => !!w.contactSubAccountId)
+        .map((w) =>
+          upsertConversationForMessage({
+            contactId: w.d.id,
+            subAccountId: w.contactSubAccountId!,
+            agencyId: w.contactAgencyId ?? "",
+            contactName: w.cdata.name ?? "",
+            contactPhone: w.cdata.phone ?? from,
+            channel: "sms",
+            direction: "inbound",
+            body: bodyRaw,
+          }),
+        ),
     );
-  } else if (route.mode === "dedicated" && matches.empty) {
+  } else if (route.mode === "dedicated") {
     console.warn(
       `[twilio/inbound] dedicated inbound from ${from} → ${to} (sa=${route.subAccountId}): no contact match — dropping per locked policy`,
     );
@@ -244,8 +273,8 @@ export async function POST(request: Request) {
 
   // ----- Opt-out / opt-in handling (both modes, existing behavior) -----
   if (nextOptedOut === null) {
-    // Not a STOP/START word. In dedicated mode the message row above was
-    // already written. In shared mode there's nothing more to persist.
+    // Not a STOP/START word. The message row + conversation index above
+    // were already written for both modes.
     //
     // Dedicated-mode-only: route to AI auto-reply if configured + enabled.
     // The AI lives in dedicated mode because it needs the sub-account's

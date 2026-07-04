@@ -18,11 +18,13 @@ type Body = { contactId?: string; body?: string };
  *
  * Mode selection:
  *   - If the contact's sub-account has `twilioConfig.enabled === true`, the
- *     send uses the sub-account's dedicated Twilio creds AND writes a message
- *     row to contacts/{id}/messages so the chat thread renders.
- *   - Otherwise falls back to the env-var Twilio (existing shared-sender
- *     behavior). No message row is written in shared mode — the activity
- *     timeline still records `sms_sent` so nothing visibly regresses.
+ *     send uses the sub-account's dedicated Twilio creds.
+ *   - Otherwise falls back to the env-var Twilio (shared-sender mode).
+ *
+ * Either way, a message row is written to contacts/{id}/messages and the
+ * Conversations unified-inbox index is updated — shared-mode sends show up
+ * in the Conversations tab + per-contact Messages tab just like dedicated
+ * ones.
  *
  * The 503 fast-path here used to gate the whole route on env-var presence;
  * we now also accept dedicated-mode sub-accounts even when env vars are
@@ -118,47 +120,48 @@ export async function POST(request: Request) {
     console.warn("[sms/send] activity write failed", err);
   }
 
-  // Chat-thread row — only in dedicated mode. Doc id = MessageSid so any
-  // accidental retry from the same SID dedupes naturally.
-  if (mode === "dedicated") {
-    try {
-      await db
-        .collection("contacts")
-        .doc(contactId)
-        .collection("messages")
-        .doc(sid)
-        .set({
-          agencyId: contact.agencyId,
-          subAccountId: contact.subAccountId,
-          contactId,
-          direction: "outbound",
-          status: "sent",
-          body,
-          from: fromNumber,
-          to: contact.phone,
-          twilioMessageSid: sid,
-          sentByUid: auth.uid,
-          error: null,
-          readAt: null,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-    } catch (err) {
-      console.warn("[sms/send] message-row write failed", err);
-    }
-
-    // Unified-inbox index — mirror this outbound into the conversation doc.
-    await upsertConversationForMessage({
-      contactId,
-      subAccountId: contact.subAccountId,
-      agencyId: contact.agencyId,
-      contactName: contact.name ?? "",
-      contactPhone: contact.phone,
-      channel: "sms",
-      direction: "outbound",
-      body,
-      pauseBot: true,
-    });
+  // Chat-thread row — written in both modes so the Messages tab + the
+  // Conversations index cover shared-sender sub-accounts too, not just
+  // dedicated ones. Doc id = MessageSid so any accidental retry from the
+  // same SID dedupes naturally.
+  try {
+    await db
+      .collection("contacts")
+      .doc(contactId)
+      .collection("messages")
+      .doc(sid)
+      .set({
+        agencyId: contact.agencyId,
+        subAccountId: contact.subAccountId,
+        contactId,
+        direction: "outbound",
+        status: "sent",
+        body,
+        from: fromNumber,
+        to: contact.phone,
+        twilioMessageSid: sid,
+        sentByUid: auth.uid,
+        error: null,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+  } catch (err) {
+    console.warn("[sms/send] message-row write failed", err);
   }
+
+  // Unified-inbox index — mirror this outbound into the conversation doc,
+  // regardless of shared vs dedicated Twilio mode.
+  await upsertConversationForMessage({
+    contactId,
+    subAccountId: contact.subAccountId,
+    agencyId: contact.agencyId,
+    contactName: contact.name ?? "",
+    contactPhone: contact.phone,
+    channel: "sms",
+    direction: "outbound",
+    body,
+    pauseBot: true,
+  });
 
   await recordSend(auth.uid, "sms");
 
