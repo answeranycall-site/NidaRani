@@ -9,6 +9,7 @@ import { maybeRespondWithAi } from "@/lib/comms/ai/respond";
 import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { phoneMatchVariants } from "@/lib/phone";
+import { cleanEnv } from "@/lib/env";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -132,11 +133,14 @@ async function resolveRoute(
     }
   }
 
-  // Shared fallback — env var match.
-  const envFrom = process.env.TWILIO_FROM_NUMBER
-    ? normalisePhone(process.env.TWILIO_FROM_NUMBER)
-    : null;
-  const envToken = process.env.TWILIO_AUTH_TOKEN ?? null;
+  // Shared fallback — env var match. cleanEnv() strips a BOM/whitespace a
+  // Windows/Vercel env var can pick up — without it, `envToken` here can
+  // silently diverge from the token Twilio itself signed the request with,
+  // making every shared-mode signature check fail even though the value
+  // "looks" identical in the dashboard.
+  const envFromRaw = cleanEnv(process.env.TWILIO_FROM_NUMBER);
+  const envFrom = envFromRaw ? normalisePhone(envFromRaw) : null;
+  const envToken = cleanEnv(process.env.TWILIO_AUTH_TOKEN) || null;
   if (envFrom && envToken && envFrom === normalisedTo) {
     return {
       mode: "shared",
