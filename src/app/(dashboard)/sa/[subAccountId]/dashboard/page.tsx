@@ -149,6 +149,10 @@ export default function DashboardPage() {
   const hasContact =
     !!accountContact &&
     (!!accountContact.name || !!accountContact.email || !!accountContact.phone);
+  const dedicatedSmsNumber =
+    subAccount?.twilioConfig?.enabled && subAccount.twilioConfig.fromNumber
+      ? subAccount.twilioConfig.fromNumber
+      : null;
 
   return (
     <div className="space-y-6">
@@ -174,6 +178,17 @@ export default function DashboardPage() {
               {accountContact.phone}
             </span>
           )}
+        </Link>
+      )}
+
+      {dedicatedSmsNumber && (
+        <Link
+          href={saPath("/dashboard/settings")}
+          className="flex w-fit items-center gap-1.5 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+        >
+          <Phone className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+          <span className="font-medium text-foreground">Your SMS number</span>
+          <span>{dedicatedSmsNumber}</span>
         </Link>
       )}
 

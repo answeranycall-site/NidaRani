@@ -36,6 +36,15 @@ export const dynamic = "force-dynamic";
  * the sub-account's own number + persona to reply from) — shared mode is
  * message-history + opt-out handling, no bot.
  *
+ * Unmatched numbers (dedicated mode only): rather than dropping the
+ * message, it's recorded under a deterministic `unknown_{subAccountId}_
+ * {phone}` placeholder id so it shows up in Conversations as "Unknown
+ * person". The operator can open it and convert it into a real contact
+ * (phone pre-filled) via `POST /api/sub-accounts/[id]/conversations/
+ * [pseudoId]/convert-to-contact`, which migrates the message history onto
+ * the new contact id. Shared mode can't do this — there's no subAccountId
+ * to scope an unmatched number to.
+ *
  * Resolution order: dedicated wins. If the same number is somehow
  * configured both as a sub-account dedicated number AND in the env var
  * (misconfiguration), the dedicated path runs because the lookup happens
@@ -70,6 +79,18 @@ function normalisePhone(s: string): string {
   let cleaned = s.trim().replace(/[\s\-()]/g, "");
   if (cleaned.startsWith("00")) cleaned = "+" + cleaned.slice(2);
   return cleaned;
+}
+
+/**
+ * Deterministic placeholder id for an inbound number that matched no
+ * existing Contact. Scoped by subAccountId (not just phone) so the same
+ * unknown number texting two different sub-accounts' dedicated numbers
+ * never collides on one doc. Stable across repeat texts from the same
+ * number, so they accumulate in one "Unknown person" thread instead of
+ * minting a new placeholder every time.
+ */
+function pseudoContactId(subAccountId: string, phone: string): string {
+  return `unknown_${subAccountId}_${phone.replace(/[^0-9]/g, "")}`;
 }
 
 interface ResolvedRoute {
@@ -265,9 +286,53 @@ export async function POST(request: Request) {
           }),
         ),
     );
-  } else if (route.mode === "dedicated") {
+  } else if (route.mode === "dedicated" && route.subAccountId) {
+    // No contact matched this number. Rather than dropping the message,
+    // record it under a stable placeholder id so it shows up in
+    // Conversations as "Unknown person" — the operator can open it and
+    // convert it into a real contact (phone pre-filled) once they know who
+    // it is. Shared mode can't do this (no subAccountId to scope it to).
+    const pseudoId = pseudoContactId(route.subAccountId, from);
+    const docId = messageSid || db.collection("contacts").doc().id;
+    try {
+      await db
+        .collection("contacts")
+        .doc(pseudoId)
+        .collection("messages")
+        .doc(docId)
+        .set(
+          {
+            agencyId: route.agencyId,
+            subAccountId: route.subAccountId,
+            contactId: pseudoId,
+            direction: "inbound",
+            status: "received",
+            body: bodyRaw,
+            from,
+            to,
+            twilioMessageSid: messageSid || null,
+            sentByUid: null,
+            error: null,
+            readAt: null,
+            createdAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      await upsertConversationForMessage({
+        contactId: pseudoId,
+        subAccountId: route.subAccountId,
+        agencyId: route.agencyId ?? "",
+        contactName: "",
+        contactPhone: from,
+        channel: "sms",
+        direction: "inbound",
+        body: bodyRaw,
+      });
+    } catch (err) {
+      console.warn("[twilio/inbound] unknown-person conversation write failed", err);
+    }
     console.warn(
-      `[twilio/inbound] dedicated inbound from ${from} → ${to} (sa=${route.subAccountId}): no contact match — dropping per locked policy`,
+      `[twilio/inbound] dedicated inbound from ${from} → ${to} (sa=${route.subAccountId}): no contact match — recorded as ${pseudoId}`,
     );
   }
 

@@ -632,14 +632,22 @@ service cloud.firestore {
       // malicious client can't spoof inbound messages. The mark-as-read
       // path is the one client-side mutation we allow: an update is only
       // permitted when the sole diff is the `readAt` field.
+      //
+      // Authorization reads subAccountId/agencyId off the MESSAGE ROW
+      // itself (every writer already stamps both) rather than joining to
+      // the parent contact doc — this lets an "Unknown person" thread
+      // (an inbound number matched no contact) render under
+      // contacts/{pseudoId}/messages even though contacts/{pseudoId} was
+      // never created. A get() join would deny that read outright since
+      // the parent doc doesn't exist.
       match /messages/{messageId} {
         allow read: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         );
         allow update: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
         allow create, delete: if false;
       }

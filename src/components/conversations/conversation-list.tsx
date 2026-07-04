@@ -49,7 +49,7 @@ export function ConversationList({
       {conversations.map((c) => {
         const unread = (c.unreadCount ?? 0) > 0;
         const ts = toDate(c.lastMessageAt);
-        const title = c.contactName || c.contactPhone || "Unknown contact";
+        const title = c.contactName || c.contactPhone || "Unknown person";
         return (
           <Link
             key={c.id}
