@@ -13,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
+  DEFAULT_RATING_ASK_TEMPLATE,
   DEFAULT_REVIEW_COOLDOWN_DAYS,
   DEFAULT_REVIEW_SMS_TEMPLATE,
   normalizeReviewChannel,
@@ -38,6 +40,13 @@ export function SubAccountGoogleReviewSection() {
   const [cooldownDays, setCooldownDays] = useState(DEFAULT_REVIEW_COOLDOWN_DAYS);
   const [autoOnPaid, setAutoOnPaid] = useState(true);
   const [autoOnDealCompleted, setAutoOnDealCompleted] = useState(false);
+  const [ratingGateEnabled, setRatingGateEnabled] = useState(false);
+  const [askForRatingTemplate, setAskForRatingTemplate] = useState(
+    DEFAULT_RATING_ASK_TEMPLATE,
+  );
+  const [internalFeedbackMessage, setInternalFeedbackMessage] = useState(
+    DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
+  );
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [approved, setApproved] = useState<
@@ -53,6 +62,13 @@ export function SubAccountGoogleReviewSection() {
     setCooldownDays(cfg?.cooldownDays ?? DEFAULT_REVIEW_COOLDOWN_DAYS);
     setAutoOnPaid(!!cfg?.enabled && !!cfg?.triggerOnQuotePaid);
     setAutoOnDealCompleted(!!cfg?.enabled && !!cfg?.triggerOnDealCompleted);
+    setRatingGateEnabled(cfg?.ratingGateEnabled === true);
+    setAskForRatingTemplate(
+      cfg?.askForRatingTemplate || DEFAULT_RATING_ASK_TEMPLATE,
+    );
+    setInternalFeedbackMessage(
+      cfg?.internalFeedbackMessage || DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
+    );
   }, [
     cfg?.reviewUrl,
     cfg?.channel,
@@ -62,6 +78,9 @@ export function SubAccountGoogleReviewSection() {
     cfg?.enabled,
     cfg?.triggerOnQuotePaid,
     cfg?.triggerOnDealCompleted,
+    cfg?.ratingGateEnabled,
+    cfg?.askForRatingTemplate,
+    cfg?.internalFeedbackMessage,
   ]);
 
   // Approved WhatsApp templates power the channel gate + the picker.
@@ -98,6 +117,10 @@ export function SubAccountGoogleReviewSection() {
   // a quote-paid event (the window is usually closed by then). Auto-send is
   // only meaningful for SMS + WhatsApp Template.
   const autoSupported = channel !== "whatsapp_manual";
+  // The rating gate needs the inbound webhook to intercept the reply, which
+  // only happens for SMS on a sub-account's own dedicated Twilio number.
+  const dedicatedReady =
+    channel === "sms" && subAccount?.twilioConfig?.enabled === true;
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -118,6 +141,9 @@ export function SubAccountGoogleReviewSection() {
             cooldownDays,
             triggerOnQuotePaid: autoSupported && autoOnPaid,
             triggerOnDealCompleted: autoSupported && autoOnDealCompleted,
+            ratingGateEnabled: dedicatedReady && ratingGateEnabled,
+            askForRatingTemplate,
+            internalFeedbackMessage,
           }),
         },
       );
@@ -339,6 +365,71 @@ export function SubAccountGoogleReviewSection() {
               &ldquo;Ask for review&rdquo; button, or pick SMS / WhatsApp
               Template for automatic sends.
             </p>
+          )}
+        </div>
+
+        <div className="space-y-2 rounded-lg border p-3">
+          <label
+            className={cn(
+              "flex items-start gap-2 text-sm",
+              !dedicatedReady && "opacity-50",
+            )}
+          >
+            <input
+              type="checkbox"
+              checked={dedicatedReady && ratingGateEnabled}
+              onChange={(e) => setRatingGateEnabled(e.target.checked)}
+              disabled={!dedicatedReady}
+              className="mt-0.5 h-4 w-4 rounded border-input disabled:cursor-not-allowed"
+            />
+            <span>
+              <span className="font-medium text-foreground">
+                Ask for a star rating first
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                Instead of sending the Google link directly, ask &ldquo;how
+                many stars (1-5)&rdquo; first. A reply of 4 or 5 gets the
+                Google link; 1-3 gets a private apology message instead and
+                creates a follow-up Task for your team.
+              </span>
+            </span>
+          </label>
+          {!dedicatedReady && (
+            <p className="text-[11px] text-muted-foreground">
+              Needs the SMS channel + this sub-account&apos;s own dedicated
+              Twilio number (Settings → SMS) — that&apos;s the only way a
+              reply can be read back and routed automatically.
+            </p>
+          )}
+          {dedicatedReady && ratingGateEnabled && (
+            <div className="space-y-3 border-t pt-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="gr-ask">Ask-for-rating message</Label>
+                <Textarea
+                  id="gr-ask"
+                  value={askForRatingTemplate}
+                  onChange={(e) => setAskForRatingTemplate(e.target.value)}
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {"Tags: {{firstName}}, {{businessName}}. Sent instead of the message above — no link yet."}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="gr-internal">
+                  Reply to a 1-3 rating (no {"{{reviewUrl}}"} — this never
+                  goes to Google)
+                </Label>
+                <Textarea
+                  id="gr-internal"
+                  value={internalFeedbackMessage}
+                  onChange={(e) => setInternalFeedbackMessage(e.target.value)}
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+              </div>
+            </div>
           )}
         </div>
 

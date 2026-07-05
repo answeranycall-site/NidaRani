@@ -183,6 +183,10 @@ export default function ConversationDetailPage() {
             <h1 className="truncate text-sm font-semibold">{title}</h1>
             <p className="truncate text-[11px] text-muted-foreground">
               {contact?.phone ?? conversation?.contactPhone ?? ""}
+              {subAccount?.twilioConfig?.enabled &&
+                subAccount.twilioConfig.fromNumber && (
+                  <span> · via {subAccount.twilioConfig.fromNumber}</span>
+                )}
             </p>
           </div>
         </div>

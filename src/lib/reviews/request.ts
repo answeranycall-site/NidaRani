@@ -14,6 +14,7 @@ import {
 import { resolveTemplateVariables } from "@/lib/comms/whatsapp/resolve-template-variables";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import {
+  DEFAULT_RATING_ASK_TEMPLATE,
   DEFAULT_REVIEW_COOLDOWN_DAYS,
   DEFAULT_REVIEW_SMS_TEMPLATE,
   normalizeReviewChannel,
@@ -59,13 +60,13 @@ export interface SendReviewResult {
   reason?: string;
 }
 
-function firstWord(s: string): string {
+export function firstWord(s: string): string {
   const t = (s ?? "").trim();
   const i = t.indexOf(" ");
   return i === -1 ? t : t.slice(0, i);
 }
 
-function fillReviewSms(
+export function fillReviewSms(
   template: string,
   v: { firstName: string; businessName: string; reviewUrl: string },
 ): string {
@@ -148,6 +149,10 @@ export async function maybeSendReviewRequest(
     let renderedBody: string;
     let writeRow = false;
     let messagesCollection = "messages";
+    // Rating-gate only ever applies to SMS in dedicated mode — that's the
+    // only path the inbound webhook can actually intercept a reply on.
+    // Set below, in the SMS branch, once we know the resolved send mode.
+    let useRatingGate = false;
 
     if (isWhatsapp) {
       messagesCollection = "whatsappMessages";
@@ -214,10 +219,19 @@ export async function maybeSendReviewRequest(
       if (!dedicated && !smsIsConfigured()) {
         return { sent: false, reason: "sms_not_configured" };
       }
-      renderedBody = fillReviewSms(
-        cfg.messageTemplate || DEFAULT_REVIEW_SMS_TEMPLATE,
-        { firstName: firstWord(contact.name), businessName, reviewUrl: cfg.reviewUrl },
-      );
+      // Only ask "how many stars" when we can actually intercept the reply
+      // (dedicated mode) — a gate the shared sender can't act on would just
+      // strand the contact after they answer.
+      useRatingGate = cfg.ratingGateEnabled === true && dedicated;
+      renderedBody = useRatingGate
+        ? fillReviewSms(
+            cfg.askForRatingTemplate || DEFAULT_RATING_ASK_TEMPLATE,
+            { firstName: firstWord(contact.name), businessName, reviewUrl: cfg.reviewUrl },
+          )
+        : fillReviewSms(
+            cfg.messageTemplate || DEFAULT_REVIEW_SMS_TEMPLATE,
+            { firstName: firstWord(contact.name), businessName, reviewUrl: cfg.reviewUrl },
+          );
       const res = await sendSmsForSubAccount({
         subAccountId: input.subAccountId,
         subAccount,
@@ -268,11 +282,14 @@ export async function maybeSendReviewRequest(
       });
     }
 
-    // Cooldown stamp.
+    // Cooldown stamp (+ the rating-gate "awaiting reply" marker, when used).
     try {
       await db.doc(`contacts/${contact.id}`).set(
         {
           reviewRequestedAt: FieldValue.serverTimestamp(),
+          ...(useRatingGate
+            ? { awaitingReviewReplyAt: FieldValue.serverTimestamp() }
+            : {}),
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },

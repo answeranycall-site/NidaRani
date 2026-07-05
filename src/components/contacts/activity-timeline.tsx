@@ -237,6 +237,11 @@ function activityVisuals(type: ActivityType): {
         icon: <MessageSquare className="h-3 w-3 text-violet-500" />,
         label: "SMS sent",
       };
+    case "sms_received":
+      return {
+        icon: <MessageSquare className="h-3 w-3 text-emerald-500" />,
+        label: "SMS received",
+      };
     case "whatsapp_sent":
       return {
         icon: <MessagesSquare className="h-3 w-3 text-green-500" />,

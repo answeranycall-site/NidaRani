@@ -54,6 +54,10 @@ export function ConversationThread({
   const [smsReady, setSmsReady] = useState(false);
   const [waReady, setWaReady] = useState(false);
   const [metaReady, setMetaReady] = useState(false);
+  // Surfaced instead of silently swallowed — a permission-denied or index
+  // error used to just render as an empty "No messages yet" state with no
+  // way to tell it apart from a genuinely empty thread.
+  const [loadError, setLoadError] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -68,7 +72,11 @@ export function ConversationThread({
         setSms(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MessageDoc));
         setSmsReady(true);
       },
-      () => setSmsReady(true),
+      (err) => {
+        console.error("[conversation-thread] sms subscription failed", err);
+        setLoadError(`SMS: ${err.message}`);
+        setSmsReady(true);
+      },
     );
     const unsubWa = onSnapshot(
       query(
@@ -79,7 +87,11 @@ export function ConversationThread({
         setWa(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MessageDoc));
         setWaReady(true);
       },
-      () => setWaReady(true),
+      (err) => {
+        console.error("[conversation-thread] whatsapp subscription failed", err);
+        setLoadError((prev) => prev ?? `WhatsApp: ${err.message}`);
+        setWaReady(true);
+      },
     );
     const unsubMeta = onSnapshot(
       query(
@@ -92,7 +104,11 @@ export function ConversationThread({
         );
         setMetaReady(true);
       },
-      () => setMetaReady(true),
+      (err) => {
+        console.error("[conversation-thread] meta subscription failed", err);
+        setLoadError((prev) => prev ?? `Meta: ${err.message}`);
+        setMetaReady(true);
+      },
     );
     return () => {
       unsubSms();
@@ -131,6 +147,12 @@ export function ConversationThread({
         <div className="space-y-2">
           <div className="h-12 w-2/3 animate-pulse rounded-lg bg-muted" />
           <div className="ml-auto h-12 w-3/4 animate-pulse rounded-lg bg-muted" />
+        </div>
+      ) : loadError ? (
+        <div className="flex h-full min-h-[150px] items-center justify-center text-center">
+          <p className="max-w-sm text-xs text-destructive">
+            Couldn&apos;t load this thread: {loadError}
+          </p>
         </div>
       ) : merged.length === 0 ? (
         <div className="flex h-full min-h-[150px] items-center justify-center text-center">

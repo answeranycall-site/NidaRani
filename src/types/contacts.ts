@@ -142,6 +142,18 @@ export interface Contact {
    */
   reviewRequestedAt?: Timestamp | FieldValue | null;
   /**
+   * Set right after a review request goes out ONLY when the sub-account's
+   * `googleReviewConfig.ratingGateEnabled` is on. The inbound SMS webhook
+   * checks this (dedicated-mode only) to decide whether the contact's next
+   * reply is answering "how many stars" (1-5) rather than ordinary chat.
+   * Cleared once a reply is interpreted (valid 1-5) or the gate window
+   * lapses (see RATING_REPLY_WINDOW_MS in lib/reviews/constants.ts) so a
+   * reply weeks later isn't misread as a rating.
+   */
+  awaitingReviewReplyAt?: Timestamp | FieldValue | null;
+  /** Most recent 1-5 rating captured via the SMS rating-gate reply flow. */
+  lastReviewRating?: number | null;
+  /**
    * Page-scoped Meta user id (PSID / IGSID) for a contact who has messaged this
    * sub-account via the BETA Facebook Messenger / Instagram DM inbox. Server-
    * managed (stamped by /api/webhooks/meta on first inbound) and used to
@@ -188,6 +200,7 @@ export type ActivityType =
   | "form_submitted"
   | "email_sent"
   | "sms_sent"
+  | "sms_received"
   | "whatsapp_sent"
   // Operator replied on the BETA Facebook Messenger / Instagram DM inbox.
   // Written by /api/comms/meta/send.

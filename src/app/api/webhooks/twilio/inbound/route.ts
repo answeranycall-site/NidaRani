@@ -8,6 +8,7 @@ import { resolveAgent } from "@/lib/comms/ai/agent";
 import { maybeRespondWithAi } from "@/lib/comms/ai/respond";
 import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { maybeHandleRatingReply } from "@/lib/reviews/rating-reply";
 import { phoneMatchVariants } from "@/lib/phone";
 import { cleanEnv } from "@/lib/env";
 import type { SubAccountDoc } from "@/types";
@@ -294,6 +295,27 @@ export async function POST(request: Request) {
           }),
         ),
     );
+
+    // Activity row — mirrors the outbound `sms_sent` entry the send route
+    // writes, so the contact profile's activity timeline shows both
+    // directions instead of only outbound sends.
+    const preview = bodyRaw.length > 80 ? `${bodyRaw.slice(0, 80)}…` : bodyRaw;
+    await Promise.all(
+      written.map((w) =>
+        w.d.ref
+          .collection("activities")
+          .add({
+            type: "sms_received",
+            content: `SMS: ${preview}`,
+            createdBy: "twilio_inbound",
+            meta: { messageSid: messageSid || null, mode: route.mode },
+            createdAt: FieldValue.serverTimestamp(),
+          })
+          .catch((err) =>
+            console.warn("[twilio/inbound] activity write failed", err),
+          ),
+      ),
+    );
   } else if (route.mode === "dedicated" && route.subAccountId) {
     // No contact matched this number. Rather than dropping the message,
     // record it under a stable placeholder id so it shows up in
@@ -349,33 +371,41 @@ export async function POST(request: Request) {
     // Not a STOP/START word. The message row + conversation index above
     // were already written for both modes.
     //
-    // Dedicated-mode-only: route to AI auto-reply if configured + enabled.
-    // The AI lives in dedicated mode because it needs the sub-account's
-    // own Twilio number to reply from and its own persona prompt. Shared
-    // mode is opt-out-only by design.
-    if (
-      route.mode === "dedicated" &&
-      route.subAccountId &&
-      !matches.empty &&
-      aiIsConfigured()
-    ) {
-      try {
-        const agent = await resolveAgent(route.subAccountId, "sms");
-        if (agent?.effective.enabled) {
-          // Respond to the first matched contact only. If multiple
-          // contacts share the same phone in this sub-account (data
-          // hygiene issue), we don't want to fire N identical SMS
-          // replies to the same number.
-          const contactDoc = matches.docs[0];
-          const contact = {
-            id: contactDoc.id,
-            ...(contactDoc.data() as Omit<Contact, "id">),
-          };
-          const saSnap = await db
-            .doc(`subAccounts/${route.subAccountId}`)
-            .get();
-          const subAccount = saSnap.data() as SubAccountDoc | undefined;
-          if (subAccount) {
+    // Dedicated-mode-only: rating-gate reply check, then AI auto-reply.
+    // Both need the sub-account's own Twilio number to reply from, so
+    // neither runs in shared mode.
+    if (route.mode === "dedicated" && route.subAccountId && !matches.empty) {
+      const contactDoc = matches.docs[0];
+      const contact = {
+        id: contactDoc.id,
+        ...(contactDoc.data() as Omit<Contact, "id">),
+      };
+      const saSnap = await db.doc(`subAccounts/${route.subAccountId}`).get();
+      const subAccount = saSnap.data() as SubAccountDoc | undefined;
+
+      let ratingHandled = false;
+      if (subAccount) {
+        try {
+          const ratingResult = await maybeHandleRatingReply({
+            subAccountId: route.subAccountId,
+            agencyId: route.agencyId ?? "",
+            contact,
+            subAccount,
+            body: bodyRaw,
+          });
+          ratingHandled = ratingResult.handled;
+        } catch (err) {
+          console.error(
+            `[twilio/inbound] rating-reply check failed for sa=${route.subAccountId}`,
+            err,
+          );
+        }
+      }
+
+      if (!ratingHandled && subAccount && aiIsConfigured()) {
+        try {
+          const agent = await resolveAgent(route.subAccountId, "sms");
+          if (agent?.effective.enabled) {
             // Fire-and-await: bounded latency is fine here because we're
             // already inside the webhook response. Twilio gives us ~15s
             // before it times out — Haiku replies in 1-3s typically.
@@ -389,14 +419,14 @@ export async function POST(request: Request) {
               contactPhone: from,
             });
           }
+        } catch (err) {
+          // Never let an AI failure break the webhook contract. Stripe-style:
+          // log and move on, return 200 so Twilio doesn't retry.
+          console.error(
+            `[twilio/inbound] AI reply pipeline failed for sa=${route.subAccountId}`,
+            err,
+          );
         }
-      } catch (err) {
-        // Never let an AI failure break the webhook contract. Stripe-style:
-        // log and move on, return 200 so Twilio doesn't retry.
-        console.error(
-          `[twilio/inbound] AI reply pipeline failed for sa=${route.subAccountId}`,
-          err,
-        );
       }
     }
 
