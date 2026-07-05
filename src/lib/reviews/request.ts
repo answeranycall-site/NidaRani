@@ -282,13 +282,20 @@ export async function maybeSendReviewRequest(
       });
     }
 
-    // Cooldown stamp (+ the rating-gate "awaiting reply" marker, when used).
+    // Cooldown stamp (+ the rating-gate "awaiting reply" marker, when used)
+    // + a "requested_review" tag so the operator can filter/find these
+    // contacts (Contacts list, Conversations tag filter) regardless of
+    // trigger (manual click, quote-paid, deal-completed).
     try {
       await db.doc(`contacts/${contact.id}`).set(
         {
           reviewRequestedAt: FieldValue.serverTimestamp(),
+          tags: FieldValue.arrayUnion("requested_review"),
           ...(useRatingGate
-            ? { awaitingReviewReplyAt: FieldValue.serverTimestamp() }
+            ? {
+                awaitingReviewReplyAt: FieldValue.serverTimestamp(),
+                awaitingReviewReplyAttempts: FieldValue.delete(),
+              }
             : {}),
           updatedAt: FieldValue.serverTimestamp(),
         },

@@ -151,6 +151,15 @@ export interface Contact {
    * reply weeks later isn't misread as a rating.
    */
   awaitingReviewReplyAt?: Timestamp | FieldValue | null;
+  /**
+   * Count of replies received while `awaitingReviewReplyAt` was live that
+   * couldn't be read as a 1-5 rating (typos, "sry one sec", etc). Lets the
+   * gate stay open across a few stray replies instead of giving up on the
+   * first ambiguous one — capped at MAX_RATING_REPLY_ATTEMPTS in
+   * lib/reviews/constants.ts, after which the gate closes for good. Reset
+   * to 0 (deleted) once a rating is successfully read.
+   */
+  awaitingReviewReplyAttempts?: number | null;
   /** Most recent 1-5 rating captured via the SMS rating-gate reply flow. */
   lastReviewRating?: number | null;
   /**

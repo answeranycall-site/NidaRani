@@ -10,6 +10,7 @@ import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
 import {
   DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
   DEFAULT_REVIEW_SMS_TEMPLATE,
+  MAX_RATING_REPLY_ATTEMPTS,
   RATING_REPLY_WINDOW_MS,
 } from "@/lib/reviews/constants";
 import { firstWord, fillReviewSms } from "@/lib/reviews/request";
@@ -128,19 +129,42 @@ export async function maybeHandleRatingReply(
   const rating =
     extractExplicitRating(input.body) ?? (await inferRatingFromSentiment(input.body));
 
-  // Clear the gate either way — a reply we still can't map to 1-5 means
-  // they weren't answering the rating question, so don't keep intercepting
-  // their future messages waiting for one.
-  await db.doc(`contacts/${input.contact.id}`).set(
-    {
-      awaitingReviewReplyAt: FieldValue.delete(),
-      ...(rating !== null ? { lastReviewRating: rating } : {}),
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
-
-  if (rating === null) return { handled: false };
+  if (rating !== null) {
+    // Resolved — close the gate and reset the ambiguous-attempt counter.
+    await db.doc(`contacts/${input.contact.id}`).set(
+      {
+        awaitingReviewReplyAt: FieldValue.delete(),
+        awaitingReviewReplyAttempts: FieldValue.delete(),
+        lastReviewRating: rating,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } else {
+    // Ambiguous — a typo'd or off-topic reply shouldn't close the gate on
+    // the very first miss, since the real answer might be 1-2 texts away.
+    // Give it a few tries before assuming they were never going to answer.
+    const attempts = (input.contact.awaitingReviewReplyAttempts ?? 0) + 1;
+    if (attempts >= MAX_RATING_REPLY_ATTEMPTS) {
+      await db.doc(`contacts/${input.contact.id}`).set(
+        {
+          awaitingReviewReplyAt: FieldValue.delete(),
+          awaitingReviewReplyAttempts: FieldValue.delete(),
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } else {
+      await db.doc(`contacts/${input.contact.id}`).set(
+        {
+          awaitingReviewReplyAttempts: attempts,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    }
+    return { handled: false };
+  }
 
   const businessName = input.subAccount.name ?? "";
   const isPositive = rating >= 4;

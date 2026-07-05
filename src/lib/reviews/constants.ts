@@ -27,6 +27,14 @@ export const DEFAULT_RATING_ASK_TEMPLATE =
 export const RATING_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * How many consecutive ambiguous replies (no readable 1-5) the gate
+ * tolerates before giving up — a typo'd first reply ("srry") followed by
+ * the real answer 1-2 texts later still gets caught, instead of the gate
+ * closing the instant the first reply doesn't parse.
+ */
+export const MAX_RATING_REPLY_ATTEMPTS = 3;
+
+/**
  * Review send channel:
  *  - "sms"               — free-form SMS.
  *  - "whatsapp_template" — approved WhatsApp template (compliant outside the 24h
