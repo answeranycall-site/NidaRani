@@ -46,6 +46,14 @@ export interface MessageDoc {
   sentByUid: string | null;
   /** Populated when status === "failed". */
   error: string | null;
+  /**
+   * Twilio MMS attachments (inbound only) — raw `https://api.twilio.com/...`
+   * media resource URLs from `MediaUrl0..N`. These require Twilio Basic Auth
+   * to fetch, so the client never hits them directly; it goes through
+   * `/api/comms/media/[contactId]/[messageId]`, which re-reads this array
+   * server-side and proxies the authenticated fetch.
+   */
+  mediaUrls?: string[] | null;
   createdAt: Timestamp | FieldValue | null;
   /**
    * Set when a sub-account user opens the contact's Messages tab. Used to

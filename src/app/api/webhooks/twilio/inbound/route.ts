@@ -168,6 +168,20 @@ export async function POST(request: Request) {
   const messageSid = (params["MessageSid"] as string | undefined) ?? "";
   const from = normalisePhone(fromRaw);
   const to = normalisePhone(toRaw);
+  // MMS attachments (images, gifs, etc). Twilio sends NumMedia + one
+  // MediaUrl{n} per attachment; the URLs require Twilio Basic Auth to fetch,
+  // so we only store them here — rendering goes through an authenticated
+  // proxy route, never a direct <img src>.
+  const numMedia = Number.parseInt(params["NumMedia"] ?? "0", 10) || 0;
+  const mediaUrls: string[] = [];
+  for (let i = 0; i < numMedia; i++) {
+    const url = params[`MediaUrl${i}`];
+    if (url) mediaUrls.push(url);
+  }
+  // Previews (conversation list + activity timeline) show the literal body,
+  // which is often empty for an image/gif-only MMS — fall back to a label.
+  const previewBody =
+    bodyRaw || (mediaUrls.length ? `📷 ${mediaUrls.length > 1 ? "Photos" : "Photo"}` : "");
 
   const route = await resolveRoute(to);
   if (!route) {
@@ -260,6 +274,7 @@ export async function POST(request: Request) {
             sentByUid: null,
             error: null,
             readAt: null,
+            mediaUrls: mediaUrls.length ? mediaUrls : null,
             createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true }, // Twilio retries on the same MessageSid → idempotent
@@ -291,7 +306,7 @@ export async function POST(request: Request) {
             contactPhone: w.cdata.phone ?? from,
             channel: "sms",
             direction: "inbound",
-            body: bodyRaw,
+            body: previewBody,
           }),
         ),
     );
@@ -299,7 +314,8 @@ export async function POST(request: Request) {
     // Activity row — mirrors the outbound `sms_sent` entry the send route
     // writes, so the contact profile's activity timeline shows both
     // directions instead of only outbound sends.
-    const preview = bodyRaw.length > 80 ? `${bodyRaw.slice(0, 80)}…` : bodyRaw;
+    const preview =
+      previewBody.length > 80 ? `${previewBody.slice(0, 80)}…` : previewBody;
     await Promise.all(
       written.map((w) =>
         w.d.ref
@@ -344,6 +360,7 @@ export async function POST(request: Request) {
             sentByUid: null,
             error: null,
             readAt: null,
+            mediaUrls: mediaUrls.length ? mediaUrls : null,
             createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
@@ -356,7 +373,7 @@ export async function POST(request: Request) {
         contactPhone: from,
         channel: "sms",
         direction: "inbound",
-        body: bodyRaw,
+        body: previewBody,
       });
     } catch (err) {
       console.warn("[twilio/inbound] unknown-person conversation write failed", err);

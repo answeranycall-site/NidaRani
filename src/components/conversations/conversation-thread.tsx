@@ -154,7 +154,7 @@ export function ConversationThread({
   return (
     <div
       ref={scrollerRef}
-      className="flex-1 space-y-2 overflow-y-auto p-4"
+      className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4"
     >
       {!hydrated ? (
         <div className="space-y-2">
@@ -175,7 +175,12 @@ export function ConversationThread({
         </div>
       ) : (
         merged.map((m) => (
-          <ChannelBubble key={`${m.channel}:${m.id}`} message={m} theme={theme} />
+          <ChannelBubble
+            key={`${m.channel}:${m.id}`}
+            message={m}
+            theme={theme}
+            contactId={contactId}
+          />
         ))
       )}
     </div>
@@ -220,9 +225,11 @@ function bubbleClasses(
 function ChannelBubble({
   message,
   theme,
+  contactId,
 }: {
   message: ChannelMessage;
   theme: ConversationTheme;
+  contactId: string;
 }) {
   const isOutbound = message.direction === "outbound";
   const ts = toDate(message.createdAt);
@@ -233,17 +240,36 @@ function ChannelBubble({
   const showTicks =
     native && isOutbound && message.channel === "whatsapp" &&
     message.status !== "failed";
+  const mediaUrls = message.mediaUrls;
 
   return (
     <div className={cn("flex flex-col", isOutbound ? "items-end" : "items-start")}>
       <div
         className={cn(
-          "max-w-[78%] rounded-2xl px-3 py-2 text-sm",
+          "max-w-[78%] overflow-hidden rounded-2xl px-3 py-2 text-sm",
           bubbleClasses(message.channel, isOutbound, theme),
           message.status === "failed" && "ring-2 ring-destructive",
         )}
       >
-        <p className="whitespace-pre-wrap break-words">{message.body}</p>
+        {mediaUrls && mediaUrls.length > 0 && (
+          <div className="mb-1 flex flex-col gap-1.5">
+            {mediaUrls.map((_, i) => (
+              // Never render the raw Twilio URL directly — it requires
+              // Basic Auth the browser can't send. This proxy route
+              // re-reads the URL server-side and streams the bytes.
+              <img
+                key={i}
+                src={`/api/comms/media/${contactId}/${message.id}?i=${i}`}
+                alt="Attachment"
+                className="max-h-64 w-auto rounded-lg object-contain"
+                loading="lazy"
+              />
+            ))}
+          </div>
+        )}
+        {message.body && (
+          <p className="whitespace-pre-wrap break-words">{message.body}</p>
+        )}
       </div>
       <div className="mt-1 flex items-center gap-1.5 text-[10px] text-muted-foreground">
         {!native && (
