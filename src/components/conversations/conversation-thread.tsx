@@ -6,6 +6,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  where,
 } from "firebase/firestore";
 import { CheckCheck } from "lucide-react";
 import { getFirebaseDb } from "@/lib/firebase/client";
@@ -43,9 +44,20 @@ type MetaMessageDoc = MessageDoc & { channel?: ConversationChannel };
  */
 export function ConversationThread({
   contactId,
+  subAccountId,
   theme = "standard",
 }: {
   contactId: string;
+  /**
+   * Required by the `messages` (SMS) rule specifically: it authorizes off
+   * fields on the message row itself (not a join to the parent contact,
+   * which is what lets an "Unknown person" thread with no real contact
+   * doc render at all) — and Firestore can only verify a `resource.data`
+   * check on a LIST query when the query carries a matching `where`
+   * clause. Without this filter, the read is denied outright even though
+   * the rule and the data are both correct.
+   */
+  subAccountId: string;
   theme?: ConversationTheme;
 }) {
   const [sms, setSms] = useState<MessageDoc[]>([]);
@@ -66,6 +78,7 @@ export function ConversationThread({
     const unsubSms = onSnapshot(
       query(
         collection(db, `contacts/${contactId}/messages`),
+        where("subAccountId", "==", subAccountId),
         orderBy("createdAt", "asc"),
       ),
       (snap) => {
@@ -115,7 +128,7 @@ export function ConversationThread({
       unsubWa();
       unsubMeta();
     };
-  }, [contactId]);
+  }, [contactId, subAccountId]);
 
   const merged = useMemo<ChannelMessage[]>(() => {
     const all: ChannelMessage[] = [

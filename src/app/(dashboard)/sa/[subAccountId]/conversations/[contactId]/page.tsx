@@ -279,7 +279,7 @@ export default function ConversationDetailPage() {
               reply and keep this conversation attached to their record.
             </span>
           </div>
-          <ConversationThread contactId={contactId} theme={theme} />
+          <ConversationThread contactId={contactId} subAccountId={subAccountId} theme={theme} />
         </>
       ) : !contact ? (
         <div className="flex flex-1 items-center justify-center">
@@ -290,7 +290,7 @@ export default function ConversationDetailPage() {
           {conversation && (
             <ConversationAiControls conversation={conversation} />
           )}
-          <ConversationThread contactId={contactId} theme={theme} />
+          <ConversationThread contactId={contactId} subAccountId={subAccountId} theme={theme} />
           {conversation?.pendingDraft && (
             <ConversationDraftCard
               contact={contact}
