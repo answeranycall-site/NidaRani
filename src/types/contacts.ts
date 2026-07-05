@@ -142,6 +142,16 @@ export interface Contact {
    */
   reviewRequestedAt?: Timestamp | FieldValue | null;
   /**
+   * Stamped by the /r/[token] click-through redirect (see
+   * lib/reviews/click-token.ts) — the review link's real destination is
+   * never texted directly, only this tracking URL, so we know if they
+   * opened it. Doesn't mean they submitted a review on Google — there's no
+   * API that tells us that — just that they clicked. `reviewLinkClickCount`
+   * increments on every click (a contact can open the link more than once).
+   */
+  reviewLinkClickedAt?: Timestamp | FieldValue | null;
+  reviewLinkClickCount?: number;
+  /**
    * Set right after a review request goes out ONLY when the sub-account's
    * `googleReviewConfig.ratingGateEnabled` is on. The inbound SMS webhook
    * checks this (dedicated-mode only) to decide whether the contact's next
@@ -239,6 +249,11 @@ export type ActivityType =
   // Google review request sent (SMS / WhatsApp) — written by
   // lib/reviews/request.ts on a manual or quote-paid-triggered send.
   | "review_requested"
+  // The contact clicked their review link (redirected through
+  // /r/[token] — see lib/reviews/click-token.ts). Doesn't confirm they
+  // actually submitted a review on Google (no API tells us that), just
+  // that they opened the link.
+  | "review_link_clicked"
   // Written by the admin-only territory-retag route when a contact
   // (the account) moves between territories. The cascade also re-tags
   // every linked deal / quote / task / event — that's logged via this

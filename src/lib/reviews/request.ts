@@ -13,6 +13,7 @@ import {
 } from "@/lib/comms/twilio";
 import { resolveTemplateVariables } from "@/lib/comms/whatsapp/resolve-template-variables";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { buildReviewClickUrl } from "@/lib/reviews/click-token";
 import {
   DEFAULT_RATING_ASK_TEMPLATE,
   DEFAULT_REVIEW_COOLDOWN_DAYS,
@@ -142,6 +143,11 @@ export async function maybeSendReviewRequest(
     }
 
     const businessName = subAccount.name ?? "";
+    // Never text the raw Google URL — this tracking link redirects to it
+    // (via /r/[token]) after stamping reviewLinkClickedAt, so we know if
+    // the contact opened it. Falls back to the raw URL if
+    // NEXT_PUBLIC_APP_URL isn't set (buildReviewClickUrl returns "").
+    const trackedReviewUrl = buildReviewClickUrl(contact.id) || cfg.reviewUrl;
 
     // ---- Send (channel-specific) ----
     let sid: string;
@@ -166,7 +172,7 @@ export async function maybeSendReviewRequest(
 
       const freeFormBody = fillReviewSms(
         cfg.messageTemplate || DEFAULT_REVIEW_SMS_TEMPLATE,
-        { firstName: firstWord(contact.name), businessName, reviewUrl: cfg.reviewUrl },
+        { firstName: firstWord(contact.name), businessName, reviewUrl: trackedReviewUrl },
       );
 
       if (channel === "whatsapp_manual") {
@@ -226,11 +232,11 @@ export async function maybeSendReviewRequest(
       renderedBody = useRatingGate
         ? fillReviewSms(
             cfg.askForRatingTemplate || DEFAULT_RATING_ASK_TEMPLATE,
-            { firstName: firstWord(contact.name), businessName, reviewUrl: cfg.reviewUrl },
+            { firstName: firstWord(contact.name), businessName, reviewUrl: trackedReviewUrl },
           )
         : fillReviewSms(
             cfg.messageTemplate || DEFAULT_REVIEW_SMS_TEMPLATE,
-            { firstName: firstWord(contact.name), businessName, reviewUrl: cfg.reviewUrl },
+            { firstName: firstWord(contact.name), businessName, reviewUrl: trackedReviewUrl },
           );
       const res = await sendSmsForSubAccount({
         subAccountId: input.subAccountId,

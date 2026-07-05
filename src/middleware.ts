@@ -66,6 +66,9 @@ const PUBLIC_PATHS = [
   "/widget.js",
   "/u",
   "/api/u",
+  // Review-link click-through redirect (/r/[token]) — HMAC-token-gated
+  // inside the route, same model as /u/[token].
+  "/r",
   // Public quote pages — recipient-facing /q/[token] view (server-rendered)
   // and the accept/decline endpoint. Both gated by HMAC-signed token
   // verification inside the route; no session needed.

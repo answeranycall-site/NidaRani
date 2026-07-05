@@ -7,6 +7,7 @@ import { upsertConversationForMessage } from "@/lib/server/conversations-service
 import { resolveAgent } from "@/lib/comms/ai/agent";
 import { aiIsConfigured, callAi } from "@/lib/comms/ai/openrouter";
 import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
+import { buildReviewClickUrl } from "@/lib/reviews/click-token";
 import {
   DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
   DEFAULT_REVIEW_SMS_TEMPLATE,
@@ -168,11 +169,15 @@ export async function maybeHandleRatingReply(
 
   const businessName = input.subAccount.name ?? "";
   const isPositive = rating >= 4;
+  // Never text the raw Google URL — the tracking link (see
+  // lib/reviews/click-token.ts) redirects to it after stamping
+  // reviewLinkClickedAt.
+  const trackedReviewUrl = buildReviewClickUrl(input.contact.id) || cfg.reviewUrl;
   const replyBody = isPositive
     ? fillReviewSms(cfg.messageTemplate || DEFAULT_REVIEW_SMS_TEMPLATE, {
         firstName: firstWord(input.contact.name),
         businessName,
-        reviewUrl: cfg.reviewUrl,
+        reviewUrl: trackedReviewUrl,
       })
     : cfg.internalFeedbackMessage || DEFAULT_INTERNAL_FEEDBACK_MESSAGE;
 

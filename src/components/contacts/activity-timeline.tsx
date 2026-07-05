@@ -30,6 +30,7 @@ import {
   UserX,
   Users,
   Star,
+  MousePointerClick,
 } from "lucide-react";
 import { subscribeToNotes } from "@/lib/firestore/contacts";
 import { subscribeToActivities } from "@/lib/firestore/activities";
@@ -321,6 +322,11 @@ function activityVisuals(type: ActivityType): {
       return {
         icon: <Star className="h-3 w-3 text-amber-500" />,
         label: "Review requested",
+      };
+    case "review_link_clicked":
+      return {
+        icon: <MousePointerClick className="h-3 w-3 text-amber-500" />,
+        label: "Clicked review link",
       };
     case "contact_territory_changed":
       return {
