@@ -5,6 +5,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { sendSmsForSubAccount } from "@/lib/comms/twilio";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { resolveAgent } from "@/lib/comms/ai/agent";
+import { aiIsConfigured, callAi } from "@/lib/comms/ai/openrouter";
 import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
 import {
   DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
@@ -14,6 +15,66 @@ import {
 import { firstWord, fillReviewSms } from "@/lib/reviews/request";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
+
+/**
+ * Pull a 1-5 rating out of a reply that isn't JUST a bare digit — "5, great
+ * job!", "I'd say 5 stars", "5/5" all have a standalone 1-5 token somewhere
+ * in a short reply. `\b` word boundaries stop a phone number ("555-1234") or
+ * a time ("5pm") from matching, since neither has a boundary around a lone
+ * digit. Scoped to short replies (≤12 words) so an unrelated long message
+ * that happens to contain a stray 1-5 digit doesn't get misread.
+ */
+function extractExplicitRating(body: string): number | null {
+  const trimmed = body.trim();
+  const word = firstWord(trimmed);
+  if (/^[1-5]$/.test(word)) return Number(word);
+
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 12) return null;
+  const match = trimmed.match(/\b([1-5])\b/);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Fallback for a reply with no digit at all — "It was amazing!" / "not
+ * great honestly" — asks the already-configured LLM to translate sentiment
+ * into an equivalent 1-5 rating. Only runs when nothing digit-based
+ * matched, so the common case (customer just replies "5") never spends a
+ * token. Returns null on any ambiguity, API failure, or missing key —
+ * callers treat that exactly like "couldn't tell", never throwing.
+ */
+async function inferRatingFromSentiment(body: string): Promise<number | null> {
+  if (!aiIsConfigured()) return null;
+  const trimmed = body.trim();
+  // A reply this long is unlikely to be answering the rating question at
+  // all (more likely an unrelated message) — skip the AI call rather than
+  // risk misclassifying a topic change as a rating.
+  if (!trimmed || trimmed.length > 300) return null;
+
+  try {
+    const result = await callAi({
+      maxTokens: 5,
+      temperature: 0,
+      messages: [
+        {
+          role: "system",
+          content:
+            "A customer was just asked to rate a business's service from 1 to 5 stars. " +
+            "Translate their reply into that 1-5 scale based on sentiment. " +
+            'Respond with ONLY a single digit 1-5, or the word NONE if the reply ' +
+            "doesn't express any opinion about the service (e.g. it's off-topic " +
+            "or asks a question instead).",
+        },
+        { role: "user", content: trimmed },
+      ],
+    });
+    const out = result.text.trim();
+    return /^[1-5]$/.test(out) ? Number(out) : null;
+  } catch (err) {
+    console.warn("[reviews/rating-reply] sentiment inference failed", err);
+    return null;
+  }
+}
 
 /**
  * Rating-gate reply interception (SMS, dedicated Twilio only). Called from
@@ -59,12 +120,17 @@ export async function maybeHandleRatingReply(
     return { handled: false };
   }
 
-  const word = input.body.trim().split(/\s+/)[0] ?? "";
-  const rating = /^[1-5]$/.test(word) ? Number(word) : null;
+  // Tier 1: a literal digit somewhere in a short reply ("5", "5, thanks!",
+  // "I'd say 5 stars"). Tier 2: no digit at all ("It was amazing!") — ask
+  // the LLM to translate sentiment into the same 1-5 scale. Tier 2 only
+  // runs when tier 1 comes up empty, so the common bare-digit reply never
+  // costs a token.
+  const rating =
+    extractExplicitRating(input.body) ?? (await inferRatingFromSentiment(input.body));
 
-  // Clear the gate either way — a non-1-5 reply means they weren't
-  // answering the rating question, so don't keep intercepting their
-  // future messages waiting for one.
+  // Clear the gate either way — a reply we still can't map to 1-5 means
+  // they weren't answering the rating question, so don't keep intercepting
+  // their future messages waiting for one.
   await db.doc(`contacts/${input.contact.id}`).set(
     {
       awaitingReviewReplyAt: FieldValue.delete(),
