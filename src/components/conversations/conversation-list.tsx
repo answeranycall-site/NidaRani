@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { MessagesSquare } from "lucide-react";
+import { MessagesSquare, Star } from "lucide-react";
 import { toDate } from "@/lib/format";
+import { setConversationStarred } from "@/lib/firestore/conversations";
 import { cn } from "@/lib/utils";
 import type { ConversationDoc, ConversationChannel } from "@/types/conversations";
 
@@ -23,11 +24,14 @@ const CHANNEL_BADGE: Record<ConversationChannel, string> = {
 export function ConversationList({
   conversations,
   basePath,
+  activeContactId,
 }: {
   /** Pre-filtered + pre-sorted by the page. */
   conversations: ConversationDoc[];
   /** e.g. `/sa/{id}/conversations` — rows link to `{basePath}/{contactId}`. */
   basePath: string;
+  /** Highlights the row matching the currently-open thread, if any. */
+  activeContactId?: string;
 }) {
   if (conversations.length === 0) {
     return (
@@ -50,11 +54,15 @@ export function ConversationList({
         const unread = (c.unreadCount ?? 0) > 0;
         const ts = toDate(c.lastMessageAt);
         const title = c.contactName || c.contactPhone || "Unknown person";
+        const active = c.contactId === activeContactId;
         return (
           <Link
             key={c.id}
             href={`${basePath}/${c.contactId}`}
-            className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
+            className={cn(
+              "flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50",
+              active && "bg-primary/5",
+            )}
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
               {initials(title)}
@@ -105,6 +113,23 @@ export function ConversationList({
                 </span>
               </div>
             </div>
+            <button
+              type="button"
+              title={c.starred ? "Unstar" : "Star"}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void setConversationStarred(c.contactId, !c.starred);
+              }}
+              className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Star
+                className={cn(
+                  "h-4 w-4",
+                  c.starred && "fill-amber-400 text-amber-500",
+                )}
+              />
+            </button>
           </Link>
         );
       })}

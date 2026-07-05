@@ -10,6 +10,7 @@ import {
   MessagesSquare,
   PanelRight,
   Smartphone,
+  Star,
   UserPlus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { subscribeToContact } from "@/lib/firestore/contacts";
 import {
   markConversationRead,
+  setConversationStarred,
   subscribeToConversation,
 } from "@/lib/firestore/conversations";
 import { Button } from "@/components/ui/button";
@@ -161,12 +163,7 @@ export default function ConversationDetailPage() {
   }
 
   return (
-    <div
-      className={cn(
-        "mx-auto flex h-[calc(100vh-9rem)] min-h-[480px] w-full gap-4",
-        panelOpen ? "max-w-4xl lg:max-w-6xl xl:max-w-7xl" : "max-w-4xl",
-      )}
-    >
+    <div className="flex h-full gap-4">
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border bg-card">
         <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
@@ -175,6 +172,7 @@ export default function ConversationDetailPage() {
             size="icon"
             render={<Link href={saPath("/conversations")} />}
             aria-label="Back to conversations"
+            className="lg:hidden"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -215,6 +213,23 @@ export default function ConversationDetailPage() {
               />
             </span>
           </button>
+          {conversation && (
+            <button
+              type="button"
+              title={conversation.starred ? "Unstar" : "Star"}
+              onClick={() =>
+                setConversationStarred(contactId, !conversation.starred)
+              }
+              className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <Star
+                className={cn(
+                  "h-4 w-4",
+                  conversation.starred && "fill-amber-400 text-amber-500",
+                )}
+              />
+            </button>
+          )}
           {contact && (
             <Button
               variant={panelOpen ? "secondary" : "outline"}

@@ -576,7 +576,7 @@ service cloud.firestore {
         resource.data.agencyId
       ) && tenantFieldsLockedOnUpdate()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['unreadCount', 'status', 'assigneeUid', 'botMode', 'botPausedUntil', 'pendingDraft', 'updatedAt']
+          ['unreadCount', 'status', 'assigneeUid', 'botMode', 'botPausedUntil', 'pendingDraft', 'starred', 'updatedAt']
         );
       allow delete: if canAdminSub(
         resource.data.subAccountId,

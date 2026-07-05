@@ -14,10 +14,9 @@ import type { Timestamp, FieldValue } from "firebase/firestore";
  * + outbound message. Doc id == contactId (1:1), so upserts need no lookup and
  * the detail page can read the contact's message subcollections directly.
  *
- * Only created when a real message row is written — i.e. dedicated-Twilio SMS,
- * a configured WhatsApp sender, or (beta) a connected Meta inbox. Shared-sender
- * SMS (no message rows) produces no conversation, consistent with the
- * per-contact threads. Message subcollections by channel:
+ * Only created when a real message row is written — SMS (dedicated OR shared
+ * sender, once matched to a contact), a configured WhatsApp sender, or (beta)
+ * a connected Meta inbox. Message subcollections by channel:
  *   sms → contacts/{id}/messages, whatsapp → contacts/{id}/whatsappMessages,
  *   messenger + instagram → contacts/{id}/metaMessages (channel-discriminated).
  */
@@ -73,6 +72,8 @@ export interface ConversationDoc {
   unreadCount: number;
   status: ConversationStatus;
   assigneeUid: string | null;
+  /** Operator-toggled, client-side only. Undefined/false = not starred. */
+  starred?: boolean;
   /** AI mode for this conversation. Default "auto". */
   botMode: ConversationBotMode;
   /** When set + in the future, the bot stays quiet (human took over). */

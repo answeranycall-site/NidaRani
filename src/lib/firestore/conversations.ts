@@ -105,6 +105,21 @@ export async function resumeBot(contactId: string): Promise<void> {
   }
 }
 
+/** Toggle the starred flag on a conversation for quick-filter access. */
+export async function setConversationStarred(
+  contactId: string,
+  starred: boolean,
+): Promise<void> {
+  try {
+    await updateDoc(doc(getFirebaseDb(), CONVERSATIONS, contactId), {
+      starred,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err) {
+    console.warn("[conversations] set starred failed", err);
+  }
+}
+
 /** Discard a pending suggest-mode draft without sending it. */
 export async function discardConversationDraft(
   contactId: string,
