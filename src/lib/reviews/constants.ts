@@ -11,12 +11,12 @@ export const DEFAULT_REVIEW_COOLDOWN_DAYS = 90;
 
 /** Sent to a 1-3 rating-gate reply when the sub-account hasn't customized it. */
 export const DEFAULT_INTERNAL_FEEDBACK_MESSAGE =
-  "Thanks for letting us know — we're sorry it wasn't a great experience. Someone from our team will reach out shortly to make it right.";
+  "Oh, sorry to hear that. We will review your feedback and get back with you.";
 
 /** Initial "how many stars" ask, sent instead of the direct link when the
  *  rating gate is on. Tags: {{firstName}} / {{businessName}}. */
 export const DEFAULT_RATING_ASK_TEMPLATE =
-  "Hi {{firstName}}, thanks for choosing {{businessName}}! On a scale of 1-5, how was your experience? Just reply with a number.";
+  "Hi {{firstName}}, thanks for being our valued client at {{businessName}}! ⭐ How would you rate our service? Reply with 1, 2, 3, 4, or 5 stars.";
 
 /**
  * How long an "awaiting rating reply" flag stays live after a review request
