@@ -100,7 +100,19 @@ export default function ConversationDetailPage() {
   }, [contactId]);
 
   const availableChannels: ConversationChannel[] = [];
-  if (subAccount?.twilioConfig?.enabled) availableChannels.push("sms");
+  // SMS is available either via this sub-account's own dedicated Twilio
+  // number, or via the agency's shared number — which every sub-account can
+  // use out of the box unless it's been specifically cut off
+  // (sharedSmsAllowed === false, the "require own Twilio account" gate).
+  // Only checking twilioConfig.enabled here hid the reply composer entirely
+  // for every shared-mode sub-account, even though /api/comms/sms/send has
+  // always supported sending (and threading) in shared mode.
+  if (
+    subAccount?.twilioConfig?.enabled ||
+    subAccount?.sharedSmsAllowed !== false
+  ) {
+    availableChannels.push("sms");
+  }
   if (
     subAccount?.twilioConfig?.whatsappFromNumber &&
     subAccount?.whatsappEnabledByAgency === true

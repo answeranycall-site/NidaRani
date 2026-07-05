@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   collection,
   onSnapshot,
@@ -8,15 +9,22 @@ import {
   query,
   where,
 } from "firebase/firestore";
-import { CheckCheck } from "lucide-react";
+import { CheckCheck, Phone, PhoneIncoming, PhoneOutgoing } from "lucide-react";
 import { getFirebaseDb } from "@/lib/firebase/client";
+import { subscribeToVoiceCalls } from "@/lib/firestore/voice-calls";
 import { toDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useSubAccount } from "@/context/sub-account-context";
 import type { MessageDoc } from "@/types/messages";
+import type { VoiceCall } from "@/types/voice";
 import type { ConversationChannel } from "@/types/conversations";
 import type { ConversationTheme } from "@/hooks/use-conversation-theme";
 
 type ChannelMessage = MessageDoc & { channel: ConversationChannel };
+/** A voice call rendered inline in the merged timeline, tagged so the
+ *  render loop can tell it apart from a chat-channel message. */
+type VoiceEntry = VoiceCall & { kind: "voice" };
+type TimelineEntry = (ChannelMessage & { kind?: undefined }) | VoiceEntry;
 
 const CHANNEL_LABEL: Record<ConversationChannel, string> = {
   sms: "SMS",
@@ -60,12 +68,15 @@ export function ConversationThread({
   subAccountId: string;
   theme?: ConversationTheme;
 }) {
+  const { saPath } = useSubAccount();
   const [sms, setSms] = useState<MessageDoc[]>([]);
   const [wa, setWa] = useState<MessageDoc[]>([]);
   const [meta, setMeta] = useState<MetaMessageDoc[]>([]);
+  const [calls, setCalls] = useState<VoiceCall[]>([]);
   const [smsReady, setSmsReady] = useState(false);
   const [waReady, setWaReady] = useState(false);
   const [metaReady, setMetaReady] = useState(false);
+  const [callsReady, setCallsReady] = useState(false);
   // Surfaced instead of silently swallowed — a permission-denied or index
   // error used to just render as an empty "No messages yet" state with no
   // way to tell it apart from a genuinely empty thread.
@@ -123,27 +134,47 @@ export function ConversationThread({
         setMetaReady(true);
       },
     );
+    // Voice calls live in a per-sub-account collection (not a per-contact
+    // subcollection like the chat channels), so we read the whole thing —
+    // same pattern the Voice operator console uses — and filter to this
+    // contact client-side. Volume is modest (a sub-account's total call
+    // count), and this sidesteps needing a composite index just for a
+    // thread view.
+    const unsubCalls = subscribeToVoiceCalls(
+      subAccountId,
+      (all) => {
+        setCalls(all.filter((c) => c.contactId === contactId));
+        setCallsReady(true);
+      },
+      (err) => {
+        console.error("[conversation-thread] voice calls subscription failed", err);
+        setLoadError((prev) => prev ?? `Voice: ${err.message}`);
+        setCallsReady(true);
+      },
+    );
     return () => {
       unsubSms();
       unsubWa();
       unsubMeta();
+      unsubCalls();
     };
   }, [contactId, subAccountId]);
 
-  const merged = useMemo<ChannelMessage[]>(() => {
-    const all: ChannelMessage[] = [
+  const merged = useMemo<TimelineEntry[]>(() => {
+    const all: TimelineEntry[] = [
       ...sms.map((m) => ({ ...m, channel: "sms" as const })),
       ...wa.map((m) => ({ ...m, channel: "whatsapp" as const })),
       ...meta.map((m) => ({
         ...m,
         channel: (m.channel ?? "messenger") as ConversationChannel,
       })),
+      ...calls.map((c) => ({ ...c, kind: "voice" as const })),
     ];
     all.sort((a, b) => toMillis(a.createdAt) - toMillis(b.createdAt));
     return all;
-  }, [sms, wa, meta]);
+  }, [sms, wa, meta, calls]);
 
-  const hydrated = smsReady && waReady && metaReady;
+  const hydrated = smsReady && waReady && metaReady && callsReady;
 
   useEffect(() => {
     if (scrollerRef.current) {
@@ -174,15 +205,77 @@ export function ConversationThread({
           </p>
         </div>
       ) : (
-        merged.map((m) => (
-          <ChannelBubble
-            key={`${m.channel}:${m.id}`}
-            message={m}
-            theme={theme}
-            contactId={contactId}
-          />
-        ))
+        merged.map((m) =>
+          m.kind === "voice" ? (
+            <VoiceCallCard key={`voice:${m.id}`} call={m} saPath={saPath} />
+          ) : (
+            <ChannelBubble
+              key={`${m.channel}:${m.id}`}
+              message={m}
+              theme={theme}
+              contactId={contactId}
+            />
+          ),
+        )
       )}
+    </div>
+  );
+}
+
+/** A voice-agent call, rendered as a centered system-style card rather than
+ *  a left/right chat bubble — it's a call event, not authored text. */
+function VoiceCallCard({
+  call,
+  saPath,
+}: {
+  call: VoiceEntry;
+  saPath: (path: string) => string;
+}) {
+  const ts = toDate(call.createdAt);
+  const isOutbound = call.direction === "outbound";
+  const mins = Math.floor(call.durationSec / 60);
+  const secs = call.durationSec % 60;
+  const durationLabel =
+    call.durationSec > 0 ? `${mins}:${String(secs).padStart(2, "0")}` : null;
+
+  return (
+    <div className="flex justify-center py-1">
+      <Link
+        href={saPath(`/ai-agents/voice/calls/${call.id}`)}
+        className="flex max-w-[85%] items-start gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-xs transition-colors hover:bg-muted"
+      >
+        <span className="mt-0.5 shrink-0 text-muted-foreground">
+          {isOutbound ? (
+            <PhoneOutgoing className="h-3.5 w-3.5" />
+          ) : call.durationSec > 0 ? (
+            <PhoneIncoming className="h-3.5 w-3.5" />
+          ) : (
+            <Phone className="h-3.5 w-3.5" />
+          )}
+        </span>
+        <span className="min-w-0">
+          <span className="font-medium text-foreground">
+            {isOutbound ? "Outbound call" : "Voice call"}
+            {durationLabel ? ` · ${durationLabel}` : " · no answer"}
+          </span>
+          {call.summary && (
+            <span className="mt-0.5 block truncate text-muted-foreground">
+              {call.summary}
+            </span>
+          )}
+          <span className="mt-0.5 block text-[10px] text-muted-foreground/80">
+            {ts
+              ? ts.toLocaleString(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                  month: "short",
+                  day: "numeric",
+                })
+              : ""}
+            {" · View transcript"}
+          </span>
+        </span>
+      </Link>
     </div>
   );
 }
