@@ -54,6 +54,11 @@ const PUBLIC_PATHS = [
   //   - Routes scoped by [subAccountId] path param so a leaked secret
   //     can only impersonate one sub-account at worst.
   "/api/webhooks/vapi",
+  // Retell AI voice-agent webhook (BETA, alternative to Vapi) — public
+  // from the Retell cloud. Security: X-Retell-Signature HMAC-SHA256
+  // verified inside the route against RETELL_API_KEY; routes scoped by
+  // [subAccountId] path param same as the Vapi webhooks above.
+  "/api/webhooks/retell",
   // Web Chat widget — public from-the-browser API. Security:
   //  - Origin header validated against per-sub-account allowedDomains
   //  - In-memory per-IP + per-session rate limits

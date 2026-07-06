@@ -228,11 +228,11 @@ async function checkStripe(): Promise<IntegrationHealth> {
   if (presence.ok) {
     const ping = await withTimeout(async () => {
       const Stripe = (await import("stripe")).default;
-      const client = new Stripe(process.env.STRIPE_SECRET_KEY!);
+      const client = new Stripe(cleanEnv(process.env.STRIPE_SECRET_KEY));
       // Confirm the key is live + has read scope.
       await client.balance.retrieve();
       // Confirm the price exists.
-      await client.prices.retrieve(process.env.STRIPE_PRO_PRICE_ID!);
+      await client.prices.retrieve(cleanEnv(process.env.STRIPE_PRO_PRICE_ID));
       return true;
     }, "Stripe ping");
     subChecks.push(
@@ -290,7 +290,9 @@ async function checkResend(): Promise<IntegrationHealth> {
       const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       try {
         const r = await fetch("https://api.resend.com/domains", {
-          headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` },
+          headers: {
+            Authorization: `Bearer ${cleanEnv(process.env.RESEND_API_KEY)}`,
+          },
           signal: ctrl.signal,
         });
         if (!r.ok) {
@@ -520,9 +522,11 @@ async function checkQstash(): Promise<IntegrationHealth> {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
       try {
-        const base = process.env.QSTASH_URL!.replace(/\/$/, "");
+        const base = cleanEnv(process.env.QSTASH_URL).replace(/\/$/, "");
         const r = await fetch(`${base}/v2/topics`, {
-          headers: { Authorization: `Bearer ${process.env.QSTASH_TOKEN}` },
+          headers: {
+            Authorization: `Bearer ${cleanEnv(process.env.QSTASH_TOKEN)}`,
+          },
           signal: ctrl.signal,
         });
         if (!r.ok) {
@@ -586,7 +590,7 @@ async function checkAutomationsSecret(): Promise<IntegrationHealth> {
 // gitpage.site (presence + format only — no documented health endpoint)
 
 async function checkGitpage(): Promise<IntegrationHealth> {
-  const key = process.env.GITPAGE_API_KEY?.trim();
+  const key = cleanEnv(process.env.GITPAGE_API_KEY);
   const subChecks: SubCheck[] = [];
 
   if (!key) {
@@ -606,7 +610,7 @@ async function checkGitpage(): Promise<IntegrationHealth> {
     });
   }
 
-  const url = process.env.GITPAGE_API_URL?.trim();
+  const url = cleanEnv(process.env.GITPAGE_API_URL);
   subChecks.push({
     label: "GITPAGE_API_URL",
     status: url ? "ok" : "skipped",
@@ -631,7 +635,7 @@ async function checkGitpage(): Promise<IntegrationHealth> {
 // Mapbox (Leads map) — public token format + live API ping
 
 async function checkMapbox(): Promise<IntegrationHealth> {
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN?.trim();
+  const token = cleanEnv(process.env.NEXT_PUBLIC_MAPBOX_TOKEN);
   const subChecks: SubCheck[] = [];
 
   if (!token) {
@@ -707,7 +711,7 @@ async function checkMapbox(): Promise<IntegrationHealth> {
 // the bot stays silent.
 
 async function checkOpenRouter(): Promise<IntegrationHealth> {
-  const key = process.env.OPENROUTER_API_KEY?.trim();
+  const key = cleanEnv(process.env.OPENROUTER_API_KEY);
   const subChecks: SubCheck[] = [
     {
       label: "OPENROUTER_API_KEY",
@@ -778,7 +782,7 @@ async function checkOpenRouter(): Promise<IntegrationHealth> {
 // website context.
 
 async function checkFirecrawl(): Promise<IntegrationHealth> {
-  const key = process.env.FIRECRAWL_API_KEY?.trim();
+  const key = cleanEnv(process.env.FIRECRAWL_API_KEY);
   const subChecks: SubCheck[] = [];
 
   if (!key) {
@@ -830,8 +834,8 @@ async function checkFirecrawl(): Promise<IntegrationHealth> {
 // SMS / Web Chat channels are unaffected.
 
 async function checkVapi(): Promise<IntegrationHealth> {
-  const apiKey = process.env.VAPI_API_KEY?.trim();
-  const webhookSecret = process.env.VAPI_WEBHOOK_SECRET?.trim();
+  const apiKey = cleanEnv(process.env.VAPI_API_KEY);
+  const webhookSecret = cleanEnv(process.env.VAPI_WEBHOOK_SECRET);
   const subChecks: SubCheck[] = [
     {
       label: "VAPI_API_KEY",
@@ -920,9 +924,9 @@ async function checkVapi(): Promise<IntegrationHealth> {
 // second "Meta Social" check — it would test the identical META_APP_ID/SECRET.
 
 async function checkMeta(): Promise<IntegrationHealth> {
-  const appId = process.env.META_APP_ID?.trim();
-  const appSecret = process.env.META_APP_SECRET?.trim();
-  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN?.trim();
+  const appId = cleanEnv(process.env.META_APP_ID);
+  const appSecret = cleanEnv(process.env.META_APP_SECRET);
+  const verifyToken = cleanEnv(process.env.META_WEBHOOK_VERIFY_TOKEN);
 
   // No app creds → not configured on this deployment. Both the inbox and the
   // Social Planner stay invisible, so report cleanly rather than as an error.
