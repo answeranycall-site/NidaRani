@@ -82,8 +82,12 @@ export function ContactForm({
     e.preventDefault();
     const next: Record<string, string> = {};
     if (!name.trim()) next.name = "Name is required";
-    if (!email.trim()) next.email = "Email is required";
-    else if (!EMAIL_RE.test(email.trim())) next.email = "Enter a valid email";
+    // Email is optional — a phone-only contact (e.g. a caller already
+    // identified by number, just adding their name) is a normal case, not
+    // an error. Only validate the format when something was actually typed.
+    if (email.trim() && !EMAIL_RE.test(email.trim())) {
+      next.email = "Enter a valid email";
+    }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -144,9 +148,7 @@ export function ContactForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="c-email">
-          Email <span className="text-destructive">*</span>
-        </Label>
+        <Label htmlFor="c-email">Email</Label>
         <Input
           id="c-email"
           type="email"
