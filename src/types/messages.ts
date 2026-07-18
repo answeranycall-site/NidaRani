@@ -54,6 +54,10 @@ export interface MessageDoc {
    * server-side and proxies the authenticated fetch.
    */
   mediaUrls?: string[] | null;
+  /** Parallel array to mediaUrls — each attachment's MIME type (from
+   *  Twilio's MediaContentType0..N), so the thread can pick <img> / <video>
+   *  / <audio> without an extra round trip to sniff the type. */
+  mediaContentTypes?: string[] | null;
   createdAt: Timestamp | FieldValue | null;
   /**
    * Set when a sub-account user opens the contact's Messages tab. Used to

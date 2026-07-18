@@ -334,6 +334,7 @@ function ChannelBubble({
     native && isOutbound && message.channel === "whatsapp" &&
     message.status !== "failed";
   const mediaUrls = message.mediaUrls;
+  const mediaContentTypes = message.mediaContentTypes;
 
   return (
     <div className={cn("flex flex-col", isOutbound ? "items-end" : "items-start")}>
@@ -346,18 +347,50 @@ function ChannelBubble({
       >
         {mediaUrls && mediaUrls.length > 0 && (
           <div className="mb-1 flex flex-col gap-1.5">
-            {mediaUrls.map((_, i) => (
+            {mediaUrls.map((_, i) => {
               // Never render the raw Twilio URL directly — it requires
               // Basic Auth the browser can't send. This proxy route
               // re-reads the URL server-side and streams the bytes.
-              <img
-                key={i}
-                src={`/api/comms/media/${contactId}/${message.id}?i=${i}`}
-                alt="Attachment"
-                className="max-h-64 w-auto rounded-lg object-contain"
-                loading="lazy"
-              />
-            ))}
+              const src = `/api/comms/media/${contactId}/${message.id}?i=${i}`;
+              const type = mediaContentTypes?.[i] ?? "";
+              if (type.startsWith("video/")) {
+                return (
+                  <video
+                    key={i}
+                    src={src}
+                    controls
+                    className="max-h-64 w-auto rounded-lg"
+                  />
+                );
+              }
+              if (type.startsWith("audio/")) {
+                return <audio key={i} src={src} controls className="w-full" />;
+              }
+              if (type && !type.startsWith("image/")) {
+                // Unrecognized attachment type (vCard, PDF, etc) — a plain
+                // download link rather than a broken <img>.
+                return (
+                  <a
+                    key={i}
+                    href={src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2"
+                  >
+                    Download attachment
+                  </a>
+                );
+              }
+              return (
+                <img
+                  key={i}
+                  src={src}
+                  alt="Attachment"
+                  className="max-h-64 w-auto rounded-lg object-contain"
+                  loading="lazy"
+                />
+              );
+            })}
           </div>
         )}
         {message.body && (

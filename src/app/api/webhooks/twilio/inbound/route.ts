@@ -168,20 +168,32 @@ export async function POST(request: Request) {
   const messageSid = (params["MessageSid"] as string | undefined) ?? "";
   const from = normalisePhone(fromRaw);
   const to = normalisePhone(toRaw);
-  // MMS attachments (images, gifs, etc). Twilio sends NumMedia + one
-  // MediaUrl{n} per attachment; the URLs require Twilio Basic Auth to fetch,
-  // so we only store them here — rendering goes through an authenticated
-  // proxy route, never a direct <img src>.
+  // MMS attachments — images, gifs, videos, voice memos (audio). Twilio
+  // sends NumMedia + one MediaUrl{n}/MediaContentType{n} pair per
+  // attachment; the URLs require Twilio Basic Auth to fetch, so we only
+  // store them here — rendering goes through an authenticated proxy
+  // route, never a direct <img src>. Content type is stored alongside so
+  // the thread can pick <img>/<video>/<audio> without an extra round trip.
   const numMedia = Number.parseInt(params["NumMedia"] ?? "0", 10) || 0;
   const mediaUrls: string[] = [];
+  const mediaContentTypes: string[] = [];
   for (let i = 0; i < numMedia; i++) {
     const url = params[`MediaUrl${i}`];
-    if (url) mediaUrls.push(url);
+    if (url) {
+      mediaUrls.push(url);
+      mediaContentTypes.push(params[`MediaContentType${i}`] ?? "");
+    }
   }
   // Previews (conversation list + activity timeline) show the literal body,
-  // which is often empty for an image/gif-only MMS — fall back to a label.
-  const previewBody =
-    bodyRaw || (mediaUrls.length ? `📷 ${mediaUrls.length > 1 ? "Photos" : "Photo"}` : "");
+  // which is often empty for a media-only MMS — fall back to a label keyed
+  // off the first attachment's content type.
+  function mediaPreviewLabel(): string {
+    const type = mediaContentTypes[0] ?? "";
+    if (type.startsWith("video/")) return "🎥 Video";
+    if (type.startsWith("audio/")) return "🎤 Voice message";
+    return mediaUrls.length > 1 ? "📷 Photos" : "📷 Photo";
+  }
+  const previewBody = bodyRaw || (mediaUrls.length ? mediaPreviewLabel() : "");
 
   const route = await resolveRoute(to);
   if (!route) {
@@ -275,6 +287,7 @@ export async function POST(request: Request) {
             error: null,
             readAt: null,
             mediaUrls: mediaUrls.length ? mediaUrls : null,
+            mediaContentTypes: mediaUrls.length ? mediaContentTypes : null,
             createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true }, // Twilio retries on the same MessageSid → idempotent
@@ -361,6 +374,7 @@ export async function POST(request: Request) {
             error: null,
             readAt: null,
             mediaUrls: mediaUrls.length ? mediaUrls : null,
+            mediaContentTypes: mediaUrls.length ? mediaContentTypes : null,
             createdAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
