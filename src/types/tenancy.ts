@@ -214,6 +214,16 @@ export interface SubAccountDoc {
    */
   sharedSmsAllowed?: boolean;
   /**
+   * Every distinct tag value ever accepted for this sub-account's contacts
+   * — the source of truth lib/contacts/tag-registry.ts checks to enforce
+   * MAX_TAGS_PER_SUBACCOUNT (7). Reusing an already-registered tag on any
+   * number of contacts is always free; only introducing a NEW tag value
+   * consumes a slot. Only two write paths currently enforce the cap (the
+   * contact-edit form + the Workflow Builder add_tag node) — see that
+   * file's header comment for what's out of scope.
+   */
+  tagRegistry?: string[];
+  /**
    * Per-feature "hide instead of lock" overrides for the sidebar-gated features
    * (Broadcasts, Website, Social Planner, Community). They ONLY take effect when
    * the matching `*EnabledByAgency` gate is off. Default behavior (field

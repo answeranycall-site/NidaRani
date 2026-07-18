@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { fireWorkflowTrigger } from "@/lib/workflows/engine";
+import { reserveTags } from "@/lib/contacts/tag-registry";
 import {
   serializeContactForApi,
   type ContactApiObject,
@@ -62,6 +63,10 @@ export interface CreateContactInput {
 export interface ContactWriteResult {
   id: string;
   contact: ContactApiObject;
+  /** Tag values dropped from the patch because they'd exceed the
+   *  sub-account's MAX_TAGS_PER_SUBACCOUNT cap — see lib/contacts/
+   *  tag-registry.ts. Empty/absent when nothing was blocked. */
+  blockedTags?: string[];
 }
 
 /**
@@ -167,8 +172,25 @@ export async function updateContactServerSide(opts: {
   const existing = snap.data()!;
   const mode = opts.mode ?? (existing.mode as Mode) ?? "live";
 
+  // Cap distinct tag values per sub-account (MAX_TAGS_PER_SUBACCOUNT) — a
+  // tag already registered for this sub-account (on this contact or any
+  // other) is always free; a brand-new value only goes through while
+  // there's room. Blocked values are silently dropped from the write
+  // (fail-soft, matches this codebase's convention elsewhere) and
+  // reported back via `blockedTags` so the caller can surface it.
+  let blockedTags: string[] | undefined;
+  const patch = { ...opts.patch };
+  if (patch.tags) {
+    const { allowed, blocked } = await reserveTags(
+      existing.subAccountId,
+      patch.tags,
+    );
+    patch.tags = allowed;
+    if (blocked.length > 0) blockedTags = blocked;
+  }
+
   await ref.set(
-    { ...opts.patch, updatedAt: FieldValue.serverTimestamp() },
+    { ...patch, updatedAt: FieldValue.serverTimestamp() },
     { merge: true },
   );
 
@@ -184,9 +206,9 @@ export async function updateContactServerSide(opts: {
   });
   // contact.tag.added fires once per update when the patch introduces a new
   // tag (replace-semantics patch → diff against the pre-update tags).
-  if (mode === "live" && opts.patch.tags) {
+  if (mode === "live" && patch.tags) {
     const oldTags: string[] = Array.isArray(existing.tags) ? existing.tags : [];
-    const added = opts.patch.tags.filter((t) => !oldTags.includes(t));
+    const added = patch.tags.filter((t) => !oldTags.includes(t));
     if (added.length > 0) {
       void fireWorkflowTrigger({
         subAccountId: existing.subAccountId,
@@ -198,7 +220,7 @@ export async function updateContactServerSide(opts: {
     }
   }
 
-  return { id: ref.id, contact };
+  return { id: ref.id, contact, ...(blockedTags ? { blockedTags } : {}) };
 }
 
 /**

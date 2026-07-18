@@ -116,7 +116,10 @@ export async function PATCH(
   if (!result) {
     return NextResponse.json({ error: "Contact not found" }, { status: 404 });
   }
-  return NextResponse.json({ contact: result.contact });
+  return NextResponse.json({
+    contact: result.contact,
+    ...(result.blockedTags ? { blockedTags: result.blockedTags } : {}),
+  });
 }
 
 export async function DELETE(

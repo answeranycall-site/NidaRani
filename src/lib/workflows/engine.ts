@@ -19,6 +19,7 @@ import {
 } from "@/lib/automations/merge-tags";
 import { buildUnsubscribeUrl } from "@/lib/automations/unsubscribe-token";
 import { publishCallback, qstashIsConfigured } from "@/lib/automations/qstash";
+import { reserveTags } from "@/lib/contacts/tag-registry";
 import { evalConditionGroup } from "./conditions";
 import type { Contact } from "@/types/contacts";
 import type { AgencyDoc, SubAccountDoc } from "@/types";
@@ -248,6 +249,14 @@ const execGoal: NodeExecutor = async () => ({
 const execAddTag: NodeExecutor = async (ctx) => {
   const tag = ((ctx.node.config as unknown as TagConfig).tag ?? "").trim();
   if (!tag) return { result: { kind: "next" }, log: "skipped:no_tag" };
+  // Cap distinct tag values per sub-account (MAX_TAGS_PER_SUBACCOUNT) — an
+  // already-registered tag is always free; a brand-new one only goes
+  // through while there's room. Blocked = fail soft, skip this node rather
+  // than fail the whole run.
+  const { allowed } = await reserveTags(ctx.subAccountId, [tag]);
+  if (allowed.length === 0) {
+    return { result: { kind: "next" }, log: `skipped:tag_cap_reached:${tag}` };
+  }
   await getAdminDb()
     .doc(`contacts/${ctx.contact.id}`)
     .update({

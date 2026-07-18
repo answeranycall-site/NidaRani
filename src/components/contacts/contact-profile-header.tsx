@@ -116,6 +116,14 @@ export function ContactProfileHeader({ contact }: { contact: Contact }) {
       toast.error(payload.error ?? "Couldn't update contact.");
       return;
     }
+    const updatePayload = (await res.json().catch(() => ({}))) as {
+      blockedTags?: string[];
+    };
+    if (updatePayload.blockedTags?.length) {
+      toast.warning(
+        `This sub-account already has 7 tags in use — not added: ${updatePayload.blockedTags.join(", ")}`,
+      );
+    }
 
     const territoryChanged =
       scopingOn &&
