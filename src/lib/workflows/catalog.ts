@@ -29,6 +29,7 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
   update_field: "Update field",
   create_task: "Create task",
   notify: "Internal notification",
+  notify_owner_sms: "Text the owner",
   webhook: "Webhook",
 };
 
@@ -44,6 +45,7 @@ export const NODE_REQUIREMENT: Partial<Record<WorkflowNodeType, NodeRequirement>
     send_email: "email",
     notify: "email",
     send_sms: "sms",
+    notify_owner_sms: "sms",
     whatsapp_template: "whatsapp",
   };
 
@@ -59,6 +61,7 @@ export const ADDABLE_TYPES: WorkflowNodeType[] = [
   "update_field",
   "create_task",
   "notify",
+  "notify_owner_sms",
   "webhook",
   "if_else",
   "goal",
@@ -98,6 +101,8 @@ export function defaultConfig(type: WorkflowNodeType): Record<string, unknown> {
       return { title: "", dueInDays: 1 };
     case "notify":
       return { recipient: "owner", to: "", subject: "", body: "" };
+    case "notify_owner_sms":
+      return { body: "" };
     case "webhook":
       return { url: "" };
     default:
@@ -136,6 +141,8 @@ export function nodeSummary(step: BuilderStep): string {
       return (c.title as string) || "Untitled task";
     case "notify":
       return (c.subject as string) || (c.to as string) || "Notification";
+    case "notify_owner_sms":
+      return (c.body as string)?.slice(0, 60) || "No message yet";
     case "webhook":
       return (c.url as string) || "No URL yet";
     case "goal":

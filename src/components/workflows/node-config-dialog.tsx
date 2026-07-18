@@ -331,6 +331,19 @@ export function NodeConfigDialog({
             </>
           )}
 
+          {step.type === "notify_owner_sms" && (
+            <Field
+              label="Message"
+              hint="Sent as an SMS to the business owner's phone (Settings → Admin → Account contact) — not the contact/lead. Plain text, no merge tags."
+            >
+              <Textarea
+                rows={3}
+                value={str("body")}
+                onChange={(e) => set({ body: e.target.value })}
+              />
+            </Field>
+          )}
+
           {step.type === "webhook" && (
             <Field label="POST URL">
               <Input

@@ -266,5 +266,23 @@ export async function handleMissedCall(input: {
     `Missed call from ${from}. Auto-text sent: "${bodyText}"`,
   );
 
+  // Best-effort heads-up to the business owner — same fixed-recipient
+  // pattern as the Workflow Builder's notify_owner_sms node (accountContact
+  // .phone, not the caller). A failure here can't undo the text-back the
+  // caller already received, so it never affects the return value.
+  const ownerPhone = subAccount.accountContact?.phone?.trim();
+  if (ownerPhone) {
+    try {
+      await sendSmsForSubAccount({
+        subAccountId,
+        subAccount,
+        to: ownerPhone,
+        body: `AnswerAnyCall just texted back a missed call from ${from} so you didn't lose that lead.`,
+      });
+    } catch (err) {
+      console.warn("[mctb] owner notification send failed", err);
+    }
+  }
+
   return { handled: true, contactId, smsSid };
 }

@@ -29,6 +29,7 @@ import type {
   IfElseConfig,
   MoveStageConfig,
   NotifyConfig,
+  NotifyOwnerSmsConfig,
   SendEmailConfig,
   SendSmsConfig,
   TagConfig,
@@ -393,6 +394,37 @@ const execNotify: NodeExecutor = async (ctx) => {
   }
 };
 
+const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
+  const cfg = ctx.node.config as unknown as NotifyOwnerSmsConfig;
+  const to = ctx.subAccount?.accountContact?.phone?.trim();
+  if (!to) return { result: { kind: "next" }, log: "skipped:no_owner_phone" };
+  const body = (cfg.body ?? "").trim();
+  if (!body) return { result: { kind: "next" }, log: "skipped:no_body" };
+  // Same resolution send_sms uses — dedicated Twilio when configured, else
+  // the shared env creds if the agency still permits it.
+  const hasSms =
+    subAccountTwilioIsConfigured(ctx.subAccount?.twilioConfig) ||
+    (smsIsConfigured() &&
+      (await agencyAllowsSharedSms(ctx.subAccount?.agencyId)));
+  if (!hasSms) {
+    return { result: { kind: "next" }, log: "error:sms_not_configured" };
+  }
+  try {
+    await sendSmsForSubAccount({
+      subAccountId: ctx.subAccountId,
+      subAccount: ctx.subAccount,
+      to,
+      body,
+    });
+    return { result: { kind: "next" }, log: "ok" };
+  } catch (err) {
+    return {
+      result: { kind: "next" },
+      log: `error:${err instanceof Error ? err.message : "send_failed"}`,
+    };
+  }
+};
+
 const execWebhook: NodeExecutor = async (ctx) => {
   const url = ((ctx.node.config as unknown as WebhookConfig).url ?? "").trim();
   if (!/^https?:\/\//i.test(url)) {
@@ -457,6 +489,7 @@ const REGISTRY: Partial<Record<WorkflowNodeType, NodeExecutor>> = {
   update_field: execUpdateField,
   create_task: execCreateTask,
   notify: execNotify,
+  notify_owner_sms: execNotifyOwnerSms,
   webhook: execWebhook,
 };
 

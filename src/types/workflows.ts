@@ -67,6 +67,7 @@ export type WorkflowNodeType =
   | "update_field"
   | "create_task"
   | "notify"
+  | "notify_owner_sms"
   | "webhook";
 
 export interface WorkflowNode {
@@ -183,4 +184,15 @@ export interface NotifyConfig {
 }
 export interface WebhookConfig {
   url: string;
+}
+/**
+ * Sends a plain-text SMS to the business OWNER (subAccount.accountContact
+ * .phone), not the contact/lead — an internal heads-up, not a customer-
+ * facing message. No merge tags: unlike send_sms/notify, this is meant for
+ * short fixed copy an operator types once ("we just texted back a missed
+ * call from..."). Reuses the same Twilio send path as send_sms, just with
+ * a fixed recipient instead of contact.phone.
+ */
+export interface NotifyOwnerSmsConfig {
+  body: string;
 }
