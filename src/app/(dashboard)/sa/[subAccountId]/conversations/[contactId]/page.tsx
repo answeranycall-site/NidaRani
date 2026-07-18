@@ -83,10 +83,21 @@ export default function ConversationDetailPage() {
   useEffect(() => {
     if (authLoading || !user || !contactId) return;
     setLoading(true);
-    const unsubContact = subscribeToContact(contactId, (c) => {
-      setContact(c);
-      setLoading(false);
-    });
+    const unsubContact = subscribeToContact(
+      contactId,
+      (c) => {
+        setContact(c);
+        setLoading(false);
+      },
+      (err) => {
+        // A denied/failed read shouldn't hang the page on "Loading
+        // conversation…" forever — treat it the same as "no such
+        // contact" (the Unknown Person state) rather than a dead end.
+        console.error("[conversations] contact subscription failed", err);
+        setContact(null);
+        setLoading(false);
+      },
+    );
     const unsubConv = subscribeToConversation(contactId, setConversation);
     return () => {
       unsubContact();

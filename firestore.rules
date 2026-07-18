@@ -589,7 +589,20 @@ service cloud.firestore {
       // see contacts whose `territoryId` is in their assigned list (or
       // the contact has a territory at all). Admins/owners + sub-accounts
       // with scoping off are unaffected.
-      allow read: if canSeeScopedDoc(
+      //
+      // `resource == null ||` guards a GET on a contactId that has no
+      // parent doc at all — "Unknown person" conversations (an inbound
+      // number with no matching Contact) only ever create a `messages`
+      // subcollection under contacts/{pseudoId}, never the parent doc
+      // itself. Without this guard, `resource.data` dereferences null,
+      // the rule evaluation throws, and Firestore treats that as a
+      // permission-denied — the client's onSnapshot then errors instead
+      // of cleanly resolving "doesn't exist", so a page with no onError
+      // handler (e.g. the Conversations detail page) gets stuck on a
+      // loading state forever instead of showing the "Unknown person"
+      // empty state. A nonexistent doc has nothing to leak, so allowing
+      // the read here is safe for any caller.
+      allow read: if resource == null || canSeeScopedDoc(
         resource.data.subAccountId,
         resource.data.agencyId,
         resource.data.get("territoryId", null)

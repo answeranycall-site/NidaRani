@@ -1,19 +1,31 @@
-<svg width="64" height="64" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="ls-1" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#7c3aed"/>
-    </linearGradient>
-    <linearGradient id="ls-2" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#8b5cf6"/>
-      <stop offset="100%" stop-color="#a855f7"/>
-    </linearGradient>
-    <linearGradient id="ls-3" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#c026d3"/>
-      <stop offset="100%" stop-color="#ec4899"/>
-    </linearGradient>
-  </defs>
-  <path d="M 56 8 L 18 8 L 8 16 L 18 24 L 56 24 Z" fill="url(#ls-1)"/>
-  <path d="M 8 28 L 46 28 L 56 36 L 46 44 L 8 44 Z" fill="url(#ls-2)"/>
-  <path d="M 56 48 L 18 48 L 8 56 L 18 60 L 56 60 Z" fill="url(#ls-3)"/>
+<svg width="64" height="64" viewBox="0 0 110 88" xmlns="http://www.w3.org/2000/svg">
+  <!-- Answer Any Call — phone receiver + EKG heartbeat waveform (matches
+       public/logo.svg + components/brand/logo-mark.tsx). Browser-tab icon;
+       previously still the unrebranded vendor LeadStack chevron mark. -->
+  <path fill="#1B3A6B" d="
+    M8 22
+    C8 14 14 8 22 8
+    L28 8
+    C32 8 36 11 37 15
+    L39 25
+    C40 29 38 34 34 35
+    L31 37
+    C34 46 42 54 51 57
+    L53 54
+    C55 50 59 48 63 49
+    L73 52
+    C77 53 80 57 80 62
+    L80 68
+    C80 76 74 82 66 82
+    C38 82 8 52 8 24
+    Z
+  "/>
+  <path
+    d="M54 40 L63 40 L67 25 L74 55 L79 33 L84 46 L91 40 L104 40"
+    stroke="#29B6E2"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
 </svg>
