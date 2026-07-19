@@ -174,6 +174,7 @@ export async function POST(request: Request) {
       websiteEnabledByAgency: false,
       communityEnabledByAgency: false,
       missedCallTextBackEnabledByAgency: false,
+      googleReviewsSyncEnabledByAgency: false,
       metaConfig: null,
       bookingConfig: null,
       sendWindow: null,

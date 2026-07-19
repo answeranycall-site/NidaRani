@@ -2,6 +2,7 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { metaAppConfigured } from "@/lib/comms/meta";
+import { googleBusinessAppConfigured } from "@/lib/comms/google-business/oauth";
 import { emailIsConfigured } from "@/lib/comms/resend";
 import { smsIsConfigured } from "@/lib/comms/twilio";
 
@@ -30,5 +31,8 @@ export async function GET(request: Request) {
     // dedicated Twilio (checked client-side from twilioConfig), so the builder
     // ORs this with the per-sub-account config.
     smsConfigured: smsIsConfigured(),
+    // GOOGLE_BUSINESS_CLIENT_ID + GOOGLE_BUSINESS_CLIENT_SECRET present —
+    // required to enable Google Reviews Sync.
+    googleBusinessConfigured: googleBusinessAppConfigured(),
   });
 }

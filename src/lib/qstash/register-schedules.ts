@@ -54,6 +54,13 @@ const SCHEDULES: ScheduleSpec[] = [
     description:
       "Daily sweep of expired apiRequestLogs / apiIdempotency / webhookEvents.",
   },
+  {
+    scheduleId: "leadstack-google-reviews-sync",
+    path: "/api/cron/google-reviews-sync",
+    cron: "0 5 * * *",
+    description:
+      "Daily Google Reviews Sync for every connected sub-account + owner SMS on new reviews.",
+  },
 ];
 
 const MARKER_PATH = "system/scheduleRegistration";

@@ -28,6 +28,7 @@ import {
   MessagesSquare,
   Share2,
   GraduationCap,
+  Star,
 } from "lucide-react";
 import { getFirebaseDb } from "@/lib/firebase/client";
 import { signOutUser } from "@/lib/firebase/auth";
@@ -96,6 +97,7 @@ const SUB_ACCOUNT_NAV: NavItem[] = [
     icon: GraduationCap,
     enabled: true,
   },
+  { href: "/reviews", label: "Reviews", icon: Star, enabled: true },
   { href: "/reports", label: "Reports", icon: BarChart3, enabled: true },
   { href: "/logs", label: "Logs", icon: ScrollText, enabled: true },
   {
@@ -135,6 +137,7 @@ function SidebarContent() {
   const [websiteGate, setWebsiteGate] = useState<boolean | null>(null);
   const [socialGate, setSocialGate] = useState<boolean | null>(null);
   const [communityGate, setCommunityGate] = useState<boolean | null>(null);
+  const [reviewsGate, setReviewsGate] = useState<boolean | null>(null);
   // Per-feature "hide instead of lock" overrides. Only consulted when the
   // matching gate is off — when true the entry is omitted entirely instead of
   // rendering a greyed "Locked" row, so the tenant never knows it exists.
@@ -149,6 +152,7 @@ function SidebarContent() {
       setWebsiteGate(null);
       setSocialGate(null);
       setCommunityGate(null);
+      setReviewsGate(null);
       return;
     }
     return onSnapshot(
@@ -159,6 +163,7 @@ function SidebarContent() {
         setWebsiteGate(data?.websiteEnabledByAgency === true);
         setSocialGate(data?.socialPlannerEnabledByAgency === true);
         setCommunityGate(data?.communityEnabledByAgency === true);
+        setReviewsGate(data?.googleReviewsSyncEnabledByAgency === true);
         setBroadcastsHidden(data?.broadcastsHiddenWhenDisabled === true);
         setWebsiteHidden(data?.websiteHiddenWhenDisabled === true);
         setSocialHidden(data?.socialPlannerHiddenWhenDisabled === true);
@@ -169,6 +174,7 @@ function SidebarContent() {
         setWebsiteGate(null);
         setSocialGate(null);
         setCommunityGate(null);
+        setReviewsGate(null);
       },
     );
   }, [activeSubId, memberships]);
@@ -299,7 +305,8 @@ function SidebarContent() {
                 (item.href === "/broadcasts" && broadcastsGate === false) ||
                 (item.href === "/website" && websiteGate === false) ||
                 (item.href === "/social" && socialGate === false) ||
-                (item.href === "/community" && communityGate === false);
+                (item.href === "/community" && communityGate === false) ||
+                (item.href === "/reviews" && reviewsGate === false);
               // When the agency owner opted to hide (not just lock) a disabled
               // feature, omit the entry entirely so the tenant never sees it.
               const gateHidden =

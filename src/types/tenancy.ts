@@ -200,6 +200,21 @@ export interface SubAccountDoc {
    */
   missedCallTextBackEnabledByAgency?: boolean;
   /**
+   * Agency-controlled gate for Google Reviews Sync — pulling the sub-account's
+   * actual Google Business Profile reviews (business info + review feed) into
+   * the CRM and texting the owner when a new review lands. Only the agency
+   * owner can flip it (PATCH /api/agency/sub-accounts/[id]/feature-gates).
+   * When `false` (or undefined on legacy docs): the Reviews sidebar entry
+   * renders a "Locked by your agency" state and the connect/sync routes 403.
+   * No tear-down on disable — the connected Google account + synced reviews
+   * are preserved, so re-enabling resumes instantly. Requires
+   * `GOOGLE_BUSINESS_CLIENT_ID`/`GOOGLE_BUSINESS_CLIENT_SECRET` on the
+   * deployment AND Google's own approval of the `business.manage` scope for
+   * production use — see lib/comms/google-business/oauth.ts. Defaults to
+   * `false` at creation (explicit allowlist). Read `=== true`.
+   */
+  googleReviewsSyncEnabledByAgency?: boolean;
+  /**
    * Agency-controlled gate — the INVERSE polarity of the other gates above.
    * Defaults to `true` (undefined reads as allowed) so every sub-account can
    * ride the agency's shared/env-var Twilio sender out of the box. Setting
@@ -293,6 +308,15 @@ export interface SubAccountDoc {
    * after payment or on demand). Optional — legacy/undefined reads as off.
    */
   googleReviewConfig?: GoogleReviewConfig | null;
+  /**
+   * Google Business Profile OAuth connection (Google Reviews Sync). Null/
+   * undefined until the sub-account admin connects a Google account (only
+   * possible when `googleReviewsSyncEnabledByAgency` is on). Distinct from
+   * `googleReviewConfig` above, which just stores a review-REQUEST link —
+   * this is the two-way connection that reads actual reviews back. See
+   * {@link GoogleBusinessConfig}.
+   */
+  googleBusinessConfig?: GoogleBusinessConfig | null;
   /**
    * Public https URL of this sub-account's brand logo. Renders on
    * quote/invoice emails, public /q/[token] pages, and PDFs — the
@@ -507,6 +531,45 @@ export interface MetaConfig {
    * card to gain posting). Reconnecting always refreshes this.
    */
   capabilities?: { inbox: boolean; publish: boolean };
+  connectedByUid: string | null;
+  connectedAt: Timestamp | FieldValue | null;
+}
+
+/**
+ * Google Business Profile OAuth connection (Google Reviews Sync). Populated
+ * by /api/google-business/callback after the sub-account admin connects a
+ * Google account. Only possible when `googleReviewsSyncEnabledByAgency` is
+ * on. Powers `subAccounts/{id}/googleReviews/{reviewId}` — the synced review
+ * feed — via a scheduled poll (Google Business Profile has no review
+ * webhook; see lib/comms/google-business/sync.ts).
+ */
+export interface GoogleBusinessConfig {
+  /** Google Business Profile account id (from accounts.list). */
+  accountId: string;
+  /** Location (single-branch business = one location) id, the review parent. */
+  locationId: string;
+  /** Business name as it reads on the Business Profile, shown in the UI. */
+  locationName: string;
+  address: string | null;
+  phone: string | null;
+  websiteUri: string | null;
+  /** Deep link to the public Google Maps listing, for a "View on Google Maps" button. */
+  mapsUri: string | null;
+  /**
+   * OAuth refresh token — long-lived, used to mint fresh access tokens for
+   * every sync. Stored in Firestore like `TwilioConfig.authToken`; never
+   * displayed back to the operator.
+   */
+  refreshToken: string;
+  /** Short-lived access token cached between syncs so we don't refresh on every call. */
+  accessToken: string;
+  accessTokenExpiresAt: Timestamp | FieldValue | Date | null;
+  /** Last review-sync snapshot, denormalized for the Reviews page header. */
+  averageRating: number | null;
+  totalReviewCount: number | null;
+  lastSyncedAt: Timestamp | FieldValue | Date | null;
+  /** Set on a failed sync so the UI can surface it; cleared on the next success. */
+  lastSyncError: string | null;
   connectedByUid: string | null;
   connectedAt: Timestamp | FieldValue | null;
 }

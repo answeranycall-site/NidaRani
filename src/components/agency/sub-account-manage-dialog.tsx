@@ -16,6 +16,7 @@ import {
   Share2,
   GraduationCap,
   ShieldAlert,
+  Star,
 } from "lucide-react";
 import {
   Dialog,
@@ -65,6 +66,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const initialCommunity = subAccount?.communityEnabledByAgency === true;
   const initialMissedCall =
     subAccount?.missedCallTextBackEnabledByAgency === true;
+  const initialGoogleReviews =
+    subAccount?.googleReviewsSyncEnabledByAgency === true;
   // Inverse polarity — checked means "require own Twilio" (sharedSmsAllowed
   // === false), unchecked (default) means shared mode stays available.
   const initialRequireOwnTwilio = subAccount?.sharedSmsAllowed === false;
@@ -89,6 +92,9 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     useState(initialSocial);
   const [communityEnabled, setCommunityEnabled] = useState(initialCommunity);
   const [missedCallEnabled, setMissedCallEnabled] = useState(initialMissedCall);
+  const [googleReviewsEnabled, setGoogleReviewsEnabled] = useState(
+    initialGoogleReviews,
+  );
   const [requireOwnTwilio, setRequireOwnTwilio] = useState(
     initialRequireOwnTwilio,
   );
@@ -105,18 +111,30 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   // loading. The FB/IG inbox + Social Planner gates depend on it, so they're
   // grayed out when it's false. Fetched once when the dialog first opens.
   const [metaConfigured, setMetaConfigured] = useState<boolean | null>(null);
+  // Whether the deployment has Google OAuth creds (GOOGLE_BUSINESS_CLIENT_ID/
+  // SECRET). Same gray-out treatment as metaConfigured above.
+  const [googleBusinessConfigured, setGoogleBusinessConfigured] = useState<
+    boolean | null
+  >(null);
 
   useEffect(() => {
     if (!open || metaConfigured !== null) return;
     let cancelled = false;
     void fetch("/api/agency/deployment-config")
       .then((r) => r.json())
-      .then((d: { metaConfigured?: boolean }) => {
-        if (!cancelled) setMetaConfigured(d.metaConfigured === true);
-      })
+      .then(
+        (d: { metaConfigured?: boolean; googleBusinessConfigured?: boolean }) => {
+          if (cancelled) return;
+          setMetaConfigured(d.metaConfigured === true);
+          setGoogleBusinessConfigured(d.googleBusinessConfigured === true);
+        },
+      )
       .catch(() => {
         // On failure, don't block the agency owner — assume configured.
-        if (!cancelled) setMetaConfigured(true);
+        if (!cancelled) {
+          setMetaConfigured(true);
+          setGoogleBusinessConfigured(true);
+        }
       });
     return () => {
       cancelled = true;
@@ -137,6 +155,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       setSocialPlannerEnabled(initialSocial);
       setCommunityEnabled(initialCommunity);
       setMissedCallEnabled(initialMissedCall);
+      setGoogleReviewsEnabled(initialGoogleReviews);
       setRequireOwnTwilio(initialRequireOwnTwilio);
       setBroadcastsHidden(initialBroadcastsHidden);
       setWebsiteHidden(initialWebsiteHidden);
@@ -155,6 +174,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialSocial,
     initialCommunity,
     initialMissedCall,
+    initialGoogleReviews,
     initialRequireOwnTwilio,
     initialBroadcastsHidden,
     initialWebsiteHidden,
@@ -177,6 +197,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const socialDirty = socialPlannerEnabled !== initialSocial;
   const communityDirty = communityEnabled !== initialCommunity;
   const missedCallDirty = missedCallEnabled !== initialMissedCall;
+  const googleReviewsDirty = googleReviewsEnabled !== initialGoogleReviews;
   const requireOwnTwilioDirty =
     requireOwnTwilio !== initialRequireOwnTwilio;
   const broadcastsHiddenDirty = broadcastsHidden !== initialBroadcastsHidden;
@@ -194,6 +215,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     socialDirty ||
     communityDirty ||
     missedCallDirty ||
+    googleReviewsDirty ||
     requireOwnTwilioDirty ||
     broadcastsHiddenDirty ||
     websiteHiddenDirty ||
@@ -204,6 +226,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   // two Meta gates when unconfigured — but still allow turning an already-on
   // gate OFF (don't trap a legacy enabled state).
   const metaUnconfigured = metaConfigured === false;
+  const googleBusinessUnconfigured = googleBusinessConfigured === false;
 
   async function handleSave() {
     if (!subAccount) return;
@@ -223,6 +246,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         socialPlannerEnabled?: boolean;
         communityEnabled?: boolean;
         missedCallTextBackEnabled?: boolean;
+        googleReviewsSyncEnabled?: boolean;
         sharedSmsAllowed?: boolean;
         broadcastsHiddenWhenDisabled?: boolean;
         websiteHiddenWhenDisabled?: boolean;
@@ -240,6 +264,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       if (communityDirty) payload.communityEnabled = communityEnabled;
       if (missedCallDirty)
         payload.missedCallTextBackEnabled = missedCallEnabled;
+      if (googleReviewsDirty)
+        payload.googleReviewsSyncEnabled = googleReviewsEnabled;
       if (requireOwnTwilioDirty)
         payload.sharedSmsAllowed = !requireOwnTwilio;
       if (broadcastsHiddenDirty)
@@ -340,6 +366,13 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
           missedCallEnabled
             ? "Missed Call Text Back enabled."
             : "Missed Call Text Back disabled. The sub-account can no longer re-enable it.",
+        );
+      }
+      if (googleReviewsDirty) {
+        parts.push(
+          googleReviewsEnabled
+            ? "Google Reviews Sync enabled."
+            : "Google Reviews Sync disabled. Connected account + synced reviews preserved.",
         );
       }
       if (requireOwnTwilioDirty) {
@@ -565,6 +598,32 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             calls itself). Disabling stops the sub-account re-enabling it; the
             sub-account&apos;s own toggle restores the number&apos;s prior voice
             settings.
+          </GateToggle>
+
+          <GateToggle
+            checked={googleReviewsEnabled}
+            onChange={setGoogleReviewsEnabled}
+            disabled={
+              saving || (googleBusinessUnconfigured && !initialGoogleReviews)
+            }
+            icon={<Star className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />}
+            title="Google Reviews Sync"
+          >
+            When enabled, this sub-account can connect its Google Business
+            Profile so its actual reviews (business info + review feed) show
+            up on a Reviews page inside the CRM, and the business owner gets
+            texted when a new review lands. Requires Google&apos;s approval of
+            the review-reading scope for production use, on top of the OAuth
+            creds below. Disabling locks the Reviews sidebar entry; the
+            connected account and synced reviews are preserved, so re-enabling
+            resumes instantly.
+            {googleBusinessUnconfigured && (
+              <span className="mt-1 block font-medium text-amber-600 dark:text-amber-400">
+                Unavailable — set <code>GOOGLE_BUSINESS_CLIENT_ID</code> and{" "}
+                <code>GOOGLE_BUSINESS_CLIENT_SECRET</code> on the deployment to
+                enable.
+              </span>
+            )}
           </GateToggle>
 
           <GateToggle

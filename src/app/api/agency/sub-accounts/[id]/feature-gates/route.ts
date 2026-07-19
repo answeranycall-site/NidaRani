@@ -6,6 +6,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountMember } from "@/lib/auth/require-tenancy";
 import { removeSendingDomain } from "@/lib/comms/resend-domains";
 import { metaAppConfigured } from "@/lib/comms/meta";
+import { googleBusinessAppConfigured } from "@/lib/comms/google-business/oauth";
 import type { ResendConfig } from "@/types";
 
 /**
@@ -42,6 +43,7 @@ interface PatchBody {
   socialPlannerEnabled?: boolean;
   communityEnabled?: boolean;
   missedCallTextBackEnabled?: boolean;
+  googleReviewsSyncEnabled?: boolean;
   // Inverse-polarity gate: true (default) = this sub-account may use the
   // agency's shared Twilio sender; false = it must bring its own dedicated
   // number. See SubAccountDoc.sharedSmsAllowed.
@@ -86,6 +88,7 @@ export async function PATCH(
   const wantsSocialPlanner = typeof body.socialPlannerEnabled === "boolean";
   const wantsCommunity = typeof body.communityEnabled === "boolean";
   const wantsMissedCall = typeof body.missedCallTextBackEnabled === "boolean";
+  const wantsGoogleReviews = typeof body.googleReviewsSyncEnabled === "boolean";
   const wantsSharedSms = typeof body.sharedSmsAllowed === "boolean";
   const wantsBroadcastsHidden =
     typeof body.broadcastsHiddenWhenDisabled === "boolean";
@@ -106,6 +109,7 @@ export async function PATCH(
     !wantsSocialPlanner &&
     !wantsCommunity &&
     !wantsMissedCall &&
+    !wantsGoogleReviews &&
     !wantsSharedSms &&
     !wantsBroadcastsHidden &&
     !wantsWebsiteHidden &&
@@ -115,7 +119,7 @@ export async function PATCH(
     return NextResponse.json(
       {
         error:
-          "At least one of `emailDomainEnabled`, `apiAccessEnabled`, `broadcastsEnabled`, `outboundVoiceEnabled`, `whatsappEnabled`, `metaInboxEnabled`, `websiteEnabled`, `socialPlannerEnabled`, `sharedSmsAllowed`, `broadcastsHiddenWhenDisabled`, `websiteHiddenWhenDisabled`, or `socialPlannerHiddenWhenDisabled` (boolean) is required.",
+          "At least one of `emailDomainEnabled`, `apiAccessEnabled`, `broadcastsEnabled`, `outboundVoiceEnabled`, `whatsappEnabled`, `metaInboxEnabled`, `websiteEnabled`, `socialPlannerEnabled`, `googleReviewsSyncEnabled`, `sharedSmsAllowed`, `broadcastsHiddenWhenDisabled`, `websiteHiddenWhenDisabled`, or `socialPlannerHiddenWhenDisabled` (boolean) is required.",
       },
       { status: 400 },
     );
@@ -132,6 +136,17 @@ export async function PATCH(
       {
         error:
           "Facebook/Instagram isn't configured on this deployment. Set META_APP_ID and META_APP_SECRET to enable the inbox or Social Planner.",
+      },
+      { status: 400 },
+    );
+  }
+
+  // Same guard for Google Reviews Sync — refuse to enable without OAuth creds.
+  if (body.googleReviewsSyncEnabled === true && !googleBusinessAppConfigured()) {
+    return NextResponse.json(
+      {
+        error:
+          "Google Reviews Sync isn't configured on this deployment. Set GOOGLE_BUSINESS_CLIENT_ID and GOOGLE_BUSINESS_CLIENT_SECRET to enable it.",
       },
       { status: 400 },
     );
@@ -248,6 +263,13 @@ export async function PATCH(
     updates.missedCallTextBackEnabledByAgency = body.missedCallTextBackEnabled;
   }
 
+  if (wantsGoogleReviews) {
+    // No tear-down — the connected Google account + synced reviews are
+    // preserved. Disabling just 403s the connect/sync routes and locks the
+    // Reviews sidebar entry; re-enabling resumes instantly.
+    updates.googleReviewsSyncEnabledByAgency = body.googleReviewsSyncEnabled;
+  }
+
   if (wantsSharedSms) {
     // No tear-down — this only affects future sends. A sub-account that's
     // been cut off from shared mode simply gets a friendly error until it
@@ -293,6 +315,9 @@ export async function PATCH(
     ...(wantsCommunity ? { communityEnabled: body.communityEnabled } : {}),
     ...(wantsMissedCall
       ? { missedCallTextBackEnabled: body.missedCallTextBackEnabled }
+      : {}),
+    ...(wantsGoogleReviews
+      ? { googleReviewsSyncEnabled: body.googleReviewsSyncEnabled }
       : {}),
     ...(wantsSharedSms ? { sharedSmsAllowed: body.sharedSmsAllowed } : {}),
     ...(wantsBroadcastsHidden

@@ -9,6 +9,7 @@ import {
   type ParsedFormRequest as _ParsedFormRequest,
 } from "@/lib/comms/ai/capture";
 import { linkSessionToContact } from "@/lib/comms/web-chat/session";
+import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
 
 /**
  * Web-chat capture surface — thin wrappers over the channel-agnostic
@@ -58,6 +59,17 @@ export async function reconcileContactFromCapture(
     capture: input.capture,
   });
   if (!result) return null;
+
+  // Visitor volunteered an email/phone but no name (e.g. skipped the name
+  // field on the inline capture form) — stamp "Lead chat #N" so it doesn't
+  // show up blank in the contact list / conversation inbox.
+  await applyLeadLabelIfUnnamed({
+    subAccountId: input.subAccountId,
+    contactId: result.contactId,
+    created: result.created,
+    currentName: input.capture.name,
+    kind: "chat",
+  });
 
   await linkSessionToContact({
     subAccountId: input.subAccountId,

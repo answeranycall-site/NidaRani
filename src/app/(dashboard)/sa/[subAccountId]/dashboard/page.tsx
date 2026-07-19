@@ -88,7 +88,9 @@ export default function DashboardPage() {
     };
   }, [user, agencyId, subAccountId, filterReady, territoryFilter]);
 
-  const displayName = (user?.displayName ?? user?.email ?? "").split("@")[0];
+  const displayName =
+    subAccount?.name ??
+    (user?.displayName ?? user?.email ?? "").split("@")[0];
 
   const openDeals = useMemo(
     () => deals.filter((d) => d.stageId !== "won" && d.stageId !== "lost"),

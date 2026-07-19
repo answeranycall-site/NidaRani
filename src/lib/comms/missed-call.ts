@@ -5,6 +5,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { reconcileContactFromCapture } from "@/lib/comms/ai/capture";
 import { sendSmsForSubAccount } from "@/lib/comms/twilio";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
 import type { MissedCallConfig, SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -162,6 +163,14 @@ export async function logAnsweredCall(input: {
     });
     if (!reconciled) return;
 
+    await applyLeadLabelIfUnnamed({
+      subAccountId,
+      contactId: reconciled.contactId,
+      created: reconciled.created,
+      currentName: null,
+      kind: "call",
+    });
+
     await getAdminDb()
       .collection(`contacts/${reconciled.contactId}/activities`)
       .add({
@@ -220,10 +229,25 @@ export async function handleMissedCall(input: {
   if (!reconciled) return { handled: false, reason: "reconcile_failed" };
   const contactId = reconciled.contactId;
 
-  // Load the contact for opt-out + merge context.
+  // Load the contact for opt-out + merge context. `firstName` (used to
+  // address the CALLER in the text-back) is derived from whatever name
+  // they already had BEFORE any lead-label gets applied below — a brand
+  // new caller should never be greeted "Hey Lead call #1".
   const contactSnap = await db.doc(`contacts/${contactId}`).get();
   const contact = contactSnap.data() as Contact | undefined;
   const firstName = (contact?.name ?? "").trim().split(/\s+/)[0] ?? "";
+
+  // Brand-new, still-nameless caller: stamp "Lead call #N" onto the contact
+  // so it shows up in the contact list / conversation inbox instead of
+  // blank. Used below for the conversation's denormalized contactName —
+  // never for addressing the caller themselves (see `firstName` above).
+  const contactDisplayName = await applyLeadLabelIfUnnamed({
+    subAccountId,
+    contactId,
+    created: reconciled.created,
+    currentName: contact?.name,
+    kind: "call",
+  });
 
   // Always log the missed call, even when we suppress the text (opt-out).
   const logActivity = async (content: string) => {
@@ -294,7 +318,7 @@ export async function handleMissedCall(input: {
       contactId,
       subAccountId,
       agencyId,
-      contactName: contact?.name ?? "",
+      contactName: contactDisplayName,
       contactPhone: contact?.phone ?? from,
       channel: "sms",
       direction: "outbound",

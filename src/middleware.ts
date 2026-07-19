@@ -27,6 +27,9 @@ const PUBLIC_PATHS = [
   // buyer doesn't need to click into the Firebase console — QStash is
   // already part of their onboarding. Signature-verified inside the route.
   "/api/cron/api-cleanup",
+  // Daily Google Reviews Sync sweep — QStash callback, signature-verified
+  // inside the route (same security model as the two cron paths above).
+  "/api/cron/google-reviews-sync",
   "/api/landing/metrics",
   "/api/landing/recent-purchases",
   // Live-visitors heartbeat ping for the agency dashboard's world map.
