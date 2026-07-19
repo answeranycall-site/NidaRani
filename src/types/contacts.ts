@@ -174,6 +174,17 @@ export interface Contact {
   /** Most recent 1-5 rating captured via the SMS rating-gate reply flow. */
   lastReviewRating?: number | null;
   /**
+   * Set by the Workflow Builder `review_rating_request` node right after it
+   * sends the "how many stars" ask, naming the paused workflowRun waiting on
+   * this contact's reply. When the rating gate (lib/reviews/rating-reply.ts)
+   * resolves a rating, it resumes this run immediately (via
+   * lib/workflows/engine.ts::resumeReviewRatingRun) instead of leaving it to
+   * the run's own 7-day timeout fallback. Not cleared on natural timeout —
+   * harmless once `awaitingReviewReplyAt` has itself expired, since that gate
+   * check runs first.
+   */
+  pendingReviewWorkflowRunId?: string | null;
+  /**
    * Page-scoped Meta user id (PSID / IGSID) for a contact who has messaged this
    * sub-account via the BETA Facebook Messenger / Instagram DM inbox. Server-
    * managed (stamped by /api/webhooks/meta on first inbound) and used to

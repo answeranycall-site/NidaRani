@@ -27,6 +27,7 @@ export async function resolveCustomBrand(): Promise<ResolvedBrand> {
     tagline: CUSTOM_BRAND.tagline,
     shortDescription: CUSTOM_BRAND.shortDescription,
     supportEmail: CUSTOM_BRAND.supportEmail,
+    phone: CUSTOM_BRAND.phone,
     primaryDomain: CUSTOM_BRAND.primaryDomain,
   };
 
@@ -51,6 +52,7 @@ export async function resolveCustomBrand(): Promise<ResolvedBrand> {
       tagline: fallback.tagline,
       shortDescription: fallback.shortDescription,
       supportEmail: agency.supportEmail || fallback.supportEmail,
+      phone: fallback.phone,
       primaryDomain: agency.primaryDomain || fallback.primaryDomain,
     };
   } catch {

@@ -68,6 +68,7 @@ export type WorkflowNodeType =
   | "create_task"
   | "notify"
   | "notify_owner_sms"
+  | "review_rating_request"
   | "webhook";
 
 export interface WorkflowNode {
@@ -196,3 +197,22 @@ export interface WebhookConfig {
 export interface NotifyOwnerSmsConfig {
   body: string;
 }
+/**
+ * Asks the contact to rate their experience 1-5 (SMS, dedicated Twilio only)
+ * instead of sending the Google review link directly. Reuses the sub-account's
+ * Settings → Messaging → "Review requests" config (review URL + templates) —
+ * this node has no config of its own. A reply of 4-5 gets the Google link; 1-3
+ * gets the configured internal-feedback message + a follow-up Task, and the
+ * Google link is never sent. The rating is read deterministically first (a
+ * literal 1-5 digit); a reply with no digit falls back to the same
+ * OpenRouter-backed sentiment classifier the Settings-driven rating gate
+ * already uses (see lib/reviews/rating-reply.ts) — same mechanism, not a
+ * separate AI conversation.
+ *
+ * The run pauses here (status "waiting") until the customer replies or 7 days
+ * elapse (whichever comes first — lib/reviews/constants.ts::RATING_REPLY_
+ * WINDOW_MS). The next node in the graph (typically `notify_owner_sms`) can
+ * reference `{{reviewRating}}` and `{{reviewOutcome}}`, populated once the
+ * reply resolves.
+ */
+export type ReviewRatingRequestConfig = Record<string, never>;

@@ -20,6 +20,7 @@ import {
   PencilLine,
   Plus,
   Smartphone,
+  Star,
   Tag,
   Trash2,
   Webhook,
@@ -87,6 +88,7 @@ const ICONS: Record<WorkflowNodeType, typeof Mail> = {
   create_task: CheckSquare,
   notify: Bell,
   notify_owner_sms: Smartphone,
+  review_rating_request: Star,
   webhook: Webhook,
 };
 

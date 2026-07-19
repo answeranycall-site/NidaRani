@@ -20,6 +20,8 @@ import {
 import { buildUnsubscribeUrl } from "@/lib/automations/unsubscribe-token";
 import { publishCallback, qstashIsConfigured } from "@/lib/automations/qstash";
 import { reserveTags } from "@/lib/contacts/tag-registry";
+import { maybeSendReviewRequest } from "@/lib/reviews/request";
+import { RATING_REPLY_WINDOW_MS } from "@/lib/reviews/constants";
 import { evalConditionGroup } from "./conditions";
 import type { Contact } from "@/types/contacts";
 import type { AgencyDoc, SubAccountDoc } from "@/types";
@@ -66,10 +68,15 @@ interface NodeContext {
   createdByUid: string;
   /**
    * The trigger context captured at enrollment (e.g. the submitted form's
-   * answers under `formData`). Carried on the run doc; surfaced here so the
-   * Webhook step can forward the form fields downstream.
+   * answers under `formData`), MERGED with anything a later external event
+   * stashed on the run (e.g. `reviewOutcome` from `resumeReviewRatingRun`).
+   * Carried on the run doc; surfaced here so the Webhook step can forward the
+   * form fields downstream, and `notify_owner_sms` can reference the outcome.
    */
   triggerContext: Record<string, unknown>;
+  /** The run's own id — needed by nodes that pause and get resumed by an
+   *  external event (e.g. `review_rating_request`) to correlate the resume. */
+  runId: string;
 }
 
 /** An executor returns the control-flow result + a short audit log string. */
@@ -394,11 +401,36 @@ const execNotify: NodeExecutor = async (ctx) => {
   }
 };
 
+/**
+ * Outcome stashed on `run.context.reviewOutcome` by `resumeReviewRatingRun`
+ * once a `review_rating_request` node's reply resolves. Absent means either
+ * no such node precedes this one, or the 7-day window lapsed with no reply.
+ */
+interface ReviewOutcome {
+  rating: number;
+  positive: boolean;
+}
+
+function resolveReviewTokens(body: string, ctx: NodeContext): string {
+  const outcome = ctx.triggerContext?.reviewOutcome as
+    | ReviewOutcome
+    | undefined;
+  const reviewRating = outcome ? String(outcome.rating) : "";
+  const reviewOutcome = outcome
+    ? outcome.positive
+      ? "positive — sent the Google review link"
+      : "negative — flagged internally, not sent to Google"
+    : "no reply yet (or no rating request on this workflow)";
+  return body
+    .replace(/\{\{\s*reviewRating\s*\}\}/g, reviewRating)
+    .replace(/\{\{\s*reviewOutcome\s*\}\}/g, reviewOutcome);
+}
+
 const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
   const cfg = ctx.node.config as unknown as NotifyOwnerSmsConfig;
   const to = ctx.subAccount?.accountContact?.phone?.trim();
   if (!to) return { result: { kind: "next" }, log: "skipped:no_owner_phone" };
-  const body = (cfg.body ?? "").trim();
+  const body = resolveReviewTokens((cfg.body ?? "").trim(), ctx);
   if (!body) return { result: { kind: "next" }, log: "skipped:no_body" };
   // Same resolution send_sms uses — dedicated Twilio when configured, else
   // the shared env creds if the agency still permits it.
@@ -423,6 +455,60 @@ const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
       log: `error:${err instanceof Error ? err.message : "send_failed"}`,
     };
   }
+};
+
+/**
+ * Sends the "how many stars" ask (reusing the sub-account's Settings →
+ * Messaging → Review requests config for the review URL + templates) and
+ * pauses the run — see ReviewRatingRequestConfig's doc comment for the full
+ * picture. Resumed early by `resumeReviewRatingRun` when the customer
+ * replies, or by its own long `wait` as a 7-day timeout fallback otherwise.
+ */
+const execReviewRatingRequest: NodeExecutor = async (ctx) => {
+  const contact = ctx.contact;
+  if (contact.smsOptedOut) {
+    return { result: { kind: "next" }, log: "skipped:opt_out" };
+  }
+  if (!contact.phone) {
+    return { result: { kind: "next" }, log: "skipped:no_phone" };
+  }
+  if (!ctx.subAccount?.googleReviewConfig?.reviewUrl) {
+    return {
+      result: { kind: "next" },
+      log: "error:review_url_not_configured",
+    };
+  }
+  if (!subAccountTwilioIsConfigured(ctx.subAccount?.twilioConfig)) {
+    return { result: { kind: "next" }, log: "error:dedicated_twilio_required" };
+  }
+
+  const res = await maybeSendReviewRequest({
+    subAccountId: ctx.subAccountId,
+    agencyId: ctx.agencyId,
+    contactId: contact.id,
+    trigger: "workflow",
+  });
+  if (!res.sent) {
+    return { result: { kind: "next" }, log: `skipped:${res.reason ?? "not_sent"}` };
+  }
+
+  // Correlate this contact's next inbound reply back to THIS run so
+  // lib/reviews/rating-reply.ts can resume it the moment they answer,
+  // instead of waiting out the full 7-day timeout below.
+  await getAdminDb()
+    .doc(`contacts/${contact.id}`)
+    .set(
+      {
+        pendingReviewWorkflowRunId: ctx.runId,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+  return {
+    result: { kind: "wait", seconds: Math.floor(RATING_REPLY_WINDOW_MS / 1000) },
+    log: "ok:awaiting_rating",
+  };
 };
 
 const execWebhook: NodeExecutor = async (ctx) => {
@@ -490,6 +576,7 @@ const REGISTRY: Partial<Record<WorkflowNodeType, NodeExecutor>> = {
   create_task: execCreateTask,
   notify: execNotify,
   notify_owner_sms: execNotifyOwnerSms,
+  review_rating_request: execReviewRatingRequest,
   webhook: execWebhook,
 };
 
@@ -708,6 +795,7 @@ export async function runStep(runId: string, nodeId: string): Promise<void> {
     agencyId: run.agencyId,
     createdByUid: wf.createdByUid,
     triggerContext: run.context ?? {},
+    runId,
   });
 
   const entry: WorkflowRunHistoryEntry = {
@@ -742,6 +830,43 @@ export async function runStep(runId: string, nodeId: string): Promise<void> {
     return;
   }
   await scheduleNode(runRef, target, delay);
+}
+
+/**
+ * Resume a run paused by `review_rating_request` as soon as the customer's
+ * rating reply resolves — called from lib/reviews/rating-reply.ts right after
+ * it determines the 1-5 rating, instead of leaving the run to its own 7-day
+ * timeout fallback. Stashes the outcome on `run.context.reviewOutcome` (read
+ * by `notify_owner_sms` via the `{{reviewRating}}` / `{{reviewOutcome}}`
+ * tokens) then advances the run one step immediately.
+ *
+ * Safe against the timeout racing in later: `runStep`'s own guards (run
+ * status must still be "running"/"waiting"; a nodeId already in `history` is
+ * a no-op) mean whichever of the two — this early resume, or the QStash
+ * timeout firing 7 days out — arrives first "wins"; the other becomes a
+ * harmless no-op. Never throws — a workflow problem can't break the
+ * customer-facing rating reply that triggered this.
+ */
+export async function resumeReviewRatingRun(
+  runId: string,
+  outcome: { rating: number; positive: boolean }
+): Promise<void> {
+  try {
+    const db = getAdminDb();
+    const runRef = db.collection("workflowRuns").doc(runId);
+    const runSnap = await runRef.get();
+    if (!runSnap.exists) return;
+    const run = runSnap.data() as WorkflowRunDoc;
+    if (run.status !== "waiting" || !run.currentNodeId) return;
+
+    await runRef.update({
+      context: { ...(run.context ?? {}), reviewOutcome: outcome },
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await runStep(runId, run.currentNodeId);
+  } catch (err) {
+    console.error("[workflows] resumeReviewRatingRun failed", err);
+  }
 }
 
 /** Manually enroll one contact to dry-run a workflow (ignores trigger/filters;

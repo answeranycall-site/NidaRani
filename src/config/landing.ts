@@ -43,6 +43,8 @@ export interface CustomBrand {
   tagline: string;
   shortDescription: string;
   supportEmail: string;
+  /** Public contact phone, E.164 (e.g. "+16158191829"). Shown in the footer. */
+  phone: string;
   primaryDomain: string;
   pricing: {
     starter: CustomPricingTier;
@@ -64,6 +66,7 @@ export interface ResolvedBrand {
   tagline: string;
   shortDescription: string;
   supportEmail: string;
+  phone: string;
   primaryDomain: string;
 }
 
@@ -89,6 +92,9 @@ export const CUSTOM_BRAND: CustomBrand = {
 
   /** Used on CTA buttons + the FAQ "talk to us" line + footer. */
   supportEmail: "info@answeranycall.com",
+
+  /** Public contact number, shown in the footer. E.164. */
+  phone: "+16158191829",
 
   /** Used in footer, og:url, canonical. No https://, no trailing slash. */
   primaryDomain: "answeranycall.com",

@@ -2,6 +2,13 @@ import Link from "next/link";
 import type { ResolvedBrand } from "@/config/landing";
 import { Logo } from "./logo";
 
+/** "+16158191829" -> "(615) 819-1829". Falls back to the raw string on shapes it doesn't recognize. */
+function formatPhone(e164: string): string {
+  const digits = e164.replace(/^\+1/, "");
+  if (!/^\d{10}$/.test(digits)) return e164;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
 export function Footer({ brand }: { brand: ResolvedBrand }) {
   return (
     <footer className="border-t py-12">
@@ -75,6 +82,14 @@ export function Footer({ brand }: { brand: ResolvedBrand }) {
           <div>
             <h3 className="mb-3 text-sm font-semibold">Contact</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a
+                  href={`tel:${brand.phone}`}
+                  className="transition-colors hover:text-foreground"
+                >
+                  {formatPhone(brand.phone)}
+                </a>
+              </li>
               <li>
                 <a
                   href={`mailto:${brand.supportEmail}`}

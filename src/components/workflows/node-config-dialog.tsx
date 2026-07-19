@@ -334,7 +334,7 @@ export function NodeConfigDialog({
           {step.type === "notify_owner_sms" && (
             <Field
               label="Message"
-              hint="Sent as an SMS to the business owner's phone (Settings → Admin → Account contact) — not the contact/lead. Plain text, no merge tags."
+              hint="Sent as an SMS to the business owner's phone (Settings → Admin → Account contact) — not the contact/lead. Plain text, except {{reviewRating}} and {{reviewOutcome}} — populated when this step follows an “Ask for a rating” step (blank/generic otherwise)."
             >
               <Textarea
                 rows={3}
@@ -342,6 +342,35 @@ export function NodeConfigDialog({
                 onChange={(e) => set({ body: e.target.value })}
               />
             </Field>
+          )}
+
+          {step.type === "review_rating_request" && (
+            <div className="text-muted-foreground space-y-2 text-sm">
+              <p>
+                Texts the contact &ldquo;how would you rate our service, 1-5?&rdquo;
+                instead of sending the Google review link directly. A reply of
+                4-5 gets the Google link; 1-3 gets a private apology message and
+                a follow-up Task — the Google link is never sent for a low
+                rating.
+              </p>
+              <p>
+                Reuses your Google review link and message templates from{" "}
+                <strong className="text-foreground">
+                  Settings → Messaging → Review requests
+                </strong>{" "}
+                — set the review link there first. Requires this sub-account&apos;s
+                own dedicated Twilio number (Settings → Messaging), since reading
+                the reply back means intercepting it on your own number.
+              </p>
+              <p>
+                The run pauses here until the contact replies, or for up to 7
+                days. The next step can reference{" "}
+                <code className="rounded bg-muted px-1">{"{{reviewRating}}"}</code>{" "}
+                and{" "}
+                <code className="rounded bg-muted px-1">{"{{reviewOutcome}}"}</code>{" "}
+                (currently supported on the &ldquo;Text the owner&rdquo; step).
+              </p>
+            </div>
           )}
 
           {step.type === "webhook" && (

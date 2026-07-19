@@ -15,6 +15,7 @@ import {
   RATING_REPLY_WINDOW_MS,
 } from "@/lib/reviews/constants";
 import { firstWord, fillReviewSms } from "@/lib/reviews/request";
+import { resumeReviewRatingRun } from "@/lib/workflows/engine";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -136,11 +137,23 @@ export async function maybeHandleRatingReply(
       {
         awaitingReviewReplyAt: FieldValue.delete(),
         awaitingReviewReplyAttempts: FieldValue.delete(),
+        pendingReviewWorkflowRunId: FieldValue.delete(),
         lastReviewRating: rating,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
+
+    // If a Workflow Builder `review_rating_request` node sent this ask, its
+    // run is parked waiting for exactly this reply — resume it now instead
+    // of leaving it to its own 7-day timeout fallback. Best-effort: a
+    // workflow problem can't break the customer-facing reply below.
+    if (input.contact.pendingReviewWorkflowRunId) {
+      void resumeReviewRatingRun(input.contact.pendingReviewWorkflowRunId, {
+        rating,
+        positive: rating >= 4,
+      });
+    }
   } else {
     // Ambiguous — a typo'd or off-topic reply shouldn't close the gate on
     // the very first miss, since the real answer might be 1-2 texts away.

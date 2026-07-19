@@ -379,7 +379,7 @@ A general-purpose automation engine that replaces the legacy single-recipe `auto
 
 Each trigger carries a `filters: ConditionGroup` (AND list of conditions on the contact) applied before enrollment. An empty filter group enrolls every contact that hits the trigger.
 
-### Node types (13)
+### Node types (15)
 
 | Node | What it does |
 |---|---|
@@ -394,6 +394,8 @@ Each trigger carries a `filters: ConditionGroup` (AND list of conditions on the 
 | `update_field` | Sets a whitelisted contact field or any `customFields.*` key. The whitelist (`WRITABLE_FIELDS`) prevents clobbering tenancy/system keys. |
 | `create_task` | Creates a follow-up Task linked to the contact, due in configurable days. Title supports merge tags. |
 | `notify` | Sends an internal email notification to the agency owner, the sub-account's account contact, or a custom address. |
+| `notify_owner_sms` | Texts the business owner (`subAccount.accountContact.phone`) a fixed message — an internal heads-up, not contact-facing. Supports two extra tokens, `{{reviewRating}}` / `{{reviewOutcome}}`, populated when it follows a `review_rating_request` step. |
+| `review_rating_request` | Texts the contact asking them to rate 1-5 instead of sending the Google review link directly, reusing the sub-account's Settings → Messaging → Review requests config (review URL + templates) — no config of its own. Requires dedicated Twilio (reply interception) + a configured review URL; fails soft (skips to `next`) otherwise. A 4-5 reply gets the Google link; 1-3 gets the internal-feedback message + a follow-up Task, never the Google link — same deterministic-first, OpenRouter-sentiment-fallback reader as the Settings-driven rating gate (`lib/reviews/rating-reply.ts`). The run pauses (`status: "waiting"`) until the reply resolves or 7 days elapse, whichever is first; `lib/workflows/engine.ts::resumeReviewRatingRun()` is the early-resume path, called from `rating-reply.ts` the moment a rating reads. |
 | `webhook` | POSTs `{ type, contact, form: { id, name, fields } }` JSON to any HTTPS URL (10s timeout). The `form.fields` object carries the form answers snapshot captured at enrollment. |
 | `goal` | Ends the run immediately (used to model a success goal mid-graph). |
 
