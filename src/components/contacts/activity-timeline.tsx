@@ -15,6 +15,7 @@ import {
   MessagesSquare,
   PhoneMissed,
   PhoneOutgoing,
+  PhoneCall,
   Zap,
   Send,
   CircleSlash,
@@ -367,6 +368,11 @@ function activityVisuals(type: ActivityType): {
       return {
         icon: <Users className="h-3 w-3 text-indigo-500" />,
         label: "Booking reassigned",
+      };
+    case "retell_call_logged":
+      return {
+        icon: <PhoneCall className="h-3 w-3 text-purple-500" />,
+        label: "Retell call",
       };
     case "note_added":
     default:

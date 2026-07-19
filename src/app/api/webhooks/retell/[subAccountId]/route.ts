@@ -1,15 +1,23 @@
 import "server-only";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { handleVapiEndOfCall } from "@/lib/comms/voice/end-of-call";
+import {
+  asBool,
+  asString,
+  durationSecFromCall,
+  extractTranscriptTurns,
+  verifyRetellSignature,
+  type RetellCall,
+  type RetellWebhookBody,
+} from "@/lib/comms/voice/retell-webhook";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
  * Retell AI call-analyzed webhook (BETA — a separate voice provider from
- * the built-in Vapi Voice Agent; use this if you're running a Retell
+ * the built-in Vapi Voice Agent; use this if a CLIENT is running a Retell
  * agent instead of/alongside Vapi). Retell fires three events per call to
  * the same "Agent Level Webhook URL" — call_started, call_ended,
  * call_analyzed — but only call_analyzed carries `call.call_analysis`
@@ -22,14 +30,11 @@ export const runtime = "nodejs";
  * Retell call gets identical operator-console treatment (AI Agents →
  * Voice → Calls) as a Vapi one, without a second pipeline to maintain.
  *
- * Auth: HMAC-SHA256 signature in X-Retell-Signature, format
- * "v={timestampMs},d={hexDigest}" where
- * digest = HMAC-SHA256(rawBody + timestamp, RETELL_API_KEY) — must be the
- * API key with the "webhook" badge in the Retell dashboard, not just any
- * key. retell-sdk doesn't currently export a verify() helper (checked
- * v5.43.0), so this reimplements the documented algorithm directly per
- * docs.retellai.com/features/secure-webhook. A stale timestamp (>5 min)
- * is rejected as a replay-defense measure, same as the spec requires.
+ * NOT to be confused with /api/webhooks/retell/call-ended — that's the
+ * separate, fixed-target route for Answer Any Call's OWN business line,
+ * which logs a single Contact activity instead of the full voiceCalls
+ * pipeline. Both share signature verification + payload parsing from
+ * lib/comms/voice/retell-webhook.ts.
  */
 
 interface RetellCustomAnalysisData {
@@ -42,106 +47,6 @@ interface RetellCustomAnalysisData {
   interested?: boolean;
   interest_reason?: string;
   reason?: string;
-}
-
-interface RetellTranscriptTurn {
-  role?: string;
-  content?: string;
-  words?: Array<{ word?: string; start?: number; end?: number }>;
-}
-
-interface RetellCall {
-  call_id?: string;
-  direction?: "inbound" | "outbound";
-  from_number?: string;
-  to_number?: string;
-  start_timestamp?: number;
-  end_timestamp?: number;
-  disconnection_reason?: string;
-  transcript_object?: RetellTranscriptTurn[];
-  call_analysis?: {
-    call_summary?: string;
-    custom_analysis_data?: RetellCustomAnalysisData;
-  };
-  /** Custom metadata an operator could attach when placing an outbound
-   *  call via Retell's API. Mirrors the pattern Vapi's outbound calls use
-   *  (see createOutboundCall) — optional, only relevant for outbound. */
-  metadata?: {
-    direction?: string;
-    contactId?: string;
-    campaignId?: string;
-  };
-}
-
-interface RetellWebhookBody {
-  event?: string;
-  call?: RetellCall;
-}
-
-const SIGNATURE_MAX_AGE_MS = 5 * 60 * 1000;
-
-function verifyRetellSignature(
-  rawBody: string,
-  apiKey: string,
-  header: string | null,
-): boolean {
-  if (!header) return false;
-  const match = header.match(/^v=(\d+),d=(.+)$/);
-  if (!match) return false;
-  const [, timestampStr, digest] = match;
-  const timestamp = Number(timestampStr);
-  if (
-    !Number.isFinite(timestamp) ||
-    Math.abs(Date.now() - timestamp) > SIGNATURE_MAX_AGE_MS
-  ) {
-    return false;
-  }
-  const expected = createHmac("sha256", apiKey)
-    .update(rawBody + timestampStr)
-    .digest("hex");
-  if (expected.length !== digest.length) return false;
-  return timingSafeEqual(Buffer.from(expected), Buffer.from(digest));
-}
-
-function asString(v: unknown): string | null {
-  return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
-}
-
-function asBool(v: unknown): boolean | null {
-  return typeof v === "boolean" ? v : null;
-}
-
-/** Normalise Retell's transcript_object into our canonical shape (same
- *  as the Vapi route's extractTranscript). "agent" -> "assistant"; any
- *  other role is dropped. */
-function extractTranscript(call: RetellCall): Array<{
-  role: "assistant" | "user" | "system";
-  content: string;
-  secondsFromStart: number | null;
-}> {
-  const raw = call.transcript_object ?? [];
-  const out: Array<{
-    role: "assistant" | "user" | "system";
-    content: string;
-    secondsFromStart: number | null;
-  }> = [];
-  for (const turn of raw) {
-    const role = (turn.role ?? "").toLowerCase();
-    if (role !== "agent" && role !== "user") continue;
-    const content = (turn.content ?? "").trim();
-    if (!content) continue;
-    const firstWordStart = turn.words?.[0]?.start;
-    const secondsFromStart =
-      typeof firstWordStart === "number" && typeof call.start_timestamp === "number"
-        ? Math.max(0, Math.round((firstWordStart - call.start_timestamp) / 1000))
-        : null;
-    out.push({
-      role: role === "agent" ? "assistant" : "user",
-      content,
-      secondsFromStart,
-    });
-  }
-  return out;
 }
 
 export async function POST(
@@ -179,7 +84,7 @@ export async function POST(
     return NextResponse.json({ ok: true, ignored: body.event ?? "unknown" });
   }
 
-  const call = body.call ?? {};
+  const call: RetellCall = body.call ?? {};
   const callId = asString(call.call_id);
   if (!callId) {
     return NextResponse.json({ error: "Missing call.call_id" }, { status: 400 });
@@ -188,13 +93,8 @@ export async function POST(
   const inbound = call.direction !== "outbound";
   const callerPhone = asString(inbound ? call.from_number : call.to_number);
   const toPhone = asString(inbound ? call.to_number : call.from_number);
-  const durationSec =
-    typeof call.start_timestamp === "number" &&
-    typeof call.end_timestamp === "number"
-      ? Math.max(0, Math.round((call.end_timestamp - call.start_timestamp) / 1000))
-      : 0;
-
-  const custom = call.call_analysis?.custom_analysis_data ?? {};
+  const custom = (call.call_analysis?.custom_analysis_data ??
+    {}) as RetellCustomAnalysisData;
 
   try {
     const result = await handleVapiEndOfCall({
@@ -203,7 +103,7 @@ export async function POST(
         callId,
         callerPhone,
         toPhone,
-        durationSec,
+        durationSec: durationSecFromCall(call),
         summary: asString(call.call_analysis?.call_summary),
         endedReason: asString(call.disconnection_reason),
         extracted: {
@@ -215,13 +115,14 @@ export async function POST(
           interestReason: asString(custom.interest_reason),
           reason: asString(custom.reason),
         },
-        transcript: extractTranscript(call),
-        direction:
-          call.metadata?.direction === "outbound" || call.direction === "outbound"
-            ? "outbound"
-            : undefined,
-        metaContactId: asString(call.metadata?.contactId),
-        metaCampaignId: asString(call.metadata?.campaignId),
+        transcript: extractTranscriptTurns(call),
+        direction: call.direction === "outbound" ? "outbound" : undefined,
+        metaContactId: asString(
+          (call.metadata as { contactId?: string } | undefined)?.contactId,
+        ),
+        metaCampaignId: asString(
+          (call.metadata as { campaignId?: string } | undefined)?.campaignId,
+        ),
       },
     });
     return NextResponse.json({ ok: true, result });

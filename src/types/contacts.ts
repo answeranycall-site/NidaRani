@@ -27,6 +27,7 @@ export type ContactSource =
   | "other"
   | "facebook"
   | "instagram"
+  | "retell-call"
   | "";
 
 /**
@@ -272,7 +273,13 @@ export type ActivityType =
   | "booking_completed"
   // Operator/host reassigned a team booking to a different host. Written by
   // /api/events/by-id/[id]/assign.
-  | "booking_reassigned";
+  | "booking_reassigned"
+  // Retell AI call logged against Answer Any Call's own business line —
+  // written by /api/webhooks/retell/call-ended. Carries summary/recording/
+  // transcript/duration in `meta`. Distinct from the per-client Vapi/Retell
+  // voiceCalls pipeline, which uses its own operator console instead of a
+  // single activity row.
+  | "retell_call_logged";
 
 export interface Note {
   id: string;
