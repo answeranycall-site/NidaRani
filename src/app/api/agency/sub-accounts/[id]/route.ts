@@ -41,9 +41,10 @@ function isValidSendWindow(v: unknown): v is SendWindow {
 }
 
 /**
- * Patch a sub-account doc. Allowed fields: name, timezone, sendWindow.
- * Caller must be an active sub-account admin (agency owners pass via the
- * implicit shortcut in requireSubAccountAdmin).
+ * Patch a sub-account doc. Allowed fields: name, timezone, sendWindow,
+ * bookingLink, replyToEmail, automationsPaused, accountContact,
+ * caseStudyOptIn. Caller must be an active sub-account admin (agency
+ * owners pass via the implicit shortcut in requireSubAccountAdmin).
  */
 export async function PATCH(
   request: Request,

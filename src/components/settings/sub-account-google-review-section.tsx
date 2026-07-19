@@ -194,12 +194,13 @@ export function SubAccountGoogleReviewSection() {
           <GoogleGIcon className="h-4 w-4" />
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-base font-semibold">Google reviews</h2>
+          <h2 className="text-base font-semibold">Review requests</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Ask customers for a Google review by SMS or WhatsApp — automatically
             after a quote/invoice is marked paid, or on demand from a contact.
             Find your link in Google Business Profile → &ldquo;Get more
-            reviews&rdquo;.
+            reviews&rdquo;. Looking for your actual Google reviews instead? See
+            the <strong className="text-foreground">Reviews</strong> sidebar page.
           </p>
         </div>
       </header>

@@ -31,9 +31,9 @@ import { DEFAULT_REVIEW_SMS_TEMPLATE } from "@/lib/reviews/constants";
  * is a friendlier front door onto them, not a replacement data model.
  *
  * The dedicated Twilio number itself is filled in by the agency owner
- * separately (Settings → SMS / the agency's own Twilio provisioning) —
- * this page just explains what the CLIENT needs to do on their end
- * (forward their existing number here on no-answer).
+ * separately (Settings → Messaging tab / the agency's own Twilio
+ * provisioning) — this page just explains what the CLIENT needs to do
+ * on their end (forward their existing number here on no-answer).
  */
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB, matches storage.rules
@@ -444,8 +444,8 @@ export function ClientOnboardingForm() {
             <div>
               <h2 className="text-sm font-semibold">Dedicated Twilio number</h2>
               <p className="text-xs text-muted-foreground">
-                The agency owner assigns this (Settings → SMS) — it&apos;s
-                not a self-service field here.
+                The agency owner assigns this (Settings → Messaging tab) —
+                it&apos;s not a self-service field here.
               </p>
             </div>
           </div>
@@ -484,8 +484,8 @@ export function ClientOnboardingForm() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Use the <strong className="text-foreground">Members</strong> tab
-            above → invite by email → choose{" "}
+            Go to the <strong className="text-foreground">Admin</strong> tab
+            above → Members section → invite by email → choose{" "}
             <strong className="text-foreground">Admin</strong> (full access)
             or <strong className="text-foreground">Collaborator</strong>{" "}
             (day-to-day access, no member management).

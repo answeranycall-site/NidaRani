@@ -11,7 +11,6 @@ import { subscribeToContacts } from "@/lib/firestore/contacts";
 import { serializeCsv, downloadCsv } from "@/lib/csv";
 import { toDate } from "@/lib/format";
 import { LANDING_VARIANT } from "@/config/landing";
-import { SubAccountBrandingSection } from "@/components/settings/sub-account-branding-section";
 import { SubAccountContactSection } from "@/components/settings/sub-account-contact-section";
 import { SubAccountMembersSection } from "@/components/settings/sub-account-members-section";
 import { SubAccountTerritoriesSection } from "@/components/settings/sub-account-territories-section";
@@ -153,9 +152,10 @@ export default function SettingsPage() {
           {/* Account contact — the human at the client this sub-account belongs to. */}
           <SubAccountContactSection />
 
-          {/* Branding — the client's logo, used on quote/invoice emails, public
-              link pages, and PDFs. Independent of agency-level branding. */}
-          <SubAccountBrandingSection />
+          {/* Logo lives on Settings → Client Onboarding now (file-upload —
+              see ClientOnboardingForm). Used to be a separate URL-paste
+              "Branding" section here; removed to avoid two disconnected
+              places editing the same subAccount.logoUrl field. */}
 
           {/* Subscription — admin only, and only on the LeadStack-branded
               deployment. Buyer clones (LANDING_VARIANT === "custom") collect
