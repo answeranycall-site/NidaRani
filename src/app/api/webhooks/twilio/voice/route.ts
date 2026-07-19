@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import twilio from "twilio";
 import {
   DEFAULT_MCTB_RING_TIMEOUT_SEC,
+  handleMissedCall,
   normalisePhone,
   resolveVoiceRoute,
 } from "@/lib/comms/missed-call";
@@ -80,6 +81,34 @@ export async function POST(request: Request) {
       `[twilio/voice] invalid signature (sa=${route.subAccountId})`,
     );
     return new NextResponse("Invalid signature", { status: 403 });
+  }
+
+  // "already_forwarded" mode: the client kept their own existing business
+  // number and their carrier only forwards HERE when a call goes unanswered.
+  // By the time Twilio receives it, it has already missed — there's nothing
+  // left to dial, so skip <Dial> entirely and go straight to the text-back.
+  if (route.missedCall.mode === "already_forwarded") {
+    const callSid = (params["CallSid"] as string | undefined) ?? "";
+    try {
+      const result = await handleMissedCall({ route, from, callSid });
+      if (!result.handled) {
+        console.warn(
+          `[twilio/voice] not handled (sa=${route.subAccountId}, reason=${result.reason})`,
+        );
+      }
+    } catch (err) {
+      console.error(
+        `[twilio/voice] handler failed (sa=${route.subAccountId})`,
+        err,
+      );
+    }
+    const twiml =
+      '<?xml version="1.0" encoding="UTF-8"?>' +
+      "<Response>" +
+      "<Say>Thanks for calling. We'll text you back in just a moment.</Say>" +
+      "<Hangup/>" +
+      "</Response>";
+    return xml(twiml);
   }
 
   const timeout = Math.min(

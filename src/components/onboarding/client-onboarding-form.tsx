@@ -1,54 +1,128 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   Building2,
-  CheckCircle2,
   Globe,
   Image as ImageIcon,
   Loader2,
   Phone,
   Save,
-  Sparkles,
   Star,
+  UserPlus,
 } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
+import { getFirebaseStorage } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 import { DEFAULT_REVIEW_SMS_TEMPLATE } from "@/lib/reviews/constants";
 
 /**
- * Client Onboarding — one page that consolidates the fields that used to be
- * scattered across Settings → Admin, Branding, Google Reviews, AI Agents →
- * Overview, and Settings → SMS. Each field still saves through its EXISTING
- * real route (no new backend model beyond logoUrl auto-fetch + the new
- * caseStudyOptIn flag) — this page is a friendlier front door onto them, not
- * a replacement data model.
+ * Client Onboarding — one tab (Settings → Client Onboarding) that
+ * consolidates the fields that used to be scattered across Settings →
+ * Admin, Branding, Google Reviews, AI Agents → Overview, and Settings →
+ * SMS. Each field still saves through its EXISTING real route — this page
+ * is a friendlier front door onto them, not a replacement data model.
  *
- * The dedicated Twilio number is deliberately READ-ONLY here — assigning one
- * is an agency-side action (picking from owned inventory or buying new),
- * not something an operator self-serves from a form field. Settings → SMS
- * is still where that actually gets configured.
+ * The dedicated Twilio number itself is filled in by the agency owner
+ * separately (Settings → SMS / the agency's own Twilio provisioning) —
+ * this page just explains what the CLIENT needs to do on their end
+ * (forward their existing number here on no-answer).
  */
 
-const CHECKLIST_ITEMS = [
-  "Website",
-  "Missed Call Text-Back",
-  "Dead Lead Reactivation",
-  "Google Review Automation",
-  "Website Chat-to-SMS",
-  "Local SEO Visibility (Optional)",
+const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB, matches storage.rules
+
+/** slug -> display label, in the exact order requested. Slugs are the
+ *  storage key (SubAccountDoc.onboardingChecklist) so relabeling later
+ *  doesn't lose anyone's progress. */
+const CHECKLIST_ITEMS: { slug: string; label: string }[] = [
+  { slug: "website", label: "Website" },
+  { slug: "twilioNumber", label: "New Twilio Number" },
+  { slug: "missedCallAiChat", label: "Missed Call Text-Back & AI Chat" },
+  { slug: "deadLeadReactivation", label: "Dead Lead Reactivation" },
+  { slug: "googleReviewAutomation", label: "Google Review Automation" },
+  { slug: "websiteChatToSms", label: "Website Chat-to-SMS" },
+  { slug: "localSeo", label: "Local SEO Visibility (Optional)" },
 ];
 
 interface ProfileState {
   websiteUrl: string;
 }
 
+function OnboardingChecklist() {
+  const { subAccountId, subAccount } = useSubAccount();
+  const { agencyRole } = useAuth();
+  const isAgencyOwner = agencyRole === "owner";
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setChecklist(subAccount?.onboardingChecklist ?? {});
+  }, [subAccount?.onboardingChecklist]);
+
+  async function toggle(slug: string, done: boolean) {
+    // Optimistic — flip immediately, roll back on failure.
+    setChecklist((prev) => ({ ...prev, [slug]: done }));
+    try {
+      const res = await fetch(
+        `/api/agency/sub-accounts/${subAccountId}/onboarding-checklist`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ item: slug, done }),
+        },
+      );
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "Couldn't save.");
+      }
+    } catch (err) {
+      setChecklist((prev) => ({ ...prev, [slug]: !done }));
+      toast.error(err instanceof Error ? err.message : "Couldn't save.");
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border bg-card p-5">
+      <h2 className="mb-1 text-sm font-semibold">What We&apos;re Installing</h2>
+      <p className="mb-4 text-xs text-muted-foreground">
+        A visual overview for the client — not a live status indicator yet.
+        {!isAgencyOwner &&
+          " Only the agency owner can check items off; you can see progress here."}
+      </p>
+      <ul className="space-y-2.5">
+        {CHECKLIST_ITEMS.map(({ slug, label }) => {
+          const done = checklist[slug] === true;
+          return (
+            <li key={slug} className="flex items-center gap-2.5 text-sm">
+              <Checkbox
+                checked={done}
+                disabled={!isAgencyOwner}
+                onCheckedChange={(v) => toggle(slug, !!v)}
+              />
+              <span
+                className={cn(
+                  done && "text-muted-foreground line-through decoration-2",
+                )}
+              >
+                {label}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
 export function ClientOnboardingForm() {
   const { subAccountId, subAccount, isAdmin } = useSubAccount();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [businessName, setBusinessName] = useState("");
   const [ownerName, setOwnerName] = useState("");
@@ -60,7 +134,7 @@ export function ClientOnboardingForm() {
   const [caseStudyOptIn, setCaseStudyOptIn] = useState(false);
 
   const [hydrated, setHydrated] = useState(false);
-  const [fetchingLogo, setFetchingLogo] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Hydrate once from the live sub-account doc + a one-time profile fetch
@@ -86,34 +160,31 @@ export function ClientOnboardingForm() {
 
   if (!isAdmin) return null;
 
-  async function handleFetchLogo() {
-    if (!websiteUrl.trim()) {
-      toast.error("Enter a website URL first.");
+  async function handleLogoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choose an image file (JPG, PNG, WebP, or GIF).");
       return;
     }
-    setFetchingLogo(true);
+    if (file.size > MAX_LOGO_BYTES) {
+      toast.error("Image is too large — keep it under 5 MB.");
+      return;
+    }
+    setUploadingLogo(true);
     try {
-      const res = await fetch(
-        `/api/sub-accounts/${subAccountId}/branding/fetch-logo`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ websiteUrl }),
-        },
-      );
-      const data = (await res.json().catch(() => ({}))) as {
-        logoUrl?: string;
-        error?: string;
-      };
-      if (!res.ok || !data.logoUrl) {
-        throw new Error(data.error ?? "Couldn't find a logo on that site.");
-      }
-      setLogoUrl(data.logoUrl);
-      toast.success("Logo found — review it below, then Save.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't fetch a logo.");
+      const ext = file.name.includes(".") ? file.name.split(".").pop() : "img";
+      const path = `branding/${subAccountId}/logo-${Date.now()}.${ext}`;
+      const storageRef = ref(getFirebaseStorage(), path);
+      await uploadBytes(storageRef, file, { contentType: file.type });
+      const url = await getDownloadURL(storageRef);
+      setLogoUrl(url);
+      toast.success("Logo uploaded — click Save to apply it.");
+    } catch {
+      toast.error("Couldn't upload that image.");
     } finally {
-      setFetchingLogo(false);
+      setUploadingLogo(false);
     }
   }
 
@@ -202,6 +273,8 @@ export function ClientOnboardingForm() {
 
   return (
     <div className="space-y-6">
+      <OnboardingChecklist />
+
       <form onSubmit={handleSave} className="space-y-6">
         <section className="rounded-2xl border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
@@ -300,41 +373,39 @@ export function ClientOnboardingForm() {
               </p>
             </div>
           </div>
-          <div className="flex items-end gap-3">
-            <div className="flex-1 space-y-1.5">
-              <Label htmlFor="ob-logo">Logo URL</Label>
-              <Input
-                id="ob-logo"
-                value={logoUrl}
-                onChange={(e) => setLogoUrl(e.target.value)}
-                placeholder="https://example.com/logo.png"
+          <div className="flex items-center gap-3">
+            {logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={logoUrl}
+                alt="Logo preview"
+                className="h-12 w-auto rounded border bg-white object-contain p-1"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
               />
-            </div>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleLogoFileChange}
+            />
             <Button
               type="button"
               variant="outline"
-              onClick={handleFetchLogo}
-              disabled={fetchingLogo}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingLogo}
             >
-              {fetchingLogo ? (
+              {uploadingLogo ? (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Sparkles className="mr-1.5 h-3.5 w-3.5" />
+                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
               )}
-              Fetch from website
+              {logoUrl ? "Replace logo" : "Upload logo"}
             </Button>
           </div>
-          {logoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt="Logo preview"
-              className="mt-3 h-12 w-auto rounded border bg-white object-contain p-1"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
-          )}
         </section>
 
         <section className="rounded-2xl border bg-card p-5">
@@ -373,8 +444,8 @@ export function ClientOnboardingForm() {
             <div>
               <h2 className="text-sm font-semibold">Dedicated Twilio number</h2>
               <p className="text-xs text-muted-foreground">
-                Read-only — assigning a number is done by the agency (Settings
-                → SMS), not from this form.
+                The agency owner assigns this (Settings → SMS) — it&apos;s
+                not a self-service field here.
               </p>
             </div>
           </div>
@@ -386,6 +457,38 @@ export function ClientOnboardingForm() {
                 Not configured yet.
               </span>
             )}
+          </p>
+          <p className="mt-3 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+            <strong className="text-foreground">What the client needs to do:</strong>{" "}
+            keep publishing their existing business number as usual — no need
+            to change anything customers see. On their phone/carrier, turn on
+            <em> &ldquo;forward when unanswered&rdquo;</em> (sometimes called
+            &ldquo;forward on no answer&rdquo; or &ldquo;busy/no-answer
+            forwarding&rdquo;) and point it at the new Twilio number above.
+            Calls still ring their real phone first; only if nobody picks up
+            does it forward here, and that&apos;s the instant the
+            auto-text-back fires.
+          </p>
+        </section>
+
+        <section className="rounded-2xl border bg-card p-5">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+              <UserPlus className="h-4 w-4" />
+            </span>
+            <div>
+              <h2 className="text-sm font-semibold">Add another person</h2>
+              <p className="text-xs text-muted-foreground">
+                Give an employee of this client their own login.
+              </p>
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Use the <strong className="text-foreground">Members</strong> tab
+            above → invite by email → choose{" "}
+            <strong className="text-foreground">Admin</strong> (full access)
+            or <strong className="text-foreground">Collaborator</strong>{" "}
+            (day-to-day access, no member management).
           </p>
         </section>
 
@@ -417,21 +520,6 @@ export function ClientOnboardingForm() {
           Save onboarding info
         </Button>
       </form>
-
-      <section className="rounded-2xl border bg-card p-5">
-        <h2 className="mb-1 text-sm font-semibold">What We&apos;re Installing</h2>
-        <p className="mb-4 text-xs text-muted-foreground">
-          A visual overview for the client — not a live status indicator yet.
-        </p>
-        <ul className="space-y-2.5">
-          {CHECKLIST_ITEMS.map((item) => (
-            <li key={item} className="flex items-center gap-2.5 text-sm">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

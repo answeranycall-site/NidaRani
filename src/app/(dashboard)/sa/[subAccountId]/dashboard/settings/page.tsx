@@ -28,6 +28,7 @@ import { SubAccountApiKeysSection } from "@/components/settings/sub-account-api-
 import { SubAccountApiRecipesSection } from "@/components/settings/sub-account-api-recipes-section";
 import { SubAccountCalendarSyncSection } from "@/components/settings/sub-account-calendar-sync-section";
 import { SubAccountWebhooksSection } from "@/components/settings/sub-account-webhooks-section";
+import { ClientOnboardingForm } from "@/components/onboarding/client-onboarding-form";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UserDoc, SubscriptionStatus } from "@/types";
@@ -130,14 +131,21 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="admin">
+      <Tabs defaultValue="onboarding">
         <TabsList>
+          <TabsTrigger value="onboarding">Client Onboarding</TabsTrigger>
           <TabsTrigger value="admin">Admin</TabsTrigger>
           <TabsTrigger value="messaging">Messaging</TabsTrigger>
           <TabsTrigger value="api">API</TabsTrigger>
           <TabsTrigger value="custom-fields">Custom Fields</TabsTrigger>
           <TabsTrigger value="import">Importer</TabsTrigger>
         </TabsList>
+
+        {/* ---------- Client Onboarding: everything to fill in once when a
+            new client comes on board, in one place. ---------- */}
+        <TabsContent value="onboarding" className="mt-6 space-y-6">
+          <ClientOnboardingForm />
+        </TabsContent>
 
         {/* ---------- Admin: contact, branding, plan, members, territories,
             calendar, payments, data ---------- */}

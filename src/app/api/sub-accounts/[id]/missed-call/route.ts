@@ -34,6 +34,7 @@ interface PostBody {
   forwardTo?: string;
   ringTimeoutSec?: number;
   messageBody?: string;
+  mode?: "dial_then_fallback" | "already_forwarded";
 }
 
 function voiceWebhookUrl(): string {
@@ -109,10 +110,21 @@ export async function POST(
     );
   }
 
-  const forwardTo = normalisePhone(body.forwardTo ?? "");
-  if (!forwardTo.startsWith("+")) {
+  const mode = body.mode === "already_forwarded" ? "already_forwarded" : "dial_then_fallback";
+
+  const forwardToRaw = (body.forwardTo ?? "").trim();
+  let forwardTo = "";
+  if (forwardToRaw) {
+    forwardTo = normalisePhone(forwardToRaw);
+    if (!forwardTo.startsWith("+")) {
+      return NextResponse.json(
+        { error: "forwardTo must be E.164 (e.g. +15551234567)." },
+        { status: 400 },
+      );
+    }
+  } else if (mode === "dial_then_fallback") {
     return NextResponse.json(
-      { error: "forwardTo must be E.164 (e.g. +15551234567)." },
+      { error: "forwardTo is required in dial-then-fallback mode." },
       { status: 400 },
     );
   }
@@ -154,6 +166,7 @@ export async function POST(
 
   const missedCall: MissedCallConfig = {
     enabled: true,
+    mode,
     forwardTo,
     ringTimeoutSec,
     messageBody,

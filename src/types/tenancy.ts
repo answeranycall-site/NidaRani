@@ -308,6 +308,15 @@ export interface SubAccountDoc {
    */
   caseStudyOptIn?: boolean;
   /**
+   * "What We're Installing" checklist state on the Client Onboarding page —
+   * keyed by a stable item slug (not the display label, so wording can
+   * change without losing state), e.g. `{ website: true, twilioNumber:
+   * false }`. Purely visual for the client to see progress; only the
+   * AGENCY OWNER can toggle it (PATCH /api/agency/sub-accounts/[id]/
+   * onboarding-checklist) — sub-account admins see it read-only.
+   */
+  onboardingChecklist?: Record<string, boolean>;
+  /**
    * Opt-in territory scoping. When true, collaborators only see deals
    * and contacts whose `territoryId` is in their `assignedTerritoryIds`.
    * Admins and the agency owner are unaffected. When false (the
@@ -421,9 +430,23 @@ export interface MissedCallConfig {
   /** Master toggle. When true the number's Voice URL points at our handler. */
   enabled: boolean;
   /**
+   * Which topology this number sits in:
+   * - `"dial_then_fallback"` (default) — this Twilio number IS the number the
+   *   caller dials directly (or it's the only number in play). Our webhook
+   *   <Dial>s `forwardTo` and only fires the text-back if that dial goes
+   *   unanswered.
+   * - `"already_forwarded"` — the client kept their OWN existing business
+   *   number and configured their carrier to forward calls to THIS Twilio
+   *   number only when unanswered. By the time Twilio receives the call it
+   *   has already missed — there's nothing left to dial, so we skip <Dial>
+   *   entirely and go straight to the text-back.
+   */
+  mode?: "dial_then_fallback" | "already_forwarded";
+  /**
    * E.164 number the inbound call is forwarded to (the business's real phone /
-   * cell). Required to enable — a forward-then-text flow needs somewhere to
-   * ring first.
+   * cell). Required in `"dial_then_fallback"` mode — a forward-then-text flow
+   * needs somewhere to ring first. Unused (but may still be stored for
+   * reference) in `"already_forwarded"` mode since Twilio never dials it.
    */
   forwardTo: string;
   /** Seconds to ring `forwardTo` before treating the call as missed (5–60). */

@@ -269,6 +269,11 @@ function activityVisuals(type: ActivityType): {
         icon: <PhoneMissed className="h-3 w-3 text-rose-500" />,
         label: "Missed call",
       };
+    case "call_answered":
+      return {
+        icon: <PhoneCall className="h-3 w-3 text-emerald-500" />,
+        label: "Call answered",
+      };
     case "automation_started":
       return {
         icon: <Zap className="h-3 w-3 text-amber-500" />,

@@ -72,11 +72,12 @@ export async function resolveVoiceRoute(
   const sa = { id: doc.id, ...(doc.data() as Omit<SubAccountDoc, "id">) };
   const cfg = sa.twilioConfig;
   const mctb = cfg?.missedCall ?? null;
+  const mode = mctb?.mode ?? "dial_then_fallback";
   if (
     sa.missedCallTextBackEnabledByAgency !== true ||
     !mctb?.enabled ||
     !cfg?.authToken ||
-    !mctb.forwardTo
+    (mode === "dial_then_fallback" && !mctb.forwardTo)
   ) {
     return null;
   }
@@ -131,6 +132,47 @@ async function claimCall(
     // Fail open on the claim (better to risk a rare double-text than to drop
     // the text-back entirely on a transient Firestore blip).
     return true;
+  }
+}
+
+/**
+ * A call routed through the MCTB number was answered by a human — no
+ * text-back needed, but the caller still deserves to show up in the CRM.
+ * Reconciles the contact (same phone-first strategy as a miss) and logs a
+ * `call_answered` activity. Best-effort; never throws.
+ */
+export async function logAnsweredCall(input: {
+  route: VoiceRoute;
+  from: string;
+  callSid: string;
+}): Promise<void> {
+  const { route, from, callSid } = input;
+  const { agencyId, subAccountId } = route;
+  if (!from) return;
+
+  try {
+    const reconciled = await reconcileContactFromCapture({
+      agencyId,
+      subAccountId,
+      existingContactId: null,
+      pageUrl: null,
+      source: "voice",
+      matchStrategy: "phone-first",
+      capture: { name: null, email: null, phone: from },
+    });
+    if (!reconciled) return;
+
+    await getAdminDb()
+      .collection(`contacts/${reconciled.contactId}/activities`)
+      .add({
+        type: "call_answered",
+        content: `Call from ${from} was answered.`,
+        createdBy: "twilio_voice",
+        meta: { kind: "call_answered", callSid, from },
+        createdAt: FieldValue.serverTimestamp(),
+      });
+  } catch (err) {
+    console.warn("[mctb] answered-call logging failed", err);
   }
 }
 

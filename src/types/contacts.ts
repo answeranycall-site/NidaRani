@@ -240,6 +240,10 @@ export type ActivityType =
   // An inbound call was forwarded but went unanswered, so Missed Call Text
   // Back auto-texted the caller. Written by /api/webhooks/twilio/voice/status.
   | "missed_call"
+  // An inbound call routed through the MCTB number WAS answered by a human
+  // (no text-back sent) — logged so the call still shows up in the CRM.
+  // Written by /api/webhooks/twilio/voice/status.
+  | "call_answered"
   // Quote lifecycle — written by the quote API routes + the public
   // /q/[token] page on first view. See lib/quotes/lifecycle.ts.
   | "quote_sent"

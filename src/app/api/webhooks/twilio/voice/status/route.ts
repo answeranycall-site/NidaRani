@@ -5,6 +5,7 @@ import twilio from "twilio";
 import {
   handleMissedCall,
   isMissedDialStatus,
+  logAnsweredCall,
   normalisePhone,
   resolveVoiceRoute,
 } from "@/lib/comms/missed-call";
@@ -63,8 +64,10 @@ export async function POST(request: Request) {
     return new NextResponse("Invalid signature", { status: 403 });
   }
 
-  // Only text back when the forward genuinely missed the human.
+  // Only text back when the forward genuinely missed the human — an answered
+  // call still gets logged (so it shows up in the CRM), just without a text.
   if (!isMissedDialStatus(dialStatus)) {
+    await logAnsweredCall({ route, from, callSid });
     return xml(EMPTY);
   }
 

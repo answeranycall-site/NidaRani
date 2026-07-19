@@ -67,6 +67,9 @@ export function SubAccountSmsSection() {
   const DEFAULT_MCTB_MESSAGE =
     "Sorry we missed your call! Reply to this text and we'll help you right away.";
   const [mcEnabled, setMcEnabled] = useState<boolean>(!!mctb?.enabled);
+  const [mcMode, setMcMode] = useState<"dial_then_fallback" | "already_forwarded">(
+    mctb?.mode ?? "dial_then_fallback",
+  );
   const [mcForwardTo, setMcForwardTo] = useState(mctb?.forwardTo ?? "");
   const [mcRing, setMcRing] = useState<number>(mctb?.ringTimeoutSec ?? 20);
   const [mcMessage, setMcMessage] = useState(mctb?.messageBody ?? "");
@@ -87,6 +90,7 @@ export function SubAccountSmsSection() {
     setWaNumber(cfg?.whatsappFromNumber ?? "");
     setWaSandbox(!!cfg?.whatsappSandbox);
     setMcEnabled(!!cfg?.missedCall?.enabled);
+    setMcMode(cfg?.missedCall?.mode ?? "dial_then_fallback");
     setMcForwardTo(cfg?.missedCall?.forwardTo ?? "");
     setMcRing(cfg?.missedCall?.ringTimeoutSec ?? 20);
     setMcMessage(cfg?.missedCall?.messageBody ?? "");
@@ -97,6 +101,7 @@ export function SubAccountSmsSection() {
     cfg?.whatsappFromNumber,
     cfg?.whatsappSandbox,
     cfg?.missedCall?.enabled,
+    cfg?.missedCall?.mode,
     cfg?.missedCall?.forwardTo,
     cfg?.missedCall?.ringTimeoutSec,
     cfg?.missedCall?.messageBody,
@@ -286,6 +291,7 @@ export function SubAccountSmsSection() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          mode: mcMode,
           forwardTo: mcForwardTo.trim(),
           ringTimeoutSec: mcRing,
           messageBody: mcMessage.trim(),
@@ -710,37 +716,82 @@ export function SubAccountSmsSection() {
 
             {mcEnabled && (
               <div className="mt-4 space-y-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mctb-forward">Forward to number</Label>
-                    <Input
-                      id="mctb-forward"
-                      value={mcForwardTo}
-                      onChange={(e) => setMcForwardTo(e.target.value)}
-                      placeholder="+15551234567"
-                      autoComplete="off"
-                      spellCheck={false}
-                    />
-                    <p className="text-muted-foreground text-[11px]">
-                      E.164. The business&apos;s real phone the call rings
-                      first.
-                    </p>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mctb-ring">Ring timeout (seconds)</Label>
-                    <Input
-                      id="mctb-ring"
-                      type="number"
-                      min={5}
-                      max={60}
-                      value={mcRing}
-                      onChange={(e) => setMcRing(Number(e.target.value) || 20)}
-                    />
-                    <p className="text-muted-foreground text-[11px]">
-                      How long to ring before it counts as missed (5–60).
-                    </p>
+                <div className="space-y-2">
+                  <Label>How does the call get here?</Label>
+                  <div className="space-y-2">
+                    <label className="bg-card flex items-start gap-2.5 rounded-lg border p-3 text-sm">
+                      <input
+                        type="radio"
+                        name="mctb-mode"
+                        className="mt-0.5"
+                        checked={mcMode === "dial_then_fallback"}
+                        onChange={() => setMcMode("dial_then_fallback")}
+                      />
+                      <span>
+                        <span className="font-medium">
+                          This IS the number customers call
+                        </span>
+                        <span className="text-muted-foreground block text-xs">
+                          We ring the business&apos;s real phone first, then
+                          text back if nobody answers.
+                        </span>
+                      </span>
+                    </label>
+                    <label className="bg-card flex items-start gap-2.5 rounded-lg border p-3 text-sm">
+                      <input
+                        type="radio"
+                        name="mctb-mode"
+                        className="mt-0.5"
+                        checked={mcMode === "already_forwarded"}
+                        onChange={() => setMcMode("already_forwarded")}
+                      />
+                      <span>
+                        <span className="font-medium">
+                          The client&apos;s own number forwards here on no-answer
+                        </span>
+                        <span className="text-muted-foreground block text-xs">
+                          Their carrier already tried the real phone and
+                          missed — we skip ringing again and text back
+                          immediately.
+                        </span>
+                      </span>
+                    </label>
                   </div>
                 </div>
+
+                {mcMode === "dial_then_fallback" && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mctb-forward">Forward to number</Label>
+                      <Input
+                        id="mctb-forward"
+                        value={mcForwardTo}
+                        onChange={(e) => setMcForwardTo(e.target.value)}
+                        placeholder="+15551234567"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      <p className="text-muted-foreground text-[11px]">
+                        E.164. The business&apos;s real phone the call rings
+                        first.
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="mctb-ring">Ring timeout (seconds)</Label>
+                      <Input
+                        id="mctb-ring"
+                        type="number"
+                        min={5}
+                        max={60}
+                        value={mcRing}
+                        onChange={(e) => setMcRing(Number(e.target.value) || 20)}
+                      />
+                      <p className="text-muted-foreground text-[11px]">
+                        How long to ring before it counts as missed (5–60).
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label htmlFor="mctb-message">Text-back message</Label>
@@ -837,7 +888,10 @@ export function SubAccountSmsSection() {
                   <Button
                     type="button"
                     size="sm"
-                    disabled={mcSaving || !mcForwardTo.trim()}
+                    disabled={
+                      mcSaving ||
+                      (mcMode === "dial_then_fallback" && !mcForwardTo.trim())
+                    }
                     onClick={handleSaveMctb}
                   >
                     {mcSaving ? (
