@@ -23,6 +23,7 @@ import {
   Lock,
   Send,
   Bot,
+  ClipboardCheck,
   Package,
   ScrollText,
   MessagesSquare,
@@ -98,6 +99,12 @@ const SUB_ACCOUNT_NAV: NavItem[] = [
   },
   { href: "/reports", label: "Reports", icon: BarChart3, enabled: true },
   { href: "/logs", label: "Logs", icon: ScrollText, enabled: true },
+  {
+    href: "/dashboard/onboarding",
+    label: "Client Onboarding",
+    icon: ClipboardCheck,
+    enabled: true,
+  },
   {
     href: "/dashboard/settings",
     label: "Settings Sub-Account",

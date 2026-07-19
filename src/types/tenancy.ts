@@ -302,6 +302,12 @@ export interface SubAccountDoc {
    */
   logoUrl: string | null;
   /**
+   * Client opted in to being featured as a case study / portfolio piece
+   * (marketing use of their results, testimonial, etc). Set from the
+   * Client Onboarding page. Undefined/false = not opted in.
+   */
+  caseStudyOptIn?: boolean;
+  /**
    * Opt-in territory scoping. When true, collaborators only see deals
    * and contacts whose `territoryId` is in their `assignedTerritoryIds`.
    * Admins and the agency owner are unaffected. When false (the
