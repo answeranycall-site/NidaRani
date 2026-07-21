@@ -458,16 +458,19 @@ const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
 };
 
 /**
- * Sends the "how many stars" ask (reusing the sub-account's Settings →
- * Messaging → Review requests config for the review URL + templates),
- * texts the business owner that a request just went out (accountContact
- * .phone — separate from the eventual outcome notification a downstream
- * `notify_owner_sms` step sends), and pauses the run — see
- * ReviewRatingRequestConfig's doc comment for the full picture. Resumed
- * early by `resumeReviewRatingRun` when the customer replies, or by its
- * own long `wait` as a 7-day timeout fallback otherwise.
+ * Shared "send the ask + notify the owner + arm the wait" logic used by
+ * both `review_rating_request` (the first ask) and `review_rating_reminder`
+ * (the one-time follow-up if 7 days pass with no reply) — the two only
+ * differ in the review-request trigger value and the owner-notify wording.
+ * Correlates the contact's next inbound reply back to THIS run so
+ * lib/reviews/rating-reply.ts can resume it the moment they answer,
+ * instead of waiting out the full 7-day timeout.
  */
-const execReviewRatingRequest: NodeExecutor = async (ctx) => {
+async function sendRatingAskAndArmWait(
+  ctx: NodeContext,
+  trigger: "workflow" | "reminder",
+  ownerNotifyBody: (identity: string) => string
+): Promise<{ result: StepResult; log: string }> {
   const contact = ctx.contact;
   if (contact.smsOptedOut) {
     return { result: { kind: "next" }, log: "skipped:opt_out" };
@@ -489,16 +492,15 @@ const execReviewRatingRequest: NodeExecutor = async (ctx) => {
     subAccountId: ctx.subAccountId,
     agencyId: ctx.agencyId,
     contactId: contact.id,
-    trigger: "workflow",
+    trigger,
   });
   if (!res.sent) {
     return { result: { kind: "next" }, log: `skipped:${res.reason ?? "not_sent"}` };
   }
 
-  // Let the owner know a request just went out — separate from (and ahead
-  // of) the eventual outcome notification on the `notify_owner_sms` step
-  // that follows resolution. Best-effort; a failure here can't undo the
-  // ask that already sent.
+  // Let the owner know — separate from (and ahead of) the eventual outcome
+  // notification a downstream `notify_owner_sms` step sends once the
+  // reply resolves. Best-effort; a failure here can't undo the send.
   const ownerPhone = ctx.subAccount?.accountContact?.phone?.trim();
   if (ownerPhone) {
     const identity = contact.name
@@ -509,16 +511,13 @@ const execReviewRatingRequest: NodeExecutor = async (ctx) => {
         subAccountId: ctx.subAccountId,
         subAccount: ctx.subAccount,
         to: ownerPhone,
-        body: `A review request was sent to ${identity}.`,
+        body: ownerNotifyBody(identity),
       });
     } catch (err) {
-      console.warn("[workflows] review_rating_request owner-notify failed", err);
+      console.warn(`[workflows] review-rating ask owner-notify failed (trigger=${trigger})`, err);
     }
   }
 
-  // Correlate this contact's next inbound reply back to THIS run so
-  // lib/reviews/rating-reply.ts can resume it the moment they answer,
-  // instead of waiting out the full 7-day timeout below.
   await getAdminDb()
     .doc(`contacts/${contact.id}`)
     .set(
@@ -531,8 +530,66 @@ const execReviewRatingRequest: NodeExecutor = async (ctx) => {
 
   return {
     result: { kind: "wait", seconds: Math.floor(RATING_REPLY_WINDOW_MS / 1000) },
-    log: "ok:awaiting_rating",
+    log: trigger === "reminder" ? "ok:reminder_sent" : "ok:awaiting_rating",
   };
+}
+
+/**
+ * Sends the "how many stars" ask (reusing the sub-account's Settings →
+ * Messaging → Review requests config for the review URL + templates),
+ * texts the business owner that a request just went out, and pauses the
+ * run — see ReviewRatingRequestConfig's doc comment for the full picture.
+ * Resumed early by `resumeReviewRatingRun` when the customer replies, or
+ * by its own long `wait` as a 7-day timeout fallback otherwise.
+ */
+const execReviewRatingRequest: NodeExecutor = (ctx) =>
+  sendRatingAskAndArmWait(
+    ctx,
+    "workflow",
+    (identity) => `A review request was sent to ${identity}.`
+  );
+
+/**
+ * One-time follow-up for `review_rating_request`'s 7-day no-reply timeout
+ * — texts the owner that the window lapsed with no response, resends the
+ * SAME ask to the contact (bypassing the normal cooldown — this is an
+ * explicit, one-off reminder, not a repeat auto-send), texts the owner
+ * that the reminder went out, and re-arms another 7-day wait so a reply to
+ * the reminder is caught the same way the first ask's would be.
+ *
+ * A transparent passthrough when the contact already replied to the first
+ * ask (`ctx.triggerContext.reviewOutcome` is set) — safe to place
+ * unconditionally right after `review_rating_request` in every workflow
+ * that uses it, regardless of how the first ask resolved.
+ */
+const execReviewRatingReminder: NodeExecutor = async (ctx) => {
+  if (ctx.triggerContext?.reviewOutcome) {
+    return { result: { kind: "next" }, log: "skipped:already_replied" };
+  }
+
+  const contact = ctx.contact;
+  const identity = contact.name
+    ? `${contact.name} (${contact.phone})`
+    : contact.phone;
+  const ownerPhone = ctx.subAccount?.accountContact?.phone?.trim();
+  if (ownerPhone) {
+    try {
+      await sendSmsForSubAccount({
+        subAccountId: ctx.subAccountId,
+        subAccount: ctx.subAccount,
+        to: ownerPhone,
+        body: `It's been 7 days since we asked ${identity} to rate their experience, and they haven't responded.`,
+      });
+    } catch (err) {
+      console.warn("[workflows] review_rating_reminder timeout owner-notify failed", err);
+    }
+  }
+
+  return sendRatingAskAndArmWait(
+    ctx,
+    "reminder",
+    (id) => `We just sent ${id} a reminder to rate their experience.`
+  );
 };
 
 const execWebhook: NodeExecutor = async (ctx) => {
@@ -601,6 +658,7 @@ const REGISTRY: Partial<Record<WorkflowNodeType, NodeExecutor>> = {
   notify: execNotify,
   notify_owner_sms: execNotifyOwnerSms,
   review_rating_request: execReviewRatingRequest,
+  review_rating_reminder: execReviewRatingReminder,
   webhook: execWebhook,
 };
 

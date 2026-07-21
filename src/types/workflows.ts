@@ -69,6 +69,7 @@ export type WorkflowNodeType =
   | "notify"
   | "notify_owner_sms"
   | "review_rating_request"
+  | "review_rating_reminder"
   | "webhook";
 
 export interface WorkflowNode {
@@ -224,3 +225,14 @@ export interface NotifyOwnerSmsConfig {
  * reply resolves.
  */
 export type ReviewRatingRequestConfig = Record<string, never>;
+
+/**
+ * One-time follow-up for `review_rating_request`'s 7-day no-reply timeout —
+ * no config of its own. Texts the owner the window lapsed, resends the same
+ * ask to the contact (bypassing the normal cooldown), texts the owner the
+ * reminder went out, and re-arms another 7-day wait. A transparent
+ * passthrough when the contact already replied to the first ask — safe to
+ * place unconditionally right after `review_rating_request`. See
+ * lib/workflows/engine.ts::execReviewRatingReminder for the full picture.
+ */
+export type ReviewRatingReminderConfig = Record<string, never>;

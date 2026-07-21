@@ -31,6 +31,7 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
   notify: "Internal notification",
   notify_owner_sms: "Text the owner",
   review_rating_request: "Ask for a rating (Google review gate)",
+  review_rating_reminder: "Remind if no reply (7 days)",
   webhook: "Webhook",
 };
 
@@ -64,6 +65,7 @@ export const ADDABLE_TYPES: WorkflowNodeType[] = [
   "notify",
   "notify_owner_sms",
   "review_rating_request",
+  "review_rating_reminder",
   "webhook",
   "if_else",
   "goal",
@@ -106,6 +108,7 @@ export function defaultConfig(type: WorkflowNodeType): Record<string, unknown> {
     case "notify_owner_sms":
       return { body: "" };
     case "review_rating_request":
+    case "review_rating_reminder":
       return {};
     case "webhook":
       return { url: "" };
@@ -149,6 +152,8 @@ export function nodeSummary(step: BuilderStep): string {
       return (c.body as string)?.slice(0, 60) || "No message yet";
     case "review_rating_request":
       return "Ask 1-5 stars, gate the Google link on the reply";
+    case "review_rating_reminder":
+      return "Notify owner + resend once if no reply after 7 days";
     case "webhook":
       return (c.url as string) || "No URL yet";
     case "goal":

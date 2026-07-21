@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  AlarmClock,
   ArrowLeft,
   Bell,
   CheckSquare,
@@ -89,6 +90,7 @@ const ICONS: Record<WorkflowNodeType, typeof Mail> = {
   notify: Bell,
   notify_owner_sms: Smartphone,
   review_rating_request: Star,
+  review_rating_reminder: AlarmClock,
   webhook: Webhook,
 };
 

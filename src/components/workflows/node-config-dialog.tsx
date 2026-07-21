@@ -380,11 +380,38 @@ export function NodeConfigDialog({
               </p>
               <p>
                 The run pauses here until the contact replies, or for up to 7
-                days. The next step can reference{" "}
+                days. Add a{" "}
+                <strong className="text-foreground">
+                  &ldquo;Remind if no reply&rdquo;
+                </strong>{" "}
+                step right after this one to automatically notify the owner
+                + send one follow-up ask if the 7 days pass with nothing back
+                — it&apos;s a no-op if they already replied, so it&apos;s
+                always safe to include. The next step can reference{" "}
                 <code className="rounded bg-muted px-1">{"{{reviewRating}}"}</code>{" "}
                 and{" "}
                 <code className="rounded bg-muted px-1">{"{{reviewOutcome}}"}</code>{" "}
                 (currently supported on the &ldquo;Text the owner&rdquo; step).
+              </p>
+            </div>
+          )}
+
+          {step.type === "review_rating_reminder" && (
+            <div className="text-muted-foreground space-y-2 text-sm">
+              <p>
+                Place this right after &ldquo;Ask for a rating&rdquo;. If the
+                contact already replied, this step does nothing and passes
+                straight through. If 7 days passed with no reply, it: texts
+                the owner that the window lapsed with no response, resends
+                the same rating ask to the contact (this one time — it
+                bypasses the normal re-ask cooldown), texts the owner that a
+                reminder went out, then waits up to another 7 days for a
+                reply to the reminder.
+              </p>
+              <p>
+                No config of its own — reuses the same Settings → Messaging
+                → Review requests link/templates and owner phone
+                (Settings → Admin → Account contact) as the step before it.
               </p>
             </div>
           )}

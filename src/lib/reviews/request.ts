@@ -47,7 +47,8 @@ export type ReviewTrigger =
   | "manual"
   | "quote_paid"
   | "deal_completed"
-  | "workflow";
+  | "workflow"
+  | "reminder";
 
 export interface SendReviewInput {
   subAccountId: string;
@@ -106,9 +107,12 @@ export async function maybeSendReviewRequest(
     // A Workflow Builder `review_rating_request` node is its own explicit
     // opt-in (the operator added the step) — it doesn't need the separate
     // Settings → Messaging "send automatically when…" checkboxes, which only
-    // govern the quote-paid / deal-completed auto-triggers.
+    // govern the quote-paid / deal-completed auto-triggers. `reminder` is
+    // the `review_rating_reminder` node's one-time follow-up resend —
+    // same reasoning, it's an explicit workflow step, not an auto-trigger.
     const isWorkflow = input.trigger === "workflow";
-    if (!isManual && !isWorkflow) {
+    const isReminder = input.trigger === "reminder";
+    if (!isManual && !isWorkflow && !isReminder) {
       // Each auto trigger is gated by `enabled` + its own per-trigger flag.
       const triggerEnabled =
         input.trigger === "quote_paid"
@@ -141,8 +145,9 @@ export async function maybeSendReviewRequest(
       return { sent: false, reason: "opted_out" };
     }
 
-    // Cooldown — auto only; manual bypasses (operator intent) but still stamps.
-    if (!isManual) {
+    // Cooldown — auto only; manual and reminder bypass it (explicit operator
+    // intent / an intentional one-time resend) but still stamp reviewRequestedAt.
+    if (!isManual && !isReminder) {
       const cooldownDays =
         cfg.cooldownDays > 0 ? cfg.cooldownDays : DEFAULT_REVIEW_COOLDOWN_DAYS;
       const lastMs = toMillis(contact.reviewRequestedAt);
@@ -236,11 +241,12 @@ export async function maybeSendReviewRequest(
       }
       // Only ask "how many stars" when we can actually intercept the reply
       // (dedicated mode) — a gate the shared sender can't act on would just
-      // strand the contact after they answer. A `workflow` trigger always
-      // gates (that's the entire point of the node), independent of the
-      // Settings-level toggle used by the quote-paid / deal-completed
-      // auto-triggers.
-      useRatingGate = (cfg.ratingGateEnabled === true || isWorkflow) && dedicated;
+      // strand the contact after they answer. `workflow` and `reminder`
+      // triggers always gate (that's the entire point of both nodes),
+      // independent of the Settings-level toggle used by the quote-paid /
+      // deal-completed auto-triggers.
+      useRatingGate =
+        (cfg.ratingGateEnabled === true || isWorkflow || isReminder) && dedicated;
       renderedBody = useRatingGate
         ? fillReviewSms(
             cfg.askForRatingTemplate || DEFAULT_RATING_ASK_TEMPLATE,
