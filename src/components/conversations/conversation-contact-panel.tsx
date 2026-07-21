@@ -1,17 +1,22 @@
 "use client";
 
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import {
   Building2,
   CircleDot,
   ExternalLink,
+  Loader2,
   Mail,
   Phone,
+  Plus,
   Tag,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useSubAccount } from "@/context/sub-account-context";
 import { SourceBadge } from "@/components/contacts/source-badge";
 import { ContactDeals } from "@/components/contacts/contact-deals";
@@ -40,6 +45,53 @@ export function ConversationContactPanel({
   onClose: () => void;
 }) {
   const { saPath } = useSubAccount();
+  const [addingTag, setAddingTag] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [savingTag, setSavingTag] = useState(false);
+
+  async function handleAddTag(e: FormEvent) {
+    e.preventDefault();
+    const tag = tagInput.trim();
+    if (!tag) return;
+    if ((contact.tags ?? []).includes(tag)) {
+      setTagInput("");
+      setAddingTag(false);
+      return;
+    }
+    setSavingTag(true);
+    try {
+      const res = await fetch(`/api/contacts/${contact.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: [...(contact.tags ?? []), tag] }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        blockedTags?: string[];
+      };
+      if (!res.ok) throw new Error(data.error ?? "Couldn't add tag.");
+      if (data.blockedTags?.length) {
+        toast.error(
+          `"${tag}" wasn't added — this sub-account's tag limit is full.`,
+        );
+      } else {
+        toast.success(`Tagged "${tag}"`);
+      }
+      setTagInput("");
+      setAddingTag(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't add tag.");
+    } finally {
+      setSavingTag(false);
+    }
+  }
+
+  function handleTagKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setAddingTag(false);
+      setTagInput("");
+    }
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -101,16 +153,66 @@ export function ConversationContactPanel({
               <SourceBadge source={contact.source} />
             </Row>
             <Row icon={<Tag className="h-3.5 w-3.5" />} label="Tags">
-              {contact.tags && contact.tags.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {contact.tags.map((tag) => (
-                    <Badge key={tag} variant="outline">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
-              ) : (
-                <span className="text-xs text-muted-foreground">No tags</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {contact.tags?.map((tag) => (
+                  <Badge key={tag} variant="outline">
+                    {tag}
+                  </Badge>
+                ))}
+                {!contact.tags?.length && !addingTag && (
+                  <span className="text-xs text-muted-foreground">
+                    No tags
+                  </span>
+                )}
+                {!addingTag && (
+                  <button
+                    type="button"
+                    onClick={() => setAddingTag(true)}
+                    className="inline-flex items-center gap-0.5 rounded-full border border-dashed px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                  >
+                    <Plus className="h-2.5 w-2.5" />
+                    Add
+                  </button>
+                )}
+              </div>
+              {addingTag && (
+                <form
+                  onSubmit={handleAddTag}
+                  className="mt-1.5 flex items-center gap-1.5"
+                >
+                  <Input
+                    autoFocus
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={handleTagKeyDown}
+                    placeholder="Tag name"
+                    className="h-7 text-xs"
+                  />
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="h-7 px-2"
+                    disabled={savingTag || !tagInput.trim()}
+                  >
+                    {savingTag ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      "Add"
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-1.5"
+                    onClick={() => {
+                      setAddingTag(false);
+                      setTagInput("");
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </form>
               )}
             </Row>
           </dl>

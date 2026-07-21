@@ -97,6 +97,16 @@ export interface AiChannelConfig {
   escalationNotifyEmailOverride: string | null;
   /** Informational lifetime running total. Not enforced. */
   totalTokensUsed: number;
+  /**
+   * Seconds to wait after generating a reply before actually sending it —
+   * purely cosmetic (makes the bot feel like it's "typing" instead of
+   * replying instantly). 0 = send immediately (default, legacy behavior).
+   * Only meaningful on SMS/WhatsApp (the channels maybeRespondWithAi
+   * serves); ignored elsewhere. Implemented as a QStash-scheduled callback
+   * (see lib/comms/ai/respond.ts + api/webhooks/ai/delayed-send) so the
+   * inbound webhook still returns immediately — never held open.
+   */
+  replyDelaySec: number;
   /** Web-chat-specific config — populated only on the `web-chat` channel
    *  doc, null elsewhere. The widget loader reads these via the public
    *  /api/web-chat/config endpoint to theme + gate access. */
@@ -235,6 +245,7 @@ export const DEFAULT_AI_CHANNEL_CONFIG: Omit<
   escalationKeywordsOverride: null,
   escalationNotifyEmailOverride: null,
   totalTokensUsed: 0,
+  replyDelaySec: 0,
   webChat: null,
   voice: null,
   whatsapp: null,
@@ -287,6 +298,7 @@ export interface ResolvedAiAgent {
     contextMessageCount: number;
     modelOverride: string | null;
     websiteKb: string | null;
+    replyDelaySec: number;
   };
 }
 

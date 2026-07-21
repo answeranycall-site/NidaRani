@@ -30,6 +30,7 @@ export function SmsChannelSection() {
 
   const [enabled, setEnabled] = useState(false);
   const [contextCount, setContextCount] = useState(10);
+  const [replyDelaySec, setReplyDelaySec] = useState(0);
   const [modelOverride, setModelOverride] = useState("");
   const [overrideKeywords, setOverrideKeywords] = useState(false);
   const [keywordsText, setKeywordsText] = useState("");
@@ -57,6 +58,7 @@ export function SmsChannelSection() {
       if (channelData.config) {
         setEnabled(channelData.config.enabled);
         setContextCount(channelData.config.contextMessageCount);
+        setReplyDelaySec(channelData.config.replyDelaySec ?? 0);
         setModelOverride(channelData.config.modelOverride ?? "");
         setOverrideKeywords(channelData.config.escalationKeywordsOverride !== null);
         setKeywordsText(
@@ -111,6 +113,7 @@ export function SmsChannelSection() {
           body: JSON.stringify({
             enabled,
             contextMessageCount: contextCount,
+            replyDelaySec,
             modelOverride: modelOverride.trim() || null,
             escalationKeywordsOverride: overrideKeywords ? keywords : null,
             escalationNotifyEmailOverride: overrideEmail ? email : null,
@@ -213,19 +216,37 @@ export function SmsChannelSection() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="sms-model">Model (advanced — blank for default)</Label>
+              <Label htmlFor="sms-reply-delay">Reply delay (0-60 sec)</Label>
               <Input
-                id="sms-model"
-                value={modelOverride}
-                onChange={(e) => setModelOverride(e.target.value)}
-                placeholder="anthropic/claude-haiku-4-5"
+                id="sms-reply-delay"
+                type="number"
+                min={0}
+                max={60}
+                value={replyDelaySec}
+                onChange={(e) =>
+                  setReplyDelaySec(
+                    Math.max(0, Math.min(60, Number(e.target.value) || 0)),
+                  )
+                }
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sms-model">Model (advanced — blank for default)</Label>
+            <Input
+              id="sms-model"
+              value={modelOverride}
+              onChange={(e) => setModelOverride(e.target.value)}
+              placeholder="anthropic/claude-haiku-4-5"
+            />
           </div>
           <p className="text-[11px] text-muted-foreground">
             Default model: Claude Haiku 4.5. Override with{" "}
             <code>anthropic/claude-opus-4-7</code> for premium quality at
             ~50× the cost. Any OpenRouter model id works.
+            {" "}Reply delay waits this many seconds after generating a reply
+            before actually texting it — purely cosmetic, so the bot doesn&apos;t
+            feel instant. 0 = send immediately.
           </p>
 
           <div className="space-y-2 rounded-lg border bg-muted/20 p-3">

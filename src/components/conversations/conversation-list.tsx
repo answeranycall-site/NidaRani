@@ -25,6 +25,8 @@ export function ConversationList({
   conversations,
   basePath,
   activeContactId,
+  selectedIds,
+  onToggleSelect,
 }: {
   /** Pre-filtered + pre-sorted by the page. */
   conversations: ConversationDoc[];
@@ -32,6 +34,10 @@ export function ConversationList({
   basePath: string;
   /** Highlights the row matching the currently-open thread, if any. */
   activeContactId?: string;
+  /** contactIds currently checked. Omit (or leave onToggleSelect unset) to
+   *  hide the checkboxes entirely — used outside bulk-select contexts. */
+  selectedIds?: Set<string>;
+  onToggleSelect?: (contactId: string) => void;
 }) {
   if (conversations.length === 0) {
     return (
@@ -55,6 +61,7 @@ export function ConversationList({
         const ts = toDate(c.lastMessageAt);
         const title = c.contactName || c.contactPhone || "Unknown person";
         const active = c.contactId === activeContactId;
+        const checked = selectedIds?.has(c.contactId) ?? false;
         return (
           <Link
             key={c.id}
@@ -64,6 +71,16 @@ export function ConversationList({
               active && "bg-primary/5",
             )}
           >
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={checked}
+                onClick={(e) => e.stopPropagation()}
+                onChange={() => onToggleSelect(c.contactId)}
+                aria-label={`Select conversation with ${title}`}
+                className="h-4 w-4 shrink-0 cursor-pointer rounded border-input"
+              />
+            )}
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
               {initials(title)}
             </span>

@@ -11,6 +11,7 @@ import {
   incrementChannelTokens,
   type ConfiguredChannelId,
 } from "@/lib/comms/ai/agent";
+import { publishCallback } from "@/lib/automations/qstash";
 import { buildContactContextBlock } from "@/lib/comms/ai/context";
 import { buildSystemPrompt } from "@/lib/comms/ai/prompt";
 import {
@@ -57,6 +58,7 @@ type AiSkipReason =
 
 type RespondOutcome =
   | { kind: "replied"; replyText: string; tokens: number }
+  | { kind: "delayed"; replyText: string; tokens: number; delaySeconds: number }
   | { kind: "escalated"; keyword: string }
   | { kind: "drafted"; replyText: string; tokens: number }
   | { kind: "skipped"; reason: AiSkipReason };
@@ -265,6 +267,124 @@ async function storeOutboundReply({
   }
 }
 
+export interface SendAndPersistReplyInput {
+  subAccountId: string;
+  subAccount: SubAccountDoc;
+  agencyId: string;
+  contactId: string;
+  contactName: string;
+  contactPhone: string;
+  channelId: ConfiguredChannelId;
+  replyText: string;
+  model: string;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+}
+
+/**
+ * The back half of the orchestrator — actually send the already-generated
+ * reply + persist it (message row, Conversations index, activity log).
+ * Split out so it can run either inline (no delay configured) or from the
+ * QStash callback that fires `replyDelaySec` seconds later (see
+ * api/webhooks/ai/delayed-send). Token counting happens at generation time
+ * in the caller, NOT here, so it's counted exactly once regardless of
+ * which path sends the reply.
+ */
+export async function sendAndPersistReply(
+  input: SendAndPersistReplyInput,
+): Promise<{ ok: true; sid: string } | { ok: false; error: string }> {
+  const transport = getChannelTransport(input.channelId);
+
+  let send;
+  try {
+    send = await transport.send({
+      subAccountId: input.subAccountId,
+      subAccount: input.subAccount,
+      to: input.contactPhone,
+      body: input.replyText,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error(
+      `[ai/respond] Twilio send failed for sa=${input.subAccountId}: ${msg}`,
+    );
+    await logActivity({
+      contactId: input.contactId,
+      agencyId: input.agencyId,
+      subAccountId: input.subAccountId,
+      type: "ai_skipped",
+      content: `AI reply generated but ${transport.label} send failed: ${msg.slice(0, 200)}`,
+      meta: {
+        reason: "llm_failed",
+        twilioError: msg.slice(0, 500),
+        channel: input.channelId,
+      },
+    });
+    return { ok: false, error: msg };
+  }
+
+  await storeOutboundReply({
+    contactId: input.contactId,
+    agencyId: input.agencyId,
+    subAccountId: input.subAccountId,
+    body: input.replyText,
+    from: send.from,
+    to: input.contactPhone,
+    twilioSid: send.sid,
+    messagesCollection: transport.messagesCollection,
+  });
+
+  await upsertConversationForMessage({
+    contactId: input.contactId,
+    subAccountId: input.subAccountId,
+    agencyId: input.agencyId,
+    contactName: input.contactName,
+    contactPhone: input.contactPhone,
+    channel: input.channelId as ConversationChannel,
+    direction: "outbound",
+    body: input.replyText,
+  });
+
+  await logActivity({
+    contactId: input.contactId,
+    agencyId: input.agencyId,
+    subAccountId: input.subAccountId,
+    type: "ai_reply_sent",
+    content: `AI replied via ${transport.label} (${input.totalTokens} tokens, ${input.model}).`,
+    meta: {
+      channel: input.channelId,
+      model: input.model,
+      tokens: input.totalTokens,
+      promptTokens: input.promptTokens,
+      completionTokens: input.completionTokens,
+      twilioSid: send.sid,
+    },
+  });
+
+  return { ok: true, sid: send.sid };
+}
+
+/**
+ * Schedules the send `delaySeconds` out via QStash instead of sending
+ * inline — the inbound webhook returns immediately either way, so this
+ * never risks Twilio's own webhook timeout. Returns false when QStash
+ * isn't configured or the publish call fails; the caller falls back to
+ * sending immediately rather than silently dropping the reply.
+ */
+async function queueDelayedReply(
+  input: SendAndPersistReplyInput & { delaySeconds: number },
+): Promise<boolean> {
+  const { delaySeconds, ...payload } = input;
+  const res = await publishCallback({
+    pathname: "/api/webhooks/ai/delayed-send",
+    body: payload,
+    delaySeconds,
+    deduplicationId: `ai_delayed_${input.contactId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  });
+  return !!res;
+}
+
 /**
  * Main orchestrator. Webhook caller already resolved profile + channel
  * into a ResolvedAiAgent via resolveAgent() — this function just
@@ -454,70 +574,51 @@ export async function maybeRespondWithAi(
     };
   }
 
-  // Send the reply via the channel transport (SMS or WhatsApp over Twilio).
-  let send;
-  try {
-    send = await transport.send({
-      subAccountId,
-      subAccount,
-      to: contactPhone,
-      body: completion.text,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    console.error(`[ai/respond] Twilio send failed for sa=${subAccountId}: ${msg}`);
-    await logActivity({
-      contactId: contact.id,
-      agencyId: subAccount.agencyId,
-      subAccountId,
-      type: "ai_skipped",
-      content: `AI reply generated but ${transport.label} send failed: ${msg.slice(0, 200)}`,
-      meta: { reason: "llm_failed", twilioError: msg.slice(0, 500), channel: channelId },
-    });
-    return { kind: "skipped", reason: "llm_failed" };
-  }
+  // Tokens were spent generating the reply regardless of when/how it's
+  // actually sent — count them once, here, rather than in both the
+  // immediate and delayed send paths below.
+  void incrementChannelTokens(subAccountId, channelId, completion.totalTokens);
 
-  await storeOutboundReply({
-    contactId: contact.id,
-    agencyId: subAccount.agencyId,
+  const replyPayload = {
     subAccountId,
-    body: completion.text,
-    from: send.from,
-    to: contactPhone,
-    twilioSid: send.sid,
-    messagesCollection: transport.messagesCollection,
-  });
-
-  // Unified-inbox index — reflect the bot's reply as the conversation's
-  // latest message (channelId here is always "sms" | "whatsapp").
-  await upsertConversationForMessage({
-    contactId: contact.id,
-    subAccountId,
+    subAccount,
     agencyId: subAccount.agencyId,
+    contactId: contact.id,
     contactName: contact.name ?? "",
     contactPhone: contact.phone ?? contactPhone,
-    channel: channelId as ConversationChannel,
-    direction: "outbound",
-    body: completion.text,
-  });
+    channelId,
+    replyText: completion.text,
+    model: completion.model,
+    totalTokens: completion.totalTokens,
+    promptTokens: completion.promptTokens,
+    completionTokens: completion.completionTokens,
+  };
 
-  await logActivity({
-    contactId: contact.id,
-    agencyId: subAccount.agencyId,
-    subAccountId,
-    type: "ai_reply_sent",
-    content: `AI replied via ${transport.label} (${completion.totalTokens} tokens, ${completion.model}).`,
-    meta: {
-      channel: channelId,
-      model: completion.model,
-      tokens: completion.totalTokens,
-      promptTokens: completion.promptTokens,
-      completionTokens: completion.completionTokens,
-      twilioSid: send.sid,
-    },
-  });
+  // Cosmetic "typing delay" — schedule the actual send via QStash instead
+  // of sending inline, so the bot doesn't feel instantaneous. The inbound
+  // webhook has already returned by the time this fires; nothing here
+  // blocks Twilio's response.
+  if (eff.replyDelaySec > 0) {
+    const queued = await queueDelayedReply({
+      ...replyPayload,
+      delaySeconds: eff.replyDelaySec,
+    });
+    if (queued) {
+      return {
+        kind: "delayed",
+        replyText: completion.text,
+        tokens: completion.totalTokens,
+        delaySeconds: eff.replyDelaySec,
+      };
+    }
+    // QStash enqueue failed (not configured, or a transient error) — fail
+    // safe by sending immediately below rather than silently dropping it.
+  }
 
-  void incrementChannelTokens(subAccountId, channelId, completion.totalTokens);
+  const sent = await sendAndPersistReply(replyPayload);
+  if (!sent.ok) {
+    return { kind: "skipped", reason: "llm_failed" };
+  }
 
   return {
     kind: "replied",

@@ -119,6 +119,7 @@ async function maybeMigrateLegacy(subAccountId: string): Promise<void> {
     escalationKeywordsOverride: null,
     escalationNotifyEmailOverride: null,
     totalTokensUsed: legacy.totalTokensUsed ?? 0,
+    replyDelaySec: 0,
     webChat: null,
     voice: null,
     whatsapp: null,
@@ -262,6 +263,8 @@ export async function resolveAgent(
       contextMessageCount: channel.contextMessageCount,
       modelOverride: channel.modelOverride,
       websiteKb: profile.websiteKb ?? null,
+      // Legacy channel docs predate this field.
+      replyDelaySec: channel.replyDelaySec ?? 0,
     },
   };
 }

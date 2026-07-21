@@ -265,6 +265,11 @@ function sanitisePatch(
       Math.min(50, Math.floor(input.contextMessageCount)),
     );
   }
+  if ("replyDelaySec" in input && typeof input.replyDelaySec === "number") {
+    // 0-60s range — a delay longer than a minute stops feeling like
+    // "typing" and starts looking like a broken bot.
+    patch.replyDelaySec = Math.max(0, Math.min(60, Math.floor(input.replyDelaySec)));
+  }
   if ("modelOverride" in input) {
     const raw = input.modelOverride;
     if (raw === null || raw === "") {

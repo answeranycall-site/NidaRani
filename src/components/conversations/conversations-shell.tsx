@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
-import { Search, Star, Tag as TagIcon } from "lucide-react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Loader2, Search, Star, Tag as TagIcon, Trash2, X } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
 import { subscribeToConversations } from "@/lib/firestore/conversations";
 import { subscribeToContacts } from "@/lib/firestore/contacts";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ConversationList } from "@/components/conversations/conversation-list";
 import type { ConversationDoc } from "@/types/conversations";
@@ -39,6 +49,97 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
   // copy on the conversation doc.
   const [contactTags, setContactTags] = useState<Map<string, string[]>>(new Map());
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const router = useRouter();
+
+  // Bulk selection — checkboxes on the list, an action bar with delete +
+  // add-tag once anything's checked.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [bulkTagOpen, setBulkTagOpen] = useState(false);
+  const [bulkTagInput, setBulkTagInput] = useState("");
+  const [taggingBulk, setTaggingBulk] = useState(false);
+
+  function toggleSelect(contactId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(contactId)) next.delete(contactId);
+      else next.add(contactId);
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  async function handleBulkDelete() {
+    setDeleting(true);
+    const ids = [...selected];
+    const results = await Promise.allSettled(
+      ids.map((id) => fetch(`/api/contacts/${id}`, { method: "DELETE" })),
+    );
+    let succeeded = 0;
+    let blocked = 0;
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value.ok) succeeded++;
+      else blocked++;
+    }
+    if (succeeded > 0) {
+      toast.success(
+        `Deleted ${succeeded} conversation${succeeded === 1 ? "" : "s"}.`,
+      );
+    }
+    if (blocked > 0) {
+      toast.error(
+        `${blocked} couldn't be deleted — still linked to other records (deals, tasks, etc).`,
+      );
+    }
+    // If the thread currently open just got deleted, back out to the list.
+    const basePathNow = saPath("/conversations");
+    const openContactId =
+      pathname !== basePathNow ? pathname.slice(basePathNow.length + 1) : null;
+    if (openContactId && ids.includes(openContactId)) {
+      router.replace(basePathNow);
+    }
+    setDeleting(false);
+    setConfirmDeleteOpen(false);
+    clearSelection();
+  }
+
+  async function handleBulkAddTag(e: FormEvent) {
+    e.preventDefault();
+    const tag = bulkTagInput.trim();
+    if (!tag) return;
+    setTaggingBulk(true);
+    const ids = [...selected];
+    const results = await Promise.allSettled(
+      ids.map((id) =>
+        fetch(`/api/contacts/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tags: [...(contactTags.get(id) ?? []), tag],
+          }),
+        }),
+      ),
+    );
+    const succeeded = results.filter(
+      (r) => r.status === "fulfilled" && r.value.ok,
+    ).length;
+    if (succeeded > 0) {
+      toast.success(
+        `Tagged ${succeeded} contact${succeeded === 1 ? "" : "s"} "${tag}".`,
+      );
+    }
+    if (succeeded < ids.length) {
+      toast.error(`${ids.length - succeeded} couldn't be tagged.`);
+    }
+    setTaggingBulk(false);
+    setBulkTagOpen(false);
+    setBulkTagInput("");
+    clearSelection();
+  }
 
   useEffect(() => {
     if (authLoading || !user || !subAccountId) return;
@@ -49,6 +150,11 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
     });
     return () => unsub();
   }, [user, subAccountId, authLoading]);
+
+  // Switching sub-accounts invalidates any in-flight selection.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [subAccountId]);
 
   useEffect(() => {
     if (authLoading || !user || !subAccountId || !agencyId) return;
@@ -112,6 +218,46 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
           </p>
         </div>
 
+        {selected.size > 0 ? (
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+            <span className="text-xs font-medium">
+              {selected.size} selected
+            </span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setBulkTagOpen(true)}
+              >
+                <TagIcon className="mr-1 h-3 w-3" />
+                Add tag
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                onClick={() => setConfirmDeleteOpen(true)}
+              >
+                <Trash2 className="mr-1 h-3 w-3" />
+                Delete
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={clearSelection}
+                aria-label="Clear selection"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-2">
           <FilterPill active={filter === "all"} onClick={() => setFilter("all")}>
             All
@@ -158,6 +304,8 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
               conversations={visible}
               basePath={basePath}
               activeContactId={activeContactId}
+              selectedIds={selected}
+              onToggleSelect={toggleSelect}
             />
           )}
         </div>
@@ -171,6 +319,82 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
       >
         {children}
       </div>
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selected.size} conversation{selected.size === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              This deletes the underlying contact{selected.size === 1 ? "" : "s"}{" "}
+              entirely, along with their message history. Any contact still
+              linked to a deal, task, quote, or other record is skipped
+              instead of deleted. This action can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={deleting}
+            >
+              {deleting ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkTagOpen} onOpenChange={setBulkTagOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Tag {selected.size} contact{selected.size === 1 ? "" : "s"}
+            </DialogTitle>
+            <DialogDescription>
+              Adds one tag to every selected contact. Existing tags are kept.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleBulkAddTag} className="space-y-4">
+            <Input
+              autoFocus
+              value={bulkTagInput}
+              onChange={(e) => setBulkTagInput(e.target.value)}
+              placeholder="Tag name"
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBulkTagOpen(false)}
+                disabled={taggingBulk}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={taggingBulk || !bulkTagInput.trim()}>
+                {taggingBulk ? (
+                  <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Add tag
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

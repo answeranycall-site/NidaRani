@@ -19,6 +19,10 @@ const PUBLIC_PATHS = [
   // Workflow Builder step worker — QStash callback, signature-verified inside
   // the route.
   "/api/workflows/step",
+  // AI Agent delayed-reply-send worker (cosmetic "typing delay") — QStash
+  // callback, signature-verified inside the route (same model as
+  // /api/workflows/step above).
+  "/api/webhooks/ai",
   "/api/broadcasts/email/step",
   "/api/checkout",
   "/api/cron/gitpage-heartbeat",

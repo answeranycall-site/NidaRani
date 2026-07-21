@@ -91,6 +91,7 @@ export async function POST(
       contextMessageCount: effectiveChannel.contextMessageCount,
       modelOverride: effectiveChannel.modelOverride,
       websiteKb: profile.websiteKb ?? null,
+      replyDelaySec: effectiveChannel.replyDelaySec ?? 0,
     },
   };
 
