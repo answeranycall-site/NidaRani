@@ -351,7 +351,17 @@ export function NodeConfigDialog({
                 instead of sending the Google review link directly. A reply of
                 4-5 gets the Google link; 1-3 gets a private apology message and
                 a follow-up Task — the Google link is never sent for a low
-                rating.
+                rating. This decision is always a hard rule based on the
+                number, never an AI judgment call.
+              </p>
+              <p>
+                A clean single-number reply is held ~30 seconds before it
+                actually sends, in case a same-minute correction comes in
+                (&ldquo;wait, 3 not 5&rdquo;). AI only gets involved for the
+                genuinely unclear cases — two different numbers in one text,
+                two texts back to back that disagree, or free text with no
+                number at all — and always confirms its best guess with the
+                contact before treating it as final.
               </p>
               <p>
                 Reuses your Google review link and message templates from{" "}
@@ -361,6 +371,12 @@ export function NodeConfigDialog({
                 — set the review link there first. Requires this sub-account&apos;s
                 own dedicated Twilio number (Settings → Messaging), since reading
                 the reply back means intercepting it on your own number.
+              </p>
+              <p>
+                The moment the ask sends, the business owner (Settings →
+                Admin → Account contact phone) gets an immediate text: &ldquo;A
+                review request was sent to {"{name} ({phone})"}.&rdquo; — separate
+                from the outcome notification below.
               </p>
               <p>
                 The run pauses here until the contact replies, or for up to 7

@@ -7,11 +7,13 @@ import { upsertConversationForMessage } from "@/lib/server/conversations-service
 import { resolveAgent } from "@/lib/comms/ai/agent";
 import { aiIsConfigured, callAi } from "@/lib/comms/ai/openrouter";
 import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
+import { publishCallback } from "@/lib/automations/qstash";
 import { buildReviewClickUrl } from "@/lib/reviews/click-token";
 import {
   DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
   DEFAULT_REVIEW_SMS_TEMPLATE,
   MAX_RATING_REPLY_ATTEMPTS,
+  RATING_HOLD_WINDOW_SEC,
   RATING_REPLY_WINDOW_MS,
 } from "@/lib/reviews/constants";
 import { firstWord, fillReviewSms } from "@/lib/reviews/request";
@@ -20,83 +22,127 @@ import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
 /**
- * Pull a 1-5 rating out of a reply that isn't JUST a bare digit — "5, great
- * job!", "I'd say 5 stars", "5/5" all have a standalone 1-5 token somewhere
- * in a short reply. `\b` word boundaries stop a phone number ("555-1234") or
- * a time ("5pm") from matching, since neither has a boundary around a lone
- * digit. Scoped to short replies (≤12 words) so an unrelated long message
- * that happens to contain a stray 1-5 digit doesn't get misread.
+ * Rating-gate reply interception (SMS, dedicated Twilio only). Called from
+ * the inbound webhook right after STOP/START handling and before the
+ * generic AI auto-reply fallback.
+ *
+ * Only acts when `googleReviewConfig.ratingGateEnabled` is on AND the
+ * contact has a live `awaitingReviewReplyAt` flag (stamped by
+ * maybeSendReviewRequest when it sends the "how many stars" ask).
+ *
+ * Three sub-states within that window, in priority order:
+ *   1. `pendingRatingConfirm` set — waiting on an explicit yes/no (or a
+ *      fresh digit) to an AI-proposed rating. See `handleConfirmReply`.
+ *   2. `pendingRatingHoldValue` set — a clean single-digit reply is being
+ *      held for RATING_HOLD_WINDOW_SEC in case a same-minute correction
+ *      arrives. See `handleDuringHold`.
+ *   3. Neither — a fresh reply. See `classifyFreshReply`.
+ *
+ * AI only ever gets involved for the genuinely ambiguous cases (2+ numbers
+ * in one reply, a reply that conflicts with a held digit, or free text with
+ * no digit at all) — a clean, unambiguous single-digit reply is read and
+ * held deterministically, no LLM call. Every AI-derived rating is confirmed
+ * with the customer before being treated as final; a held deterministic
+ * reply is not (it's unambiguous by construction), but still gets a
+ * RATING_HOLD_WINDOW_SEC grace period before committing, in case a
+ * corrective follow-up text lands moments later.
  */
-function extractExplicitRating(body: string): number | null {
-  const trimmed = body.trim();
-  const word = firstWord(trimmed);
-  if (/^[1-5]$/.test(word)) return Number(word);
 
+/** Every DISTINCT 1-5 digit appearing in the reply, in order of first
+ *  appearance — "3 or 5" -> [3, 5]; "5, great job!" -> [5]; "555-1234" ->
+ *  [] (word-boundary guarded). Same ≤12-word scope as extractExplicitRating. */
+function extractAllExplicitRatings(body: string): number[] {
+  const trimmed = body.trim();
   const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
-  if (wordCount > 12) return null;
-  const match = trimmed.match(/\b([1-5])\b/);
-  return match ? Number(match[1]) : null;
+  if (wordCount > 12) return [];
+  const seen = new Set<number>();
+  for (const m of trimmed.matchAll(/\b([1-5])\b/g)) {
+    seen.add(Number(m[1]));
+  }
+  return [...seen];
+}
+
+function isAffirmative(body: string): boolean {
+  const t = body.trim().toLowerCase().replace(/[.!]+$/, "");
+  return /^(y|ya|yea|yeah|yep|yup|yes|correct|right|that'?s right|thats right|confirmed|👍|✅)$/.test(
+    t,
+  );
+}
+
+function isNegative(body: string): boolean {
+  const t = body.trim().toLowerCase().replace(/[.!]+$/, "");
+  return /^(n|no|nope|nah|wrong|incorrect|that'?s not right|thats not right)$/.test(
+    t,
+  );
 }
 
 /**
- * Fallback for a reply with no digit at all — "It was amazing!" / "not
- * great honestly" — asks the already-configured LLM to translate sentiment
- * into an equivalent 1-5 rating. Only runs when nothing digit-based
- * matched, so the common case (customer just replies "5") never spends a
- * token. Returns null on any ambiguity, API failure, or missing key —
- * callers treat that exactly like "couldn't tell", never throwing.
+ * Resolves an ambiguous reply into a single 1-5 (or null if genuinely
+ * unreadable) via the already-configured LLM. Used for: free text with no
+ * digit, a message naming 2+ distinct digits, or a new reply that
+ * conflicts with an already-held digit from a moments-ago message. When
+ * `priorMessage` is set, the model is told the customer may be
+ * correcting/clarifying their first answer.
  */
-async function inferRatingFromSentiment(body: string): Promise<number | null> {
+async function disambiguateRating(
+  latestMessage: string,
+  priorMessage?: string,
+): Promise<number | null> {
   if (!aiIsConfigured()) return null;
-  const trimmed = body.trim();
-  // A reply this long is unlikely to be answering the rating question at
-  // all (more likely an unrelated message) — skip the AI call rather than
-  // risk misclassifying a topic change as a rating.
+  const trimmed = latestMessage.trim();
   if (!trimmed || trimmed.length > 300) return null;
+
+  const systemPrompt = priorMessage
+    ? "A customer was asked to rate a business's service from 1 to 5 stars. " +
+      "They sent two messages close together — they may be correcting or " +
+      "clarifying their first answer. Decide their FINAL intended rating, " +
+      "favoring the more recent message when the two conflict. Respond " +
+      "with ONLY a single digit 1-5, or the word NONE if neither message " +
+      "expresses a clear rating."
+    : "A customer was just asked to rate a business's service from 1 to 5 stars. " +
+      "Translate their reply into that 1-5 scale based on sentiment, or pick " +
+      "the number they most likely meant if their message names more than " +
+      "one. Respond with ONLY a single digit 1-5, or the word NONE if the " +
+      "reply doesn't express any opinion about the service (e.g. it's " +
+      "off-topic or asks a question instead).";
+
+  const userContent = priorMessage
+    ? `First message: "${priorMessage.trim().slice(0, 300)}"\nSecond message: "${trimmed}"`
+    : trimmed;
 
   try {
     const result = await callAi({
       maxTokens: 5,
       temperature: 0,
       messages: [
-        {
-          role: "system",
-          content:
-            "A customer was just asked to rate a business's service from 1 to 5 stars. " +
-            "Translate their reply into that 1-5 scale based on sentiment. " +
-            'Respond with ONLY a single digit 1-5, or the word NONE if the reply ' +
-            "doesn't express any opinion about the service (e.g. it's off-topic " +
-            "or asks a question instead).",
-        },
-        { role: "user", content: trimmed },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent },
       ],
     });
     const out = result.text.trim();
     return /^[1-5]$/.test(out) ? Number(out) : null;
   } catch (err) {
-    console.warn("[reviews/rating-reply] sentiment inference failed", err);
+    console.warn("[reviews/rating-reply] disambiguation failed", err);
     return null;
   }
 }
-
-/**
- * Rating-gate reply interception (SMS, dedicated Twilio only). Called from
- * the inbound webhook right after STOP/START handling and before the
- * generic AI auto-reply fallback — deterministic, not LLM-based, same as
- * the STOP/START keyword check it sits next to.
- *
- * Only acts when `googleReviewConfig.ratingGateEnabled` is on AND the
- * contact has a live `awaitingReviewReplyAt` flag (stamped by
- * maybeSendReviewRequest when it sends the "how many stars" ask). A reply
- * that isn't a recognizable 1-5 clears the flag and falls through to
- * normal handling instead of forcing every future message through this
- * gate.
- */
 
 function toMillis(v: unknown): number | null {
   const maybe = v as { toMillis?: () => number } | null | undefined;
   return maybe && typeof maybe.toMillis === "function" ? maybe.toMillis() : null;
 }
+
+function confirmQuestion(rating: number): string {
+  return `Just to confirm — that sounds like a ${rating}/5, is that right? Reply YES or give a number 1-5.`;
+}
+
+const CLEAR_PENDING_STATE = {
+  awaitingReviewReplyAt: FieldValue.delete(),
+  awaitingReviewReplyAttempts: FieldValue.delete(),
+  pendingRatingHoldValue: FieldValue.delete(),
+  pendingRatingHoldMessage: FieldValue.delete(),
+  pendingRatingConfirm: FieldValue.delete(),
+};
 
 export interface RatingReplyInput {
   subAccountId: string;
@@ -117,67 +163,267 @@ export async function maybeHandleRatingReply(
   const cfg = input.subAccount.googleReviewConfig;
   if (!cfg || cfg.ratingGateEnabled !== true) return { handled: false };
 
-  const db = getAdminDb();
   const awaitingMs = toMillis(input.contact.awaitingReviewReplyAt);
   if (!awaitingMs || Date.now() - awaitingMs > RATING_REPLY_WINDOW_MS) {
     return { handled: false };
   }
 
-  // Tier 1: a literal digit somewhere in a short reply ("5", "5, thanks!",
-  // "I'd say 5 stars"). Tier 2: no digit at all ("It was amazing!") — ask
-  // the LLM to translate sentiment into the same 1-5 scale. Tier 2 only
-  // runs when tier 1 comes up empty, so the common bare-digit reply never
-  // costs a token.
-  const rating =
-    extractExplicitRating(input.body) ?? (await inferRatingFromSentiment(input.body));
+  if (input.contact.pendingRatingConfirm != null) {
+    return handleConfirmReply(input, input.contact.pendingRatingConfirm);
+  }
+  if (input.contact.pendingRatingHoldValue != null) {
+    return handleDuringHold(input, input.contact.pendingRatingHoldValue);
+  }
+  return classifyFreshReply(input);
+}
 
-  if (rating !== null) {
-    // Resolved — close the gate and reset the ambiguous-attempt counter.
-    await db.doc(`contacts/${input.contact.id}`).set(
-      {
-        awaitingReviewReplyAt: FieldValue.delete(),
-        awaitingReviewReplyAttempts: FieldValue.delete(),
-        pendingReviewWorkflowRunId: FieldValue.delete(),
-        lastReviewRating: rating,
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
+/** No pending state yet — this is the customer's first reply since the ask. */
+async function classifyFreshReply(
+  input: RatingReplyInput,
+): Promise<RatingReplyResult> {
+  const digits = extractAllExplicitRatings(input.body);
 
-    // If a Workflow Builder `review_rating_request` node sent this ask, its
-    // run is parked waiting for exactly this reply — resume it now instead
-    // of leaving it to its own 7-day timeout fallback. Best-effort: a
-    // workflow problem can't break the customer-facing reply below.
-    if (input.contact.pendingReviewWorkflowRunId) {
-      void resumeReviewRatingRun(input.contact.pendingReviewWorkflowRunId, {
-        rating,
-        positive: rating >= 4,
-      });
-    }
-  } else {
-    // Ambiguous — a typo'd or off-topic reply shouldn't close the gate on
-    // the very first miss, since the real answer might be 1-2 texts away.
-    // Give it a few tries before assuming they were never going to answer.
-    const attempts = (input.contact.awaitingReviewReplyAttempts ?? 0) + 1;
-    if (attempts >= MAX_RATING_REPLY_ATTEMPTS) {
-      await db.doc(`contacts/${input.contact.id}`).set(
+  if (digits.length === 1) {
+    await startHold(input, digits[0]);
+    return { handled: true };
+  }
+
+  // 2+ digits, or none at all — genuinely ambiguous, ask the AI.
+  const candidate = await disambiguateRating(input.body);
+  if (candidate !== null) {
+    await askForConfirmation(input, candidate);
+    return { handled: true };
+  }
+  return giveUpOrRetry(input);
+}
+
+/** A clean single digit is being held; a new reply arrived during the window. */
+async function handleDuringHold(
+  input: RatingReplyInput,
+  heldValue: number,
+): Promise<RatingReplyResult> {
+  const digits = extractAllExplicitRatings(input.body);
+
+  if (digits.length === 0) {
+    // Unrelated chatter during the hold — don't perturb it, let the
+    // scheduled commit proceed and let this message fall through to
+    // normal handling (e.g. the general AI chatbot, if enabled).
+    return { handled: false };
+  }
+  if (digits.length === 1 && digits[0] === heldValue) {
+    // Reinforcement ("5" again, or "yes 5") — consume it silently.
+    return { handled: true };
+  }
+
+  // A different digit (or multiple digits) arrived — the "two different
+  // messages back to back" case. Ask AI to weigh both messages, favoring
+  // the more recent one, then confirm with the customer either way.
+  const heldMessage = input.contact.pendingRatingHoldMessage ?? "";
+  const candidate =
+    (await disambiguateRating(input.body, heldMessage)) ??
+    digits[digits.length - 1]; // AI unsure — default to the newest digit.
+  await askForConfirmation(input, candidate);
+  return { handled: true };
+}
+
+/** An AI-proposed (or conflict-disambiguated) rating is awaiting confirmation. */
+async function handleConfirmReply(
+  input: RatingReplyInput,
+  candidate: number,
+): Promise<RatingReplyResult> {
+  if (isAffirmative(input.body)) {
+    await commitRating(input, candidate);
+    return { handled: true, rating: candidate };
+  }
+
+  const digits = extractAllExplicitRatings(input.body);
+  if (digits.length === 1) {
+    // An explicit number always wins over a proposed candidate.
+    await commitRating(input, digits[0]);
+    return { handled: true, rating: digits[0] };
+  }
+
+  if (isNegative(input.body)) {
+    await getAdminDb()
+      .doc(`contacts/${input.contact.id}`)
+      .set(
         {
-          awaitingReviewReplyAt: FieldValue.delete(),
+          pendingRatingConfirm: FieldValue.delete(),
           awaitingReviewReplyAttempts: FieldValue.delete(),
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },
       );
-    } else {
-      await db.doc(`contacts/${input.contact.id}`).set(
-        {
-          awaitingReviewReplyAttempts: attempts,
-          updatedAt: FieldValue.serverTimestamp(),
-        },
+    await sendPlainText(
+      input,
+      "No worries — what number would you give us, 1-5?",
+    );
+    return { handled: true };
+  }
+
+  return giveUpOrRetry(input, () => confirmQuestion(candidate));
+}
+
+/** Starts the RATING_HOLD_WINDOW_SEC hold for a clean, unambiguous digit. */
+async function startHold(input: RatingReplyInput, rating: number): Promise<void> {
+  await getAdminDb()
+    .doc(`contacts/${input.contact.id}`)
+    .set(
+      {
+        pendingRatingHoldValue: rating,
+        pendingRatingHoldMessage: input.body.slice(0, 500),
+        awaitingReviewReplyAttempts: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+  const queued = await publishCallback({
+    pathname: "/api/webhooks/reviews/commit-rating",
+    body: {
+      subAccountId: input.subAccountId,
+      agencyId: input.agencyId,
+      contactId: input.contact.id,
+      expectedValue: rating,
+    },
+    delaySeconds: RATING_HOLD_WINDOW_SEC,
+    deduplicationId: `rating_hold_${input.contact.id}_${Date.now()}`,
+  });
+
+  if (!queued) {
+    // QStash isn't configured or the enqueue failed — commit immediately
+    // rather than stranding the customer with a hold that never resolves.
+    await commitRating(input, rating);
+  }
+}
+
+/** Sends the confirm question and parks the candidate for the next reply. */
+async function askForConfirmation(
+  input: RatingReplyInput,
+  candidate: number,
+): Promise<void> {
+  await getAdminDb()
+    .doc(`contacts/${input.contact.id}`)
+    .set(
+      {
+        pendingRatingConfirm: candidate,
+        pendingRatingHoldValue: FieldValue.delete(),
+        pendingRatingHoldMessage: FieldValue.delete(),
+        awaitingReviewReplyAttempts: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  await sendPlainText(input, confirmQuestion(candidate));
+}
+
+/** Ambiguous reply, no readable rating at all — retry a few times before
+ *  giving up on the gate entirely (mirrors the original tolerant-of-typos
+ *  behavior). `resendQuestion`, when given, re-asks the same question
+ *  instead of silently waiting (used from the confirm state). */
+async function giveUpOrRetry(
+  input: RatingReplyInput,
+  resendQuestion?: () => string,
+): Promise<RatingReplyResult> {
+  const attempts = (input.contact.awaitingReviewReplyAttempts ?? 0) + 1;
+  if (attempts >= MAX_RATING_REPLY_ATTEMPTS) {
+    await getAdminDb()
+      .doc(`contacts/${input.contact.id}`)
+      .set(
+        { ...CLEAR_PENDING_STATE, updatedAt: FieldValue.serverTimestamp() },
         { merge: true },
       );
-    }
     return { handled: false };
+  }
+  await getAdminDb()
+    .doc(`contacts/${input.contact.id}`)
+    .set(
+      { awaitingReviewReplyAttempts: attempts, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+  if (resendQuestion) {
+    await sendPlainText(input, resendQuestion());
+    return { handled: true };
+  }
+  return { handled: false };
+}
+
+/** Bare-bones outbound send + persist, for the confirm/re-ask questions
+ *  (not the final Google-link/apology outcome — see commitRating for that). */
+async function sendPlainText(input: RatingReplyInput, body: string): Promise<void> {
+  try {
+    const res = await sendSmsForSubAccount({
+      subAccountId: input.subAccountId,
+      subAccount: input.subAccount,
+      to: input.contact.phone,
+      body,
+    });
+    const db = getAdminDb();
+    await db
+      .collection("contacts")
+      .doc(input.contact.id)
+      .collection("messages")
+      .doc(res.sid)
+      .set({
+        agencyId: input.agencyId,
+        subAccountId: input.subAccountId,
+        contactId: input.contact.id,
+        direction: "outbound",
+        status: "sent",
+        body,
+        from: res.from,
+        to: input.contact.phone,
+        twilioMessageSid: res.sid,
+        sentByUid: "review-rating-reply",
+        error: null,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    await upsertConversationForMessage({
+      contactId: input.contact.id,
+      subAccountId: input.subAccountId,
+      agencyId: input.agencyId,
+      contactName: input.contact.name ?? "",
+      contactPhone: input.contact.phone,
+      channel: "sms",
+      direction: "outbound",
+      body,
+    });
+  } catch (err) {
+    console.warn("[reviews/rating-reply] plain-text send failed", err);
+  }
+}
+
+/**
+ * Final resolution — the rating is now treated as definitive. Clears every
+ * pending-state field, sends the Google link (4-5) or the internal
+ * feedback message (1-3), persists it, logs the activity, resumes any
+ * paused Workflow Builder run, and fires the low-rating Task/email.
+ * Exported so the QStash hold-commit callback can call it directly.
+ */
+export async function commitRating(
+  input: RatingReplyInput,
+  rating: number,
+): Promise<void> {
+  const cfg = input.subAccount.googleReviewConfig;
+  if (!cfg) return; // Gate got turned off mid-flight — nothing to send.
+
+  const db = getAdminDb();
+  await db.doc(`contacts/${input.contact.id}`).set(
+    {
+      ...CLEAR_PENDING_STATE,
+      pendingReviewWorkflowRunId: FieldValue.delete(),
+      lastReviewRating: rating,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
+  if (input.contact.pendingReviewWorkflowRunId) {
+    void resumeReviewRatingRun(input.contact.pendingReviewWorkflowRunId, {
+      rating,
+      positive: rating >= 4,
+    });
   }
 
   const businessName = input.subAccount.name ?? "";
@@ -270,8 +516,6 @@ export async function maybeHandleRatingReply(
       rating,
     });
   }
-
-  return { handled: true, rating };
 }
 
 /** Task + escalation email for a 1-3 rating reply. Best-effort, never throws. */

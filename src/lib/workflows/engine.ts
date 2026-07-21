@@ -459,10 +459,13 @@ const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
 
 /**
  * Sends the "how many stars" ask (reusing the sub-account's Settings →
- * Messaging → Review requests config for the review URL + templates) and
- * pauses the run — see ReviewRatingRequestConfig's doc comment for the full
- * picture. Resumed early by `resumeReviewRatingRun` when the customer
- * replies, or by its own long `wait` as a 7-day timeout fallback otherwise.
+ * Messaging → Review requests config for the review URL + templates),
+ * texts the business owner that a request just went out (accountContact
+ * .phone — separate from the eventual outcome notification a downstream
+ * `notify_owner_sms` step sends), and pauses the run — see
+ * ReviewRatingRequestConfig's doc comment for the full picture. Resumed
+ * early by `resumeReviewRatingRun` when the customer replies, or by its
+ * own long `wait` as a 7-day timeout fallback otherwise.
  */
 const execReviewRatingRequest: NodeExecutor = async (ctx) => {
   const contact = ctx.contact;
@@ -490,6 +493,27 @@ const execReviewRatingRequest: NodeExecutor = async (ctx) => {
   });
   if (!res.sent) {
     return { result: { kind: "next" }, log: `skipped:${res.reason ?? "not_sent"}` };
+  }
+
+  // Let the owner know a request just went out — separate from (and ahead
+  // of) the eventual outcome notification on the `notify_owner_sms` step
+  // that follows resolution. Best-effort; a failure here can't undo the
+  // ask that already sent.
+  const ownerPhone = ctx.subAccount?.accountContact?.phone?.trim();
+  if (ownerPhone) {
+    const identity = contact.name
+      ? `${contact.name} (${contact.phone})`
+      : contact.phone;
+    try {
+      await sendSmsForSubAccount({
+        subAccountId: ctx.subAccountId,
+        subAccount: ctx.subAccount,
+        to: ownerPhone,
+        body: `A review request was sent to ${identity}.`,
+      });
+    } catch (err) {
+      console.warn("[workflows] review_rating_request owner-notify failed", err);
+    }
   }
 
   // Correlate this contact's next inbound reply back to THIS run so

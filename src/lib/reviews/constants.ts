@@ -35,6 +35,16 @@ export const RATING_REPLY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_RATING_REPLY_ATTEMPTS = 3;
 
 /**
+ * How long a clean, unambiguous single-digit rating is held before it's
+ * actually committed (Google link / apology sent) — gives a customer who
+ * fires off a same-minute correction ("wait, 3 not 5") a chance to be
+ * caught before the first reply commits. Implemented as a QStash-scheduled
+ * callback (see api/webhooks/reviews/commit-rating), so nothing blocks the
+ * inbound webhook itself.
+ */
+export const RATING_HOLD_WINDOW_SEC = 30;
+
+/**
  * Review send channel:
  *  - "sms"               — free-form SMS.
  *  - "whatsapp_template" — approved WhatsApp template (compliant outside the 24h

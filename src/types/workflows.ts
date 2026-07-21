@@ -202,12 +202,20 @@ export interface NotifyOwnerSmsConfig {
  * instead of sending the Google review link directly. Reuses the sub-account's
  * Settings → Messaging → "Review requests" config (review URL + templates) —
  * this node has no config of its own. A reply of 4-5 gets the Google link; 1-3
- * gets the configured internal-feedback message + a follow-up Task, and the
- * Google link is never sent. The rating is read deterministically first (a
- * literal 1-5 digit); a reply with no digit falls back to the same
- * OpenRouter-backed sentiment classifier the Settings-driven rating gate
- * already uses (see lib/reviews/rating-reply.ts) — same mechanism, not a
- * separate AI conversation.
+ * gets the configured internal-feedback message + a follow-up Task — this
+ * send/don't-send decision is always a hard rule on the number, never an AI
+ * judgment call. A clean single-digit reply is held ~30s before committing
+ * (lib/reviews/constants.ts::RATING_HOLD_WINDOW_SEC) in case a same-minute
+ * correction arrives; the OpenRouter-backed disambiguator (same one the
+ * Settings-driven rating gate uses — see lib/reviews/rating-reply.ts) only
+ * gets involved for genuinely ambiguous replies (2+ numbers in one message, a
+ * conflicting follow-up message, or free text with no digit), and always
+ * confirms its guess with the contact before it's treated as final.
+ *
+ * As soon as the ask sends successfully, the business owner
+ * (subAccount.accountContact.phone) gets an immediate "A review request was
+ * sent to {name} ({phone})." text — separate from, and ahead of, the
+ * eventual outcome notification a downstream `notify_owner_sms` step sends.
  *
  * The run pauses here (status "waiting") until the customer replies or 7 days
  * elapse (whichever comes first — lib/reviews/constants.ts::RATING_REPLY_

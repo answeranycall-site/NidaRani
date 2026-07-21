@@ -23,6 +23,9 @@ const PUBLIC_PATHS = [
   // callback, signature-verified inside the route (same model as
   // /api/workflows/step above).
   "/api/webhooks/ai",
+  // Review rating-gate hold-then-commit worker — QStash callback,
+  // signature-verified inside the route (same model as the entries above).
+  "/api/webhooks/reviews",
   "/api/broadcasts/email/step",
   "/api/checkout",
   "/api/cron/gitpage-heartbeat",
