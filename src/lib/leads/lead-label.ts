@@ -5,20 +5,21 @@ import { getAdminDb } from "@/lib/firebase/admin";
 
 /**
  * Sequential, per-sub-account "Lead {kind} #N" labels for contacts created
- * anonymously (no name volunteered) via Missed Call Text Back or the Web
- * Chat widget — so a brand-new lead never shows up nameless in the CRM
- * (contact list, conversation inbox, etc).
+ * anonymously (no name volunteered) via Missed Call Text Back, the Web Chat
+ * widget, or a cold inbound SMS to a dedicated number — so a brand-new lead
+ * never shows up nameless in the CRM (contact list, conversation inbox, etc).
  *
- * Counter doc: subAccounts/{id}/counters/leadLabels — { call: n, chat: n },
- * atomically incremented via a Firestore transaction (same pattern as
- * lib/quotes/number.ts).
+ * Counter doc: subAccounts/{id}/counters/leadLabels — { call: n, chat: n,
+ * sms: n }, atomically incremented via a Firestore transaction (same pattern
+ * as lib/quotes/number.ts).
  */
 
-export type LeadLabelKind = "call" | "chat";
+export type LeadLabelKind = "call" | "chat" | "sms";
 
 const KIND_TO_LABEL: Record<LeadLabelKind, string> = {
   call: "Lead call",
   chat: "Lead chat",
+  sms: "Lead text",
 };
 
 export async function issueLeadLabel(

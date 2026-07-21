@@ -1,13 +1,15 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, type DocumentSnapshot } from "firebase-admin/firestore";
 import twilio from "twilio";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { resolveAgent } from "@/lib/comms/ai/agent";
 import { maybeRespondWithAi } from "@/lib/comms/ai/respond";
 import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { createContactServerSide } from "@/lib/server/contacts-service";
+import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
 import { maybeHandleRatingReply } from "@/lib/reviews/rating-reply";
 import { phoneMatchVariants } from "@/lib/phone";
 import { cleanEnv } from "@/lib/env";
@@ -39,14 +41,16 @@ export const dynamic = "force-dynamic";
  * the sub-account's own number + persona to reply from) — shared mode is
  * message-history + opt-out handling, no bot.
  *
- * Unmatched numbers (dedicated mode only): rather than dropping the
- * message, it's recorded under a deterministic `unknown_{subAccountId}_
- * {phone}` placeholder id so it shows up in Conversations as "Unknown
- * person". The operator can open it and convert it into a real contact
- * (phone pre-filled) via `POST /api/sub-accounts/[id]/conversations/
- * [pseudoId]/convert-to-contact`, which migrates the message history onto
- * the new contact id. Shared mode can't do this — there's no subAccountId
- * to scope an unmatched number to.
+ * Unmatched numbers (dedicated mode only): auto-created as a new Contact
+ * (phone-first, `source: "sms"`, named "Lead text #N" via
+ * lib/leads/lead-label.ts until they volunteer/get given a real name) —
+ * same pattern as the WhatsApp inbound webhook — so a cold inbound text
+ * becomes a real lead in the CRM (and fires `contact.created` for any
+ * workflow watching it) instead of a placeholder thread the operator has
+ * to manually convert. One exception: a never-seen number whose FIRST
+ * message is STOP/START — don't mint a contact just to immediately opt it
+ * out; drop silently. Shared mode can't auto-create — there's no
+ * subAccountId to scope an unmatched number to, so it's dropped there.
  *
  * Resolution order: dedicated wins. If the same number is somehow
  * configured both as a sub-account dedicated number AND in the env var
@@ -82,18 +86,6 @@ function normalisePhone(s: string): string {
   let cleaned = s.trim().replace(/[\s\-()]/g, "");
   if (cleaned.startsWith("00")) cleaned = "+" + cleaned.slice(2);
   return cleaned;
-}
-
-/**
- * Deterministic placeholder id for an inbound number that matched no
- * existing Contact. Scoped by subAccountId (not just phone) so the same
- * unknown number texting two different sub-accounts' dedicated numbers
- * never collides on one doc. Stable across repeat texts from the same
- * number, so they accumulate in one "Unknown person" thread instead of
- * minting a new placeholder every time.
- */
-function pseudoContactId(subAccountId: string, phone: string): string {
-  return `unknown_${subAccountId}_${phone.replace(/[^0-9]/g, "")}`;
 }
 
 interface ResolvedRoute {
@@ -253,15 +245,56 @@ export async function POST(request: Request) {
   }
   const matches = await query.limit(5).get();
 
+  // Dedicated mode only: an unrecognized number is auto-created as a new
+  // Contact instead of a placeholder thread — see the header comment.
+  // Shared mode can't do this (no subAccountId to scope a new contact to),
+  // so it's left to fall through and drop below, same as before.
+  let contactDocs: DocumentSnapshot[] = matches.docs;
+  if (matches.empty && route.mode === "dedicated" && route.subAccountId) {
+    if (nextOptedOut !== null) {
+      // A never-seen number's FIRST message is STOP/START — don't mint a
+      // contact just to immediately opt it out.
+      return twimlResponse(emptyTwimlResponse());
+    }
+    try {
+      const created = await createContactServerSide({
+        subAccountId: route.subAccountId,
+        agencyId: route.agencyId ?? "",
+        createdByUid: "twilio-sms-inbound",
+        mode: "live",
+        name: "",
+        email: "",
+        phone: from,
+        company: "",
+        address: "",
+        source: "sms",
+        tags: [],
+      });
+      await applyLeadLabelIfUnnamed({
+        subAccountId: route.subAccountId,
+        contactId: created.id,
+        created: true,
+        currentName: "",
+        kind: "sms",
+      });
+      contactDocs = [await db.collection("contacts").doc(created.id).get()];
+    } catch (err) {
+      console.error(
+        `[twilio/inbound] failed to auto-create contact for ${from} (sa=${route.subAccountId})`,
+        err,
+      );
+    }
+  }
+
   // ----- Message-row + Conversations-index write (BOTH modes, BEFORE
   // opt-out so the row captures the actual word the customer sent, even if
   // it's STOP/START). In shared mode `route.subAccountId` is null (the env
   // var isn't tied to one sub-account), so tenancy is read off each matched
   // contact doc instead — every Contact already carries its own
   // agencyId/subAccountId regardless of which Twilio mode reached it. -----
-  if (!matches.empty) {
+  if (contactDocs.length > 0) {
     const docId = messageSid || db.collection("contacts").doc().id;
-    const writes = matches.docs.map((d) => {
+    const writes = contactDocs.map((d) => {
       const cdata = d.data() as {
         name?: string;
         phone?: string;
@@ -295,7 +328,7 @@ export async function POST(request: Request) {
         .then(() => ({ d, contactSubAccountId, contactAgencyId, cdata }));
     });
     let written: {
-      d: (typeof matches.docs)[number];
+      d: (typeof contactDocs)[number];
       contactSubAccountId: string | undefined;
       contactAgencyId: string | undefined;
       cdata: { name?: string; phone?: string };
@@ -345,55 +378,10 @@ export async function POST(request: Request) {
           ),
       ),
     );
-  } else if (route.mode === "dedicated" && route.subAccountId) {
-    // No contact matched this number. Rather than dropping the message,
-    // record it under a stable placeholder id so it shows up in
-    // Conversations as "Unknown person" — the operator can open it and
-    // convert it into a real contact (phone pre-filled) once they know who
-    // it is. Shared mode can't do this (no subAccountId to scope it to).
-    const pseudoId = pseudoContactId(route.subAccountId, from);
-    const docId = messageSid || db.collection("contacts").doc().id;
-    try {
-      await db
-        .collection("contacts")
-        .doc(pseudoId)
-        .collection("messages")
-        .doc(docId)
-        .set(
-          {
-            agencyId: route.agencyId,
-            subAccountId: route.subAccountId,
-            contactId: pseudoId,
-            direction: "inbound",
-            status: "received",
-            body: bodyRaw,
-            from,
-            to,
-            twilioMessageSid: messageSid || null,
-            sentByUid: null,
-            error: null,
-            readAt: null,
-            mediaUrls: mediaUrls.length ? mediaUrls : null,
-            mediaContentTypes: mediaUrls.length ? mediaContentTypes : null,
-            createdAt: FieldValue.serverTimestamp(),
-          },
-          { merge: true },
-        );
-      await upsertConversationForMessage({
-        contactId: pseudoId,
-        subAccountId: route.subAccountId,
-        agencyId: route.agencyId ?? "",
-        contactName: "",
-        contactPhone: from,
-        channel: "sms",
-        direction: "inbound",
-        body: previewBody,
-      });
-    } catch (err) {
-      console.warn("[twilio/inbound] unknown-person conversation write failed", err);
-    }
+  } else if (route.mode === "dedicated") {
+    // Auto-create above failed (logged there) — nothing left to write.
     console.warn(
-      `[twilio/inbound] dedicated inbound from ${from} → ${to} (sa=${route.subAccountId}): no contact match — recorded as ${pseudoId}`,
+      `[twilio/inbound] dedicated inbound from ${from} → ${to} (sa=${route.subAccountId}): no contact and auto-create failed — dropping`,
     );
   }
 
@@ -405,8 +393,8 @@ export async function POST(request: Request) {
     // Dedicated-mode-only: rating-gate reply check, then AI auto-reply.
     // Both need the sub-account's own Twilio number to reply from, so
     // neither runs in shared mode.
-    if (route.mode === "dedicated" && route.subAccountId && !matches.empty) {
-      const contactDoc = matches.docs[0];
+    if (route.mode === "dedicated" && route.subAccountId && contactDocs.length > 0) {
+      const contactDoc = contactDocs[0];
       const contact = {
         id: contactDoc.id,
         ...(contactDoc.data() as Omit<Contact, "id">),
@@ -464,7 +452,7 @@ export async function POST(request: Request) {
     return twimlResponse(emptyTwimlResponse());
   }
 
-  if (matches.empty) {
+  if (contactDocs.length === 0) {
     console.warn(
       `[twilio/inbound] ${word} from ${from} (mode=${route.mode}) — no matching contact`,
     );
@@ -472,7 +460,7 @@ export async function POST(request: Request) {
   }
 
   const batch = db.batch();
-  for (const docSnap of matches.docs) {
+  for (const docSnap of contactDocs) {
     batch.update(docSnap.ref, {
       smsOptedOut: nextOptedOut,
       updatedAt: FieldValue.serverTimestamp(),
