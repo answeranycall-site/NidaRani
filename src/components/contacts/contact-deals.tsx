@@ -72,7 +72,7 @@ export function ContactDeals({ contact }: { contact: Contact }) {
           contacts={[contact]}
           defaultContactId={contact.id}
           trigger={
-            <Button size="sm" variant="outline" className="pointer-events-none">
+            <Button size="sm" variant="outline">
               + Add deal
             </Button>
           }
