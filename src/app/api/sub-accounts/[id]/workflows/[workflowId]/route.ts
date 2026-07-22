@@ -10,6 +10,9 @@ import type { WorkflowNode, WorkflowNodeType } from "@/types/workflows";
 
 export const dynamic = "force-dynamic";
 
+// Kept in sync with the full WorkflowNodeType union (types/workflows.ts) —
+// any type missing here gets silently rejected by sanitizeNodes() below,
+// which the client surfaces as a generic "Couldn't save workflow" error.
 const NODE_TYPES: WorkflowNodeType[] = [
   "send_email",
   "send_sms",
@@ -23,6 +26,9 @@ const NODE_TYPES: WorkflowNodeType[] = [
   "update_field",
   "create_task",
   "notify",
+  "notify_owner_sms",
+  "review_rating_request",
+  "review_rating_reminder",
   "webhook",
 ];
 
