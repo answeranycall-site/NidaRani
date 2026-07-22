@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Briefcase } from "lucide-react";
-import Link from "next/link";
+import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
 import { subscribeToDealsForContact } from "@/lib/firestore/deals";
@@ -15,10 +15,33 @@ import { Button } from "@/components/ui/button";
 
 export function ContactDeals({ contact }: { contact: Contact }) {
   const { user } = useAuth();
-  const { subAccountId, agencyId, saPath } = useSubAccount();
+  const { subAccountId, agencyId } = useSubAccount();
   const stages = usePipelineStages();
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [movingDealId, setMovingDealId] = useState<string | null>(null);
+
+  async function handleStageChange(dealId: string, stageId: string) {
+    setMovingDealId(dealId);
+    try {
+      const res = await fetch(`/api/deals/${dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stageId }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "Couldn't move the deal.");
+      }
+      // Fires pipeline.stage.changed for any workflow watching this stage —
+      // subscribeToDealsForContact picks up the change live, no local
+      // state update needed here.
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't move the deal.");
+    } finally {
+      setMovingDealId(null);
+    }
+  }
 
   useEffect(() => {
     if (!user || !agencyId) return;
@@ -89,12 +112,18 @@ export function ContactDeals({ contact }: { contact: Contact }) {
                     </p>
                   </div>
                 </div>
-                <Link
-                  href={saPath("/pipeline")}
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium transition-opacity hover:opacity-80 ${stage.tone}`}
+                <select
+                  value={deal.stageId}
+                  disabled={movingDealId === deal.id}
+                  onChange={(e) => handleStageChange(deal.id, e.target.value)}
+                  className={`shrink-0 cursor-pointer rounded-full border-0 px-2 py-0.5 text-[11px] font-medium disabled:cursor-not-allowed disabled:opacity-60 ${stage.tone}`}
                 >
-                  {stage.label}
-                </Link>
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
               </li>
             );
           })}
