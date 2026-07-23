@@ -566,6 +566,18 @@ const execReviewRatingReminder: NodeExecutor = async (ctx) => {
   if (ctx.triggerContext?.reviewOutcome) {
     return { result: { kind: "next" }, log: "skipped:already_replied" };
   }
+  // The preceding review_rating_request node only ever WAITS (pausing the
+  // run) when it actually sent the ask — every skip path (cooldown,
+  // opted-out, no phone, missing config) returns "next" instead, meaning
+  // this node runs again immediately with `reviewOutcome` absent. Without
+  // this check that reads as "no reply after 7 days" even though nothing
+  // was ever sent. `awaitingReviewReplyAt` is ONLY stamped when the ask
+  // genuinely went out, so its absence reliably means "there was no ask to
+  // follow up on" — pass through silently rather than notifying the owner
+  // of a false timeout and sending a stray "reminder".
+  if (!ctx.contact.awaitingReviewReplyAt) {
+    return { result: { kind: "next" }, log: "skipped:no_original_ask" };
+  }
 
   const contact = ctx.contact;
   const identity = contact.name
@@ -971,6 +983,32 @@ export async function enrollForTest(opts: {
   if (!cSnap.exists || cSnap.data()!.subAccountId !== opts.subAccountId) {
     return { ok: false, error: "Contact not found" };
   }
+
+  // A prior test's rating-gate state (hold, cooldown stamp, etc.) would
+  // otherwise carry over and make review_rating_request/_reminder behave
+  // as if the contact already had a request pending — clear it so every
+  // Test click starts the gate fresh. Only touches these specific fields;
+  // never runs for a real (non-test) enrollment.
+  const hasReviewNode = Object.values(wf.nodes).some(
+    (n) => n.type === "review_rating_request" || n.type === "review_rating_reminder"
+  );
+  if (hasReviewNode) {
+    await cSnap.ref.set(
+      {
+        awaitingReviewReplyAt: FieldValue.delete(),
+        awaitingReviewReplyAttempts: FieldValue.delete(),
+        pendingRatingHoldValue: FieldValue.delete(),
+        pendingRatingHoldMessage: FieldValue.delete(),
+        pendingRatingConfirm: FieldValue.delete(),
+        pendingReviewWorkflowRunId: FieldValue.delete(),
+        reviewRequestedAt: FieldValue.delete(),
+        lastReviewRating: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+  }
+
   await enroll(wf, opts.contactId, { test: true });
   return { ok: true };
 }

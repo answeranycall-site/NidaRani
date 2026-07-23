@@ -160,8 +160,17 @@ export interface RatingReplyResult {
 export async function maybeHandleRatingReply(
   input: RatingReplyInput,
 ): Promise<RatingReplyResult> {
+  // NOT gated on cfg.ratingGateEnabled here — that Settings toggle only
+  // governs whether the quote-paid / deal-completed auto-triggers open the
+  // gate. A Workflow Builder `review_rating_request` / `review_rating_reminder`
+  // node forces the gate on for its own send regardless of that toggle (see
+  // lib/reviews/request.ts's isWorkflow/isReminder handling), so the ONLY
+  // thing that should gate reading the reply back is whether an ask was
+  // actually sent for this contact — i.e. `awaitingReviewReplyAt` being live.
+  // Re-checking the toggle here would silently drop every workflow-sent
+  // ask's reply whenever the toggle happens to be off in Settings.
   const cfg = input.subAccount.googleReviewConfig;
-  if (!cfg || cfg.ratingGateEnabled !== true) return { handled: false };
+  if (!cfg || !cfg.reviewUrl) return { handled: false };
 
   const awaitingMs = toMillis(input.contact.awaitingReviewReplyAt);
   if (!awaitingMs || Date.now() - awaitingMs > RATING_REPLY_WINDOW_MS) {
