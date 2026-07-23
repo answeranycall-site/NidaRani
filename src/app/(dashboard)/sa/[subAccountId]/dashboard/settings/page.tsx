@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CreditCard, Download } from "lucide-react";
+import { CreditCard, Download, Globe } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
 import { getUserDoc } from "@/lib/firestore/users";
@@ -11,7 +11,6 @@ import { subscribeToContacts } from "@/lib/firestore/contacts";
 import { serializeCsv, downloadCsv } from "@/lib/csv";
 import { toDate } from "@/lib/format";
 import { LANDING_VARIANT } from "@/config/landing";
-import { SubAccountContactSection } from "@/components/settings/sub-account-contact-section";
 import { SubAccountMembersSection } from "@/components/settings/sub-account-members-section";
 import { SubAccountTerritoriesSection } from "@/components/settings/sub-account-territories-section";
 import { SubAccountCustomFieldsSection } from "@/components/settings/sub-account-custom-fields-section";
@@ -27,7 +26,6 @@ import { SubAccountApiKeysSection } from "@/components/settings/sub-account-api-
 import { SubAccountApiRecipesSection } from "@/components/settings/sub-account-api-recipes-section";
 import { SubAccountCalendarSyncSection } from "@/components/settings/sub-account-calendar-sync-section";
 import { SubAccountWebhooksSection } from "@/components/settings/sub-account-webhooks-section";
-import { ClientOnboardingForm } from "@/components/onboarding/client-onboarding-form";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UserDoc, SubscriptionStatus } from "@/types";
@@ -130,9 +128,8 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="onboarding">
+      <Tabs defaultValue="admin">
         <TabsList>
-          <TabsTrigger value="onboarding">Client Onboarding</TabsTrigger>
           <TabsTrigger value="admin">Admin</TabsTrigger>
           <TabsTrigger value="messaging">Messaging</TabsTrigger>
           <TabsTrigger value="api">API</TabsTrigger>
@@ -140,22 +137,18 @@ export default function SettingsPage() {
           <TabsTrigger value="import">Importer</TabsTrigger>
         </TabsList>
 
-        {/* ---------- Client Onboarding: everything to fill in once when a
-            new client comes on board, in one place. ---------- */}
-        <TabsContent value="onboarding" className="mt-6 space-y-6">
-          <ClientOnboardingForm />
-        </TabsContent>
-
-        {/* ---------- Admin: contact, branding, plan, members, territories,
-            calendar, payments, data ---------- */}
+        {/* ---------- Admin: dedicated Twilio number, branding, plan, members,
+            territories, calendar, payments, data. Account contact + the rest
+            of client onboarding now lives on the Dashboard. ---------- */}
         <TabsContent value="admin" className="mt-6 space-y-6">
-          {/* Account contact — the human at the client this sub-account belongs to. */}
-          <SubAccountContactSection />
+          {/* Dedicated Twilio number — read-only display; edited at
+              Settings → Messaging → SMS (SubAccountSmsSection below). */}
+          <DedicatedTwilioNumberCard />
 
-          {/* Logo lives on Settings → Client Onboarding now (file-upload —
-              see ClientOnboardingForm). Used to be a separate URL-paste
-              "Branding" section here; removed to avoid two disconnected
-              places editing the same subAccount.logoUrl field. */}
+          {/* Logo lives on the Dashboard's Client Onboarding card now
+              (file-upload — see ClientOnboardingForm). Used to be a separate
+              URL-paste "Branding" section here; removed to avoid two
+              disconnected places editing the same subAccount.logoUrl field. */}
 
           {/* Subscription — admin only, and only on the LeadStack-branded
               deployment. Buyer clones (LANDING_VARIANT === "custom") collect
@@ -300,5 +293,53 @@ export default function SettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/**
+ * Read-only display of this sub-account's dedicated Twilio number — the
+ * actual entry form (Account SID + Auth Token + From Number) lives at
+ * Settings → Messaging → SMS (SubAccountSmsSection); this card is just a
+ * quick-glance summary + the client-facing forwarding instructions, kept in
+ * Admin since it's operational/technical rather than onboarding-form info.
+ */
+function DedicatedTwilioNumberCard() {
+  const { subAccount } = useSubAccount();
+  const twilioNumber = subAccount?.twilioConfig?.enabled
+    ? subAccount.twilioConfig.fromNumber
+    : null;
+
+  return (
+    <section className="rounded-2xl border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
+          <Globe className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold">Dedicated Twilio number</h2>
+          <p className="text-xs text-muted-foreground">
+            Edited below at Messaging → SMS — this is just a quick-glance
+            summary.
+          </p>
+        </div>
+      </div>
+      <p className="text-sm">
+        {twilioNumber ? (
+          <span className="font-medium">{twilioNumber}</span>
+        ) : (
+          <span className="text-muted-foreground">Not configured yet.</span>
+        )}
+      </p>
+      <p className="mt-3 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
+        <strong className="text-foreground">What the client needs to do:</strong>{" "}
+        keep publishing their existing business number as usual — no need to
+        change anything customers see. On their phone/carrier, turn on
+        <em> &ldquo;forward when unanswered&rdquo;</em> (sometimes called
+        &ldquo;forward on no answer&rdquo; or &ldquo;busy/no-answer
+        forwarding&rdquo;) and point it at the number above. Calls still ring
+        their real phone first; only if nobody picks up does it forward here,
+        and that&apos;s the instant the auto-text-back fires.
+      </p>
+    </section>
   );
 }

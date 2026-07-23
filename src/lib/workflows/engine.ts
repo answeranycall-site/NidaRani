@@ -22,6 +22,7 @@ import { publishCallback, qstashIsConfigured } from "@/lib/automations/qstash";
 import { reserveTags } from "@/lib/contacts/tag-registry";
 import { maybeSendReviewRequest } from "@/lib/reviews/request";
 import { RATING_REPLY_WINDOW_MS } from "@/lib/reviews/constants";
+import { renderOwnerNotify } from "@/lib/reviews/owner-notify";
 import { evalConditionGroup } from "./conditions";
 import type { Contact } from "@/types/contacts";
 import type { AgencyDoc, SubAccountDoc } from "@/types";
@@ -469,7 +470,7 @@ const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
 async function sendRatingAskAndArmWait(
   ctx: NodeContext,
   trigger: "workflow" | "reminder",
-  ownerNotifyBody: (identity: string) => string
+  ownerNotifyKind: "requestSent" | "reminderSent"
 ): Promise<{ result: StepResult; log: string }> {
   const contact = ctx.contact;
   if (contact.smsOptedOut) {
@@ -503,15 +504,17 @@ async function sendRatingAskAndArmWait(
   // reply resolves. Best-effort; a failure here can't undo the send.
   const ownerPhone = ctx.subAccount?.accountContact?.phone?.trim();
   if (ownerPhone) {
-    const identity = contact.name
-      ? `${contact.name} (${contact.phone})`
-      : contact.phone;
     try {
+      const body = await renderOwnerNotify(ctx.agencyId, ownerNotifyKind, {
+        clientName: contact.name || contact.phone,
+        clientPhone: contact.phone,
+        businessName: ctx.subAccount?.name ?? "",
+      });
       await sendSmsForSubAccount({
         subAccountId: ctx.subAccountId,
         subAccount: ctx.subAccount,
         to: ownerPhone,
-        body: ownerNotifyBody(identity),
+        body,
       });
     } catch (err) {
       console.warn(`[workflows] review-rating ask owner-notify failed (trigger=${trigger})`, err);
@@ -543,11 +546,7 @@ async function sendRatingAskAndArmWait(
  * by its own long `wait` as a 7-day timeout fallback otherwise.
  */
 const execReviewRatingRequest: NodeExecutor = (ctx) =>
-  sendRatingAskAndArmWait(
-    ctx,
-    "workflow",
-    (identity) => `A review request was sent to ${identity}.`
-  );
+  sendRatingAskAndArmWait(ctx, "workflow", "requestSent");
 
 /**
  * One-time follow-up for `review_rating_request`'s 7-day no-reply timeout
@@ -580,28 +579,26 @@ const execReviewRatingReminder: NodeExecutor = async (ctx) => {
   }
 
   const contact = ctx.contact;
-  const identity = contact.name
-    ? `${contact.name} (${contact.phone})`
-    : contact.phone;
   const ownerPhone = ctx.subAccount?.accountContact?.phone?.trim();
   if (ownerPhone) {
     try {
+      const body = await renderOwnerNotify(ctx.agencyId, "reminderTimeout", {
+        clientName: contact.name || contact.phone,
+        clientPhone: contact.phone,
+        businessName: ctx.subAccount?.name ?? "",
+      });
       await sendSmsForSubAccount({
         subAccountId: ctx.subAccountId,
         subAccount: ctx.subAccount,
         to: ownerPhone,
-        body: `It's been 7 days since we asked ${identity} to rate their experience, and they haven't responded.`,
+        body,
       });
     } catch (err) {
       console.warn("[workflows] review_rating_reminder timeout owner-notify failed", err);
     }
   }
 
-  return sendRatingAskAndArmWait(
-    ctx,
-    "reminder",
-    (id) => `We just sent ${id} a reminder to rate their experience.`
-  );
+  return sendRatingAskAndArmWait(ctx, "reminder", "reminderSent");
 };
 
 const execWebhook: NodeExecutor = async (ctx) => {

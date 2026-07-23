@@ -44,6 +44,23 @@ export interface AgencyDoc {
    * (`getTwilioForSubAccount`) and reflected in the workflow builder readiness.
    */
   sharedSmsAllowed?: boolean;
+  /**
+   * Agency-wide SMS copy for the texts a SUB-ACCOUNT's own business owner
+   * (subAccount.accountContact.phone) receives from the review-rating-gate
+   * workflow nodes (review_rating_request / review_rating_reminder). One set
+   * of copy applies across every sub-account in the agency — the customer-
+   * facing templates (ask/confirm/internal-feedback/link message) stay
+   * per-sub-account at Settings → Messaging → Review requests since those
+   * vary by client brand voice, but the owner heads-up texts are internal
+   * ops copy the agency sets once. Tags: {{clientName}}, {{clientPhone}},
+   * {{businessName}} (the sub-account's name). Blank/missing fields fall
+   * back to the DEFAULT_OWNER_*_TEMPLATE constants in lib/reviews/constants.ts.
+   */
+  reviewOwnerNotifyTemplates?: {
+    requestSent?: string;
+    reminderTimeout?: string;
+    reminderSent?: string;
+  };
 }
 
 export interface SubAccountDoc {
@@ -325,12 +342,6 @@ export interface SubAccountDoc {
    * sub-account name shows alone.
    */
   logoUrl: string | null;
-  /**
-   * Client opted in to being featured as a case study / portfolio piece
-   * (marketing use of their results, testimonial, etc). Set from the
-   * Client Onboarding page. Undefined/false = not opted in.
-   */
-  caseStudyOptIn?: boolean;
   /**
    * "What We're Installing" checklist state on the Client Onboarding page —
    * keyed by a stable item slug (not the display label, so wording can

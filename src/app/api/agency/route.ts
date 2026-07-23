@@ -26,6 +26,11 @@ interface PatchBody {
   supportEmail?: string | null;
   primaryDomain?: string | null;
   sharedSmsAllowed?: boolean;
+  reviewOwnerNotifyTemplates?: {
+    requestSent?: string;
+    reminderTimeout?: string;
+    reminderSent?: string;
+  };
 }
 
 const URL_RE = /^https?:\/\/.+/i;
@@ -160,6 +165,30 @@ export async function PATCH(request: Request) {
       );
     }
     update.sharedSmsAllowed = body.sharedSmsAllowed;
+  }
+
+  if (body.reviewOwnerNotifyTemplates !== undefined) {
+    const t = body.reviewOwnerNotifyTemplates;
+    if (typeof t !== "object" || t === null) {
+      return NextResponse.json(
+        { error: "reviewOwnerNotifyTemplates must be an object." },
+        { status: 400 },
+      );
+    }
+    const clean: Record<string, string> = {};
+    for (const key of ["requestSent", "reminderTimeout", "reminderSent"] as const) {
+      const v = t[key];
+      if (v !== undefined) {
+        if (typeof v !== "string") {
+          return NextResponse.json(
+            { error: `reviewOwnerNotifyTemplates.${key} must be a string.` },
+            { status: 400 },
+          );
+        }
+        clean[key] = v.trim().slice(0, 480);
+      }
+    }
+    update.reviewOwnerNotifyTemplates = clean;
   }
 
   if (Object.keys(update).length === 1) {

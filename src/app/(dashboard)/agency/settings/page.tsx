@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { BrandingSection } from "@/components/agency/branding-section";
 import { MessagingSection } from "@/components/agency/messaging-section";
+import { ReviewOwnerTemplatesSection } from "@/components/agency/review-owner-templates-section";
 import { SeedDemoSection } from "@/components/agency/seed-demo-section";
 import { PasswordSection } from "@/components/settings/password-section";
 import { LANDING_VARIANT } from "@/config/landing";
@@ -45,6 +46,12 @@ export default function AgencySettingsPage() {
       {/* Read-only view of the shared (env-var) Twilio + Resend senders, so the
           owner can see exactly what "agency-level" SMS/email resolves to. */}
       <MessagingSection />
+
+      {/* Owner-facing review-rating-gate SMS copy — agency-wide, applies to
+          every sub-account's own business owner. The customer-facing
+          templates live per-sub-account at Settings → Messaging → Review
+          requests instead. */}
+      <ReviewOwnerTemplatesSection />
 
       {/* Password change — user-level concern but mounted on both the
           agency-settings and sub-account-settings pages so it's reachable

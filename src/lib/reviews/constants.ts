@@ -24,6 +24,31 @@ export const DEFAULT_CONFIRM_RATING_TEMPLATE =
   "Just to confirm — that sounds like a {{rating}}/5, is that right? Reply YES or give a number 1-5.";
 
 /**
+ * Agency-wide texts sent to a SUB-ACCOUNT'S OWN business owner
+ * (accountContact.phone) by the review-rating-gate workflow nodes. One set
+ * of copy applies across every sub-account in the agency (Agency → Settings)
+ * — distinct from the customer-facing templates above, which stay per
+ * sub-account. Tags: {{clientName}}, {{clientPhone}}, {{businessName}}.
+ */
+export const DEFAULT_OWNER_REQUEST_SENT_TEMPLATE =
+  "A review request was sent to {{clientName}} ({{clientPhone}}).";
+export const DEFAULT_OWNER_REMINDER_TIMEOUT_TEMPLATE =
+  "It's been 7 days since we asked {{clientName}} ({{clientPhone}}) to rate their experience, and they haven't responded.";
+export const DEFAULT_OWNER_REMINDER_SENT_TEMPLATE =
+  "We just sent {{clientName}} ({{clientPhone}}) a reminder to rate their experience.";
+
+/** Fill {{clientName}} / {{clientPhone}} / {{businessName}} into an owner-notify template. */
+export function renderOwnerNotifyTemplate(
+  template: string,
+  vars: { clientName: string; clientPhone: string; businessName: string },
+): string {
+  return template
+    .replaceAll("{{clientName}}", vars.clientName)
+    .replaceAll("{{clientPhone}}", vars.clientPhone)
+    .replaceAll("{{businessName}}", vars.businessName);
+}
+
+/**
  * How long an "awaiting rating reply" flag stays live after a review request
  * goes out. A reply after this window is treated as ordinary chat instead of
  * a stale rating answer. 7 days comfortably covers a delayed reply without

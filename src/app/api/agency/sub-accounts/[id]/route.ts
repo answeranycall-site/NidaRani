@@ -18,7 +18,6 @@ interface PatchBody {
     email?: string | null;
     phone?: string | null;
   } | null;
-  caseStudyOptIn?: boolean;
 }
 
 const URL_RE = /^https?:\/\/.+/i;
@@ -42,9 +41,9 @@ function isValidSendWindow(v: unknown): v is SendWindow {
 
 /**
  * Patch a sub-account doc. Allowed fields: name, timezone, sendWindow,
- * bookingLink, replyToEmail, automationsPaused, accountContact,
- * caseStudyOptIn. Caller must be an active sub-account admin (agency
- * owners pass via the implicit shortcut in requireSubAccountAdmin).
+ * bookingLink, replyToEmail, automationsPaused, accountContact. Caller must
+ * be an active sub-account admin (agency owners pass via the implicit
+ * shortcut in requireSubAccountAdmin).
  */
 export async function PATCH(
   request: Request,
@@ -183,16 +182,6 @@ export async function PATCH(
             };
       update.accountContact = normalized;
     }
-  }
-
-  if (body.caseStudyOptIn !== undefined) {
-    if (typeof body.caseStudyOptIn !== "boolean") {
-      return NextResponse.json(
-        { error: "caseStudyOptIn must be a boolean." },
-        { status: 400 },
-      );
-    }
-    update.caseStudyOptIn = body.caseStudyOptIn;
   }
 
   if (Object.keys(update).length === 1) {

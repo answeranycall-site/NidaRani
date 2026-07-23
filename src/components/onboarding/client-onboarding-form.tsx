@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   Building2,
-  Globe,
   Image as ImageIcon,
   Loader2,
   Phone,
@@ -24,16 +23,14 @@ import { cn } from "@/lib/utils";
 import { DEFAULT_REVIEW_SMS_TEMPLATE } from "@/lib/reviews/constants";
 
 /**
- * Client Onboarding — one tab (Settings → Client Onboarding) that
- * consolidates the fields that used to be scattered across Settings →
- * Admin, Branding, Google Reviews, AI Agents → Overview, and Settings →
- * SMS. Each field still saves through its EXISTING real route — this page
- * is a friendlier front door onto them, not a replacement data model.
+ * Client Onboarding — rendered on the sub-account Dashboard, consolidating
+ * the fields that used to be scattered across Settings → Admin, Branding,
+ * Google Reviews, AI Agents → Overview, and Settings → SMS. Each field still
+ * saves through its EXISTING real route — this is a friendlier front door
+ * onto them, not a replacement data model.
  *
- * The dedicated Twilio number itself is filled in by the agency owner
- * separately (Settings → Messaging tab / the agency's own Twilio
- * provisioning) — this page just explains what the CLIENT needs to do
- * on their end (forward their existing number here on no-answer).
+ * The dedicated Twilio number itself is a separate, read-only display kept
+ * in Settings → Admin (not here) — it's edited at Settings → Messaging → SMS.
  */
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB, matches storage.rules
@@ -131,7 +128,6 @@ export function ClientOnboardingForm() {
   const [logoUrl, setLogoUrl] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [reviewUrl, setReviewUrl] = useState("");
-  const [caseStudyOptIn, setCaseStudyOptIn] = useState(false);
 
   const [hydrated, setHydrated] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -147,7 +143,6 @@ export function ClientOnboardingForm() {
     setOwnerPhone(subAccount.accountContact?.phone ?? "");
     setLogoUrl(subAccount.logoUrl ?? "");
     setReviewUrl(subAccount.googleReviewConfig?.reviewUrl ?? "");
-    setCaseStudyOptIn(subAccount.caseStudyOptIn === true);
 
     fetch(`/api/sub-accounts/${subAccountId}/ai-agent/profile`)
       .then((r) => r.json())
@@ -194,7 +189,7 @@ export function ClientOnboardingForm() {
     try {
       const jobs: Promise<Response>[] = [];
 
-      // Business name + account contact + case-study opt-in.
+      // Business name + account contact.
       jobs.push(
         fetch(`/api/agency/sub-accounts/${subAccountId}`, {
           method: "PATCH",
@@ -206,7 +201,6 @@ export function ClientOnboardingForm() {
               email: ownerEmail,
               phone: ownerPhone,
             },
-            caseStudyOptIn,
           }),
         }),
       );
@@ -266,10 +260,6 @@ export function ClientOnboardingForm() {
       setSaving(false);
     }
   }
-
-  const twilioNumber = subAccount?.twilioConfig?.enabled
-    ? subAccount.twilioConfig.fromNumber
-    : null;
 
   return (
     <div className="space-y-6">
@@ -438,41 +428,6 @@ export function ClientOnboardingForm() {
 
         <section className="rounded-2xl border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
-              <Globe className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold">Dedicated Twilio number</h2>
-              <p className="text-xs text-muted-foreground">
-                The agency owner assigns this (Settings → Messaging tab) —
-                it&apos;s not a self-service field here.
-              </p>
-            </div>
-          </div>
-          <p className="text-sm">
-            {twilioNumber ? (
-              <span className="font-medium">{twilioNumber}</span>
-            ) : (
-              <span className="text-muted-foreground">
-                Not configured yet.
-              </span>
-            )}
-          </p>
-          <p className="mt-3 rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-            <strong className="text-foreground">What the client needs to do:</strong>{" "}
-            keep publishing their existing business number as usual — no need
-            to change anything customers see. On their phone/carrier, turn on
-            <em> &ldquo;forward when unanswered&rdquo;</em> (sometimes called
-            &ldquo;forward on no answer&rdquo; or &ldquo;busy/no-answer
-            forwarding&rdquo;) and point it at the new Twilio number above.
-            Calls still ring their real phone first; only if nobody picks up
-            does it forward here, and that&apos;s the instant the
-            auto-text-back fires.
-          </p>
-        </section>
-
-        <section className="rounded-2xl border bg-card p-5">
-          <div className="mb-4 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
               <UserPlus className="h-4 w-4" />
             </span>
@@ -484,31 +439,12 @@ export function ClientOnboardingForm() {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            Go to the <strong className="text-foreground">Admin</strong> tab
-            above → Members section → invite by email → choose{" "}
+            Go to <strong className="text-foreground">Settings → Admin</strong>{" "}
+            → Members section → invite by email → choose{" "}
             <strong className="text-foreground">Admin</strong> (full access)
             or <strong className="text-foreground">Collaborator</strong>{" "}
             (day-to-day access, no member management).
           </p>
-        </section>
-
-        <section className="rounded-2xl border bg-card p-5">
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id="ob-case-study"
-              checked={caseStudyOptIn}
-              onCheckedChange={(v) => setCaseStudyOptIn(!!v)}
-            />
-            <div>
-              <Label htmlFor="ob-case-study" className="text-sm font-medium">
-                Opt in to being featured as a case study / portfolio piece
-              </Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Optional — lets the agency showcase results from this account
-                in marketing.
-              </p>
-            </div>
-          </div>
         </section>
 
         <Button type="submit" disabled={saving}>
