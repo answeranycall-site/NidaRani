@@ -18,6 +18,11 @@ export const DEFAULT_INTERNAL_FEEDBACK_MESSAGE =
 export const DEFAULT_RATING_ASK_TEMPLATE =
   "Hi {{firstName}}, thanks for being our valued client at {{businessName}}! ⭐ How would you rate our service? Reply with 1, 2, 3, 4, or 5 stars.";
 
+/** Sent when the gate needs the contact to confirm an AI-inferred or
+ *  conflict-disambiguated rating before treating it as final. Tag: {{rating}}. */
+export const DEFAULT_CONFIRM_RATING_TEMPLATE =
+  "Just to confirm — that sounds like a {{rating}}/5, is that right? Reply YES or give a number 1-5.";
+
 /**
  * How long an "awaiting rating reply" flag stays live after a review request
  * goes out. A reply after this window is treated as ordinary chat instead of

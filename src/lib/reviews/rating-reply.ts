@@ -10,6 +10,7 @@ import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
 import { publishCallback } from "@/lib/automations/qstash";
 import { buildReviewClickUrl } from "@/lib/reviews/click-token";
 import {
+  DEFAULT_CONFIRM_RATING_TEMPLATE,
   DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
   DEFAULT_REVIEW_SMS_TEMPLATE,
   MAX_RATING_REPLY_ATTEMPTS,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/reviews/constants";
 import { firstWord, fillReviewSms } from "@/lib/reviews/request";
 import { resumeReviewRatingRun } from "@/lib/workflows/engine";
-import type { SubAccountDoc } from "@/types";
+import type { SubAccountDoc, GoogleReviewConfig } from "@/types";
 import type { Contact } from "@/types/contacts";
 
 /**
@@ -132,8 +133,9 @@ function toMillis(v: unknown): number | null {
   return maybe && typeof maybe.toMillis === "function" ? maybe.toMillis() : null;
 }
 
-function confirmQuestion(rating: number): string {
-  return `Just to confirm — that sounds like a ${rating}/5, is that right? Reply YES or give a number 1-5.`;
+function confirmQuestion(rating: number, cfg: GoogleReviewConfig | null): string {
+  const template = cfg?.confirmRatingTemplate || DEFAULT_CONFIRM_RATING_TEMPLATE;
+  return template.replace(/\{\{\s*rating\s*\}\}/g, String(rating));
 }
 
 const CLEAR_PENDING_STATE = {
@@ -270,7 +272,9 @@ async function handleConfirmReply(
     return { handled: true };
   }
 
-  return giveUpOrRetry(input, () => confirmQuestion(candidate));
+  return giveUpOrRetry(input, () =>
+    confirmQuestion(candidate, input.subAccount.googleReviewConfig ?? null),
+  );
 }
 
 /** Starts the RATING_HOLD_WINDOW_SEC hold for a clean, unambiguous digit. */
@@ -323,7 +327,10 @@ async function askForConfirmation(
       },
       { merge: true },
     );
-  await sendPlainText(input, confirmQuestion(candidate));
+  await sendPlainText(
+    input,
+    confirmQuestion(candidate, input.subAccount.googleReviewConfig ?? null),
+  );
 }
 
 /** Ambiguous reply, no readable rating at all — retry a few times before

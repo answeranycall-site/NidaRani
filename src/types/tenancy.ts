@@ -632,6 +632,13 @@ export interface GoogleReviewConfig {
   /** Sent to 1-3 repliers when the rating gate is on. Falls back to
    *  DEFAULT_INTERNAL_FEEDBACK_MESSAGE when blank. */
   internalFeedbackMessage?: string;
+  /**
+   * Sent when the gate can't read a rating deterministically (2+ numbers in
+   * one reply, a conflicting follow-up message, or free text) and needs the
+   * contact to confirm the AI's best guess before treating it as final.
+   * Tag: {{rating}}. Falls back to DEFAULT_CONFIRM_RATING_TEMPLATE when blank.
+   */
+  confirmRatingTemplate?: string;
   updatedAt: Date;
 }
 

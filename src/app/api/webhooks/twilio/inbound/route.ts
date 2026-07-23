@@ -286,6 +286,18 @@ export async function POST(request: Request) {
     }
   }
 
+  // "YES"/"START"/"UNSTOP" is a reserved re-opt-in keyword, but a contact
+  // who ISN'T currently opted out (the common case) typing "yes" almost
+  // always means they're answering something — a rating-gate confirm, a
+  // yes/no question from the AI agent, etc. — not asking to opt back into
+  // texts they were never opted out of. Only treat it as the compliance
+  // opt-in action when it would actually flip something; otherwise let the
+  // message fall through to normal handling below. STOP always still
+  // opts out regardless of current state.
+  if (nextOptedOut === false && contactDocs[0]?.data()?.smsOptedOut !== true) {
+    nextOptedOut = null;
+  }
+
   // ----- Message-row + Conversations-index write (BOTH modes, BEFORE
   // opt-out so the row captures the actual word the customer sent, even if
   // it's STOP/START). In shared mode `route.subAccountId` is null (the env

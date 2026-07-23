@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
+  DEFAULT_CONFIRM_RATING_TEMPLATE,
   DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
   DEFAULT_RATING_ASK_TEMPLATE,
   DEFAULT_REVIEW_COOLDOWN_DAYS,
@@ -47,6 +48,9 @@ export function SubAccountGoogleReviewSection() {
   const [internalFeedbackMessage, setInternalFeedbackMessage] = useState(
     DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
   );
+  const [confirmRatingTemplate, setConfirmRatingTemplate] = useState(
+    DEFAULT_CONFIRM_RATING_TEMPLATE,
+  );
   const [saving, setSaving] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [approved, setApproved] = useState<
@@ -69,6 +73,9 @@ export function SubAccountGoogleReviewSection() {
     setInternalFeedbackMessage(
       cfg?.internalFeedbackMessage || DEFAULT_INTERNAL_FEEDBACK_MESSAGE,
     );
+    setConfirmRatingTemplate(
+      cfg?.confirmRatingTemplate || DEFAULT_CONFIRM_RATING_TEMPLATE,
+    );
   }, [
     cfg?.reviewUrl,
     cfg?.channel,
@@ -81,6 +88,7 @@ export function SubAccountGoogleReviewSection() {
     cfg?.ratingGateEnabled,
     cfg?.askForRatingTemplate,
     cfg?.internalFeedbackMessage,
+    cfg?.confirmRatingTemplate,
   ]);
 
   // Approved WhatsApp templates power the channel gate + the picker.
@@ -144,6 +152,7 @@ export function SubAccountGoogleReviewSection() {
             ratingGateEnabled: dedicatedReady && ratingGateEnabled,
             askForRatingTemplate,
             internalFeedbackMessage,
+            confirmRatingTemplate,
           }),
         },
       );
@@ -385,13 +394,17 @@ export function SubAccountGoogleReviewSection() {
             />
             <span>
               <span className="font-medium text-foreground">
-                Ask for a star rating first
+                Ask for a star rating first (quote/deal auto-sends)
               </span>
               <span className="block text-[11px] text-muted-foreground">
                 Instead of sending the Google link directly, ask &ldquo;how
                 many stars (1-5)&rdquo; first. A reply of 4 or 5 gets the
                 Google link; 1-3 gets a private apology message instead and
-                creates a follow-up Task for your team.
+                creates a follow-up Task for your team. Only governs the
+                quote-paid / deal-completed auto-sends above — a Workflow
+                Builder &ldquo;Ask for a rating&rdquo; step always gates,
+                independent of this checkbox, but uses the same templates
+                below.
               </span>
             </span>
           </label>
@@ -402,7 +415,7 @@ export function SubAccountGoogleReviewSection() {
               reply can be read back and routed automatically.
             </p>
           )}
-          {dedicatedReady && ratingGateEnabled && (
+          {dedicatedReady && (
             <div className="space-y-3 border-t pt-3">
               <div className="space-y-1.5">
                 <Label htmlFor="gr-ask">Ask-for-rating message</Label>
@@ -429,6 +442,21 @@ export function SubAccountGoogleReviewSection() {
                   rows={2}
                   className="resize-none text-sm"
                 />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="gr-confirm">
+                  Confirm-the-rating message
+                </Label>
+                <Textarea
+                  id="gr-confirm"
+                  value={confirmRatingTemplate}
+                  onChange={(e) => setConfirmRatingTemplate(e.target.value)}
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  {"Tag: {{rating}}. Sent when the reply isn't a clean single digit — two numbers in one text, a conflicting follow-up, or free text — and needs the contact to confirm the AI's best guess before it's treated as final."}
+                </p>
               </div>
             </div>
           )}

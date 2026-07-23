@@ -36,6 +36,7 @@ interface PostBody {
   ratingGateEnabled?: boolean;
   askForRatingTemplate?: string;
   internalFeedbackMessage?: string;
+  confirmRatingTemplate?: string;
 }
 
 function isHttpsUrl(s: string): boolean {
@@ -157,6 +158,7 @@ export async function POST(
     ratingGateEnabled,
     askForRatingTemplate: body.askForRatingTemplate?.trim() || "",
     internalFeedbackMessage: body.internalFeedbackMessage?.trim() || "",
+    confirmRatingTemplate: body.confirmRatingTemplate?.trim() || "",
     updatedAt: new Date(),
   };
 
