@@ -19,8 +19,6 @@ import {
   Upload,
   Download,
   Zap,
-  ChevronDown,
-  ChevronUp,
   ClipboardList,
 } from "lucide-react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
@@ -51,7 +49,6 @@ export default function DashboardPage() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [forms, setForms] = useState<LeadForm[]>([]);
   const [automations, setAutomations] = useState<AutomationDoc[]>([]);
-  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -164,11 +161,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       {hasContact && accountContact && (
-        <button
-          type="button"
-          onClick={() => setOnboardingOpen(true)}
-          className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-card px-3 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/50"
-        >
+        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
             <Building2 className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
             Account contact
@@ -186,7 +179,7 @@ export default function DashboardPage() {
               {accountContact.phone}
             </span>
           )}
-        </button>
+        </div>
       )}
 
       {dedicatedSmsNumber && (
@@ -201,37 +194,20 @@ export default function DashboardPage() {
       )}
 
       {isAdmin && (
-        <section className="rounded-2xl border bg-card">
-          <button
-            type="button"
-            onClick={() => setOnboardingOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 p-4 text-left"
-          >
-            <span className="inline-flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                <ClipboardList className="h-4 w-4" />
-              </span>
-              <span>
-                <span className="block text-sm font-semibold">
-                  Client Onboarding
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  Business info, owner contact, logo, Google review link, and
-                  setup checklist — all in one place.
-                </span>
-              </span>
+        <section className="rounded-2xl border bg-card p-4">
+          <div className="mb-4 flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              <ClipboardList className="h-4 w-4" />
             </span>
-            {onboardingOpen ? (
-              <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-            )}
-          </button>
-          {onboardingOpen && (
-            <div className="border-t p-4">
-              <ClientOnboardingForm />
+            <div>
+              <h2 className="text-sm font-semibold">Client Onboarding</h2>
+              <p className="text-xs text-muted-foreground">
+                Business info, owner contact, logo, Google review link, and
+                setup checklist — all in one place.
+              </p>
             </div>
-          )}
+          </div>
+          <ClientOnboardingForm />
         </section>
       )}
 
