@@ -41,7 +41,6 @@ export function SubAccountGoogleReviewSection() {
   const [cooldownDays, setCooldownDays] = useState(DEFAULT_REVIEW_COOLDOWN_DAYS);
   const [autoOnPaid, setAutoOnPaid] = useState(true);
   const [autoOnDealCompleted, setAutoOnDealCompleted] = useState(false);
-  const [ratingGateEnabled, setRatingGateEnabled] = useState(false);
   const [askForRatingTemplate, setAskForRatingTemplate] = useState(
     DEFAULT_RATING_ASK_TEMPLATE,
   );
@@ -66,7 +65,6 @@ export function SubAccountGoogleReviewSection() {
     setCooldownDays(cfg?.cooldownDays ?? DEFAULT_REVIEW_COOLDOWN_DAYS);
     setAutoOnPaid(!!cfg?.enabled && !!cfg?.triggerOnQuotePaid);
     setAutoOnDealCompleted(!!cfg?.enabled && !!cfg?.triggerOnDealCompleted);
-    setRatingGateEnabled(cfg?.ratingGateEnabled === true);
     setAskForRatingTemplate(
       cfg?.askForRatingTemplate || DEFAULT_RATING_ASK_TEMPLATE,
     );
@@ -85,7 +83,6 @@ export function SubAccountGoogleReviewSection() {
     cfg?.enabled,
     cfg?.triggerOnQuotePaid,
     cfg?.triggerOnDealCompleted,
-    cfg?.ratingGateEnabled,
     cfg?.askForRatingTemplate,
     cfg?.internalFeedbackMessage,
     cfg?.confirmRatingTemplate,
@@ -149,7 +146,6 @@ export function SubAccountGoogleReviewSection() {
             cooldownDays,
             triggerOnQuotePaid: autoSupported && autoOnPaid,
             triggerOnDealCompleted: autoSupported && autoOnDealCompleted,
-            ratingGateEnabled: dedicatedReady && ratingGateEnabled,
             askForRatingTemplate,
             internalFeedbackMessage,
             confirmRatingTemplate,
@@ -379,40 +375,27 @@ export function SubAccountGoogleReviewSection() {
         </div>
 
         <div className="space-y-2 rounded-lg border p-3">
-          <label
-            className={cn(
-              "flex items-start gap-2 text-sm",
-              !dedicatedReady && "opacity-50",
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={dedicatedReady && ratingGateEnabled}
-              onChange={(e) => setRatingGateEnabled(e.target.checked)}
-              disabled={!dedicatedReady}
-              className="mt-0.5 h-4 w-4 rounded border-input disabled:cursor-not-allowed"
-            />
-            <span>
-              <span className="font-medium text-foreground">
-                Ask for a star rating first (quote/deal auto-sends)
-              </span>
-              <span className="block text-[11px] text-muted-foreground">
-                Instead of sending the Google link directly, ask &ldquo;how
-                many stars (1-5)&rdquo; first. A reply of 4 or 5 gets the
-                Google link; 1-3 gets a private apology message instead and
-                creates a follow-up Task for your team. Only governs the
-                quote-paid / deal-completed auto-sends above — a Workflow
-                Builder &ldquo;Ask for a rating&rdquo; step always gates,
-                independent of this checkbox, but uses the same templates
-                below.
-              </span>
+          <div>
+            <span className="font-medium text-foreground">
+              Ask for a star rating first
             </span>
-          </label>
+            <span className="block text-[11px] text-muted-foreground">
+              Every SMS review request — quote/deal auto-sends, a manual
+              &ldquo;Ask for review&rdquo; click, or a Workflow Builder
+              &ldquo;Ask for a rating&rdquo; step — asks &ldquo;how many
+              stars (1-5)&rdquo; first instead of dropping the Google link
+              in cold. A reply of 4 or 5 gets the Google link (the Message
+              field above); 1-3 gets the private reply below instead and
+              creates a follow-up Task for your team. Not optional — always
+              on wherever it can technically work (see below).
+            </span>
+          </div>
           {!dedicatedReady && (
             <p className="text-[11px] text-muted-foreground">
-              Needs the SMS channel + this sub-account&apos;s own dedicated
-              Twilio number (Settings → SMS) — that&apos;s the only way a
-              reply can be read back and routed automatically.
+              Not active yet: needs the SMS channel + this sub-account&apos;s
+              own dedicated Twilio number (Settings → SMS) — that&apos;s the
+              only way a reply can be read back and routed automatically.
+              Until then, review requests send the Message above directly.
             </p>
           )}
           {dedicatedReady && (

@@ -33,7 +33,6 @@ interface PostBody {
   cooldownDays?: number;
   triggerOnQuotePaid?: boolean;
   triggerOnDealCompleted?: boolean;
-  ratingGateEnabled?: boolean;
   askForRatingTemplate?: string;
   internalFeedbackMessage?: string;
   confirmRatingTemplate?: string;
@@ -135,17 +134,6 @@ export async function POST(
 
   const cooldownDays = clampCooldown(body.cooldownDays);
 
-  // The rating gate only works on SMS (dedicated Twilio) — the inbound
-  // webhook is the only place that can intercept a reply, and it only does
-  // so for SMS. Refuse rather than silently no-op on another channel.
-  const ratingGateEnabled = body.ratingGateEnabled === true;
-  if (ratingGateEnabled && channel !== "sms") {
-    return NextResponse.json(
-      { error: "The rating gate only works on the SMS channel." },
-      { status: 400 },
-    );
-  }
-
   const cfg: GoogleReviewConfig = {
     enabled: body.enabled === true,
     reviewUrl,
@@ -155,7 +143,6 @@ export async function POST(
     cooldownDays,
     triggerOnQuotePaid: body.triggerOnQuotePaid === true,
     triggerOnDealCompleted: body.triggerOnDealCompleted === true,
-    ratingGateEnabled,
     askForRatingTemplate: body.askForRatingTemplate?.trim() || "",
     internalFeedbackMessage: body.internalFeedbackMessage?.trim() || "",
     confirmRatingTemplate: body.confirmRatingTemplate?.trim() || "",

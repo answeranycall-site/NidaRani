@@ -27,9 +27,10 @@ import type { Contact } from "@/types/contacts";
  * the inbound webhook right after STOP/START handling and before the
  * generic AI auto-reply fallback.
  *
- * Only acts when `googleReviewConfig.ratingGateEnabled` is on AND the
- * contact has a live `awaitingReviewReplyAt` flag (stamped by
- * maybeSendReviewRequest when it sends the "how many stars" ask).
+ * Only acts when the contact has a live `awaitingReviewReplyAt` flag
+ * (stamped by maybeSendReviewRequest when it sends the "how many stars"
+ * ask — every SMS review request on a dedicated number sends that ask, no
+ * config toggle involved).
  *
  * Three sub-states within that window, in priority order:
  *   1. `pendingRatingConfirm` set — waiting on an explicit yes/no (or a
@@ -162,15 +163,10 @@ export interface RatingReplyResult {
 export async function maybeHandleRatingReply(
   input: RatingReplyInput,
 ): Promise<RatingReplyResult> {
-  // NOT gated on cfg.ratingGateEnabled here — that Settings toggle only
-  // governs whether the quote-paid / deal-completed auto-triggers open the
-  // gate. A Workflow Builder `review_rating_request` / `review_rating_reminder`
-  // node forces the gate on for its own send regardless of that toggle (see
-  // lib/reviews/request.ts's isWorkflow/isReminder handling), so the ONLY
-  // thing that should gate reading the reply back is whether an ask was
-  // actually sent for this contact — i.e. `awaitingReviewReplyAt` being live.
-  // Re-checking the toggle here would silently drop every workflow-sent
-  // ask's reply whenever the toggle happens to be off in Settings.
+  // The only thing that gates reading a reply back is whether an ask was
+  // actually sent for this contact — i.e. `awaitingReviewReplyAt` being
+  // live. There's no separate config toggle to re-check: every SMS review
+  // request on a dedicated number always sends the "how many stars" ask.
   const cfg = input.subAccount.googleReviewConfig;
   if (!cfg || !cfg.reviewUrl) return { handled: false };
 

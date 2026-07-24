@@ -239,14 +239,11 @@ export async function maybeSendReviewRequest(
       if (!dedicated && !smsIsConfigured()) {
         return { sent: false, reason: "sms_not_configured" };
       }
-      // Only ask "how many stars" when we can actually intercept the reply
-      // (dedicated mode) — a gate the shared sender can't act on would just
-      // strand the contact after they answer. `workflow` and `reminder`
-      // triggers always gate (that's the entire point of both nodes),
-      // independent of the Settings-level toggle used by the quote-paid /
-      // deal-completed auto-triggers.
-      useRatingGate =
-        (cfg.ratingGateEnabled === true || isWorkflow || isReminder) && dedicated;
+      // Every SMS review request asks "how many stars" first — the Google
+      // link never goes out cold. Only requires dedicated mode: that's the
+      // only path that can actually intercept the reply (the shared sender
+      // has no per-sub-account inbound routing to act on it).
+      useRatingGate = dedicated;
       renderedBody = useRatingGate
         ? fillReviewSms(
             cfg.askForRatingTemplate || DEFAULT_RATING_ASK_TEMPLATE,

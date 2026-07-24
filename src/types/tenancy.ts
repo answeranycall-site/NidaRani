@@ -626,22 +626,16 @@ export interface GoogleReviewConfig {
    * (WhatsApp Manual can't auto-send). Undefined on legacy docs → off.
    */
   triggerOnDealCompleted?: boolean;
-  /**
-   * Rating-gate (SMS + dedicated Twilio number only): instead of dropping
-   * the Google link straight into the review-request text, ask "reply
-   * 1-5" first. A 4 or 5 reply gets the Google link; 1-3 gets
-   * `internalFeedbackMessage` instead and creates a follow-up Task +
-   * escalation email so a human reaches out privately. Off by default —
-   * legacy configs keep the original one-shot-link behavior. See
-   * lib/reviews/rating-reply.ts.
-   */
-  ratingGateEnabled?: boolean;
-  /** Sent instead of `messageTemplate` when the gate is on — asks "how many
-   *  stars" instead of handing over the link. Falls back to
-   *  DEFAULT_RATING_ASK_TEMPLATE when blank. */
+  /** Sent instead of `messageTemplate` — every SMS review request on a
+   *  dedicated Twilio number always asks "how many stars" first (the Google
+   *  link never goes out cold). A 4 or 5 reply gets the Google link
+   *  (`messageTemplate`); 1-3 gets `internalFeedbackMessage` instead and
+   *  creates a follow-up Task + escalation email so a human reaches out
+   *  privately. Falls back to DEFAULT_RATING_ASK_TEMPLATE when blank. See
+   *  lib/reviews/rating-reply.ts. */
   askForRatingTemplate?: string;
-  /** Sent to 1-3 repliers when the rating gate is on. Falls back to
-   *  DEFAULT_INTERNAL_FEEDBACK_MESSAGE when blank. */
+  /** Sent to 1-3 repliers. Falls back to DEFAULT_INTERNAL_FEEDBACK_MESSAGE
+   *  when blank. */
   internalFeedbackMessage?: string;
   /**
    * Sent when the gate can't read a rating deterministically (2+ numbers in

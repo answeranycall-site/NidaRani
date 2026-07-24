@@ -153,8 +153,9 @@ export interface Contact {
   reviewLinkClickedAt?: Timestamp | FieldValue | null;
   reviewLinkClickCount?: number;
   /**
-   * Set right after a review request goes out ONLY when the sub-account's
-   * `googleReviewConfig.ratingGateEnabled` is on. The inbound SMS webhook
+   * Set right after a review request goes out over SMS on a dedicated
+   * Twilio number (every such request asks for a star rating first — see
+   * GoogleReviewConfig.askForRatingTemplate). The inbound SMS webhook
    * checks this (dedicated-mode only) to decide whether the contact's next
    * reply is answering "how many stars" (1-5) rather than ordinary chat.
    * Cleared once a reply is interpreted (valid 1-5) or the gate window
