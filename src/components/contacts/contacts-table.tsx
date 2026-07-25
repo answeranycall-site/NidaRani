@@ -29,12 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useSubAccount } from "@/context/sub-account-context";
-
-interface ContactBlocker {
-  type: string;
-  label: string;
-  count: number;
-}
+import { DELETED_CONTACT_RETENTION_DAYS } from "@/lib/contacts/retention";
 
 interface Props {
   contacts: Contact[];
@@ -47,22 +42,13 @@ interface Props {
   territories?: TerritoryDoc[];
 }
 
-type BulkState =
-  | { phase: "checking" }
-  | {
-      phase: "confirm";
-      deletable: Contact[];
-      blocked: { contact: Contact; blockers: ContactBlocker[] }[];
-    }
-  | { phase: "deleting" };
-
 export function ContactsTable({ contacts, search, territories = [] }: Props) {
   const { subAccount, saPath } = useSubAccount();
   const showTerritoryCol = subAccount?.territoryScopingEnabled === true;
   const [sorting, setSorting] = useState<SortingState>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkState, setBulkState] = useState<BulkState>({ phase: "checking" });
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const territoryById = useMemo(() => {
     const m = new Map<string, TerritoryDoc>();
@@ -111,48 +97,13 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
     });
   }, []);
 
-  async function openBulkDelete() {
-    setBulkOpen(true);
-    setBulkState({ phase: "checking" });
+  async function confirmBulkDelete() {
     const ids = Array.from(selected);
-    const byId = new Map(contacts.map((c) => [c.id, c]));
+    setBulkDeleting(true);
     const results = await Promise.all(
       ids.map(async (id) => {
         try {
-          const res = await fetch(`/api/contacts/${id}?check=1`);
-          const data = (await res.json().catch(() => ({}))) as {
-            deletable?: boolean;
-            blockers?: ContactBlocker[];
-          };
-          return { id, deletable: !!data.deletable, blockers: data.blockers ?? [] };
-        } catch {
-          return {
-            id,
-            deletable: false,
-            blockers: [{ type: "error", label: "check failed", count: 1 }],
-          };
-        }
-      }),
-    );
-    const deletable: Contact[] = [];
-    const blocked: { contact: Contact; blockers: ContactBlocker[] }[] = [];
-    for (const r of results) {
-      const c = byId.get(r.id);
-      if (!c) continue;
-      if (r.deletable) deletable.push(c);
-      else blocked.push({ contact: c, blockers: r.blockers });
-    }
-    setBulkState({ phase: "confirm", deletable, blocked });
-  }
-
-  async function confirmBulkDelete() {
-    if (bulkState.phase !== "confirm") return;
-    const targets = bulkState.deletable;
-    setBulkState({ phase: "deleting" });
-    const results = await Promise.all(
-      targets.map(async (c) => {
-        try {
-          const res = await fetch(`/api/contacts/${c.id}`, { method: "DELETE" });
+          const res = await fetch(`/api/contacts/${id}`, { method: "DELETE" });
           return res.ok;
         } catch {
           return false;
@@ -162,13 +113,17 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
     const succeeded = results.filter(Boolean).length;
     const failed = results.length - succeeded;
     if (succeeded > 0) {
-      toast.success(`Deleted ${succeeded} contact${succeeded === 1 ? "" : "s"}.`);
+      toast.success(
+        `Deleted ${succeeded} contact${succeeded === 1 ? "" : "s"} — ` +
+          `restorable from Conversations → Deleted for ${DELETED_CONTACT_RETENTION_DAYS} days.`,
+      );
     }
     if (failed > 0) {
       toast.error(
         `${failed} contact${failed === 1 ? "" : "s"} couldn't be deleted.`,
       );
     }
+    setBulkDeleting(false);
     setSelected(new Set());
     setBulkOpen(false);
   }
@@ -357,7 +312,7 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
               <X className="mr-1 h-3.5 w-3.5" />
               Clear
             </Button>
-            <Button variant="destructive" size="sm" onClick={openBulkDelete}>
+            <Button variant="destructive" size="sm" onClick={() => setBulkOpen(true)}>
               <Trash2 className="mr-1 h-3.5 w-3.5" />
               Delete
             </Button>
@@ -478,51 +433,33 @@ export function ContactsTable({ contacts, search, territories = [] }: Props) {
       <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {selected.size} contact{selected.size === 1 ? "" : "s"}?</DialogTitle>
+            <DialogTitle>
+              Delete {selected.size} contact{selected.size === 1 ? "" : "s"}?
+            </DialogTitle>
             <DialogDescription>
-              {bulkState.phase === "checking" &&
-                "Checking which contacts are safe to delete…"}
-              {bulkState.phase === "deleting" && "Deleting…"}
-              {bulkState.phase === "confirm" &&
-                (bulkState.blocked.length === 0
-                  ? "This can't be undone."
-                  : `${bulkState.deletable.length} contact${bulkState.deletable.length === 1 ? "" : "s"} will be deleted. ${bulkState.blocked.length} can't be deleted because they're linked to other records.`)}
+              Moves {selected.size === 1 ? "it" : "them"} to Conversations →
+              Deleted — hidden everywhere else (contacts, pipeline, search),
+              but fully restorable for {DELETED_CONTACT_RETENTION_DAYS} days,
+              after which {selected.size === 1 ? "it's" : "they're"}{" "}
+              permanently removed. Any deals, tasks, or other linked records
+              are left exactly as they are.
             </DialogDescription>
           </DialogHeader>
 
-          {bulkState.phase === "confirm" && bulkState.blocked.length > 0 && (
-            <ul className="max-h-40 space-y-1 overflow-y-auto rounded-md border bg-muted/30 p-2 text-sm">
-              {bulkState.blocked.map(({ contact, blockers }) => (
-                <li key={contact.id} className="text-muted-foreground">
-                  <span className="font-medium text-foreground">
-                    {contact.name || contact.email || "Unnamed"}
-                  </span>{" "}
-                  — linked to{" "}
-                  {blockers.map((b) => `${b.count} ${b.label}`).join(", ")}
-                </li>
-              ))}
-            </ul>
-          )}
-
           <DialogFooter>
-            <Button variant="outline" onClick={() => setBulkOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setBulkOpen(false)}
+              disabled={bulkDeleting}
+            >
               Cancel
             </Button>
             <Button
               variant="destructive"
-              disabled={
-                bulkState.phase !== "confirm" ||
-                bulkState.deletable.length === 0
-              }
+              disabled={bulkDeleting || selected.size === 0}
               onClick={confirmBulkDelete}
             >
-              {bulkState.phase === "deleting"
-                ? "Deleting…"
-                : `Delete${
-                    bulkState.phase === "confirm"
-                      ? ` ${bulkState.deletable.length}`
-                      : ""
-                  }`}
+              {bulkDeleting ? "Deleting…" : `Delete ${selected.size}`}
             </Button>
           </DialogFooter>
         </DialogContent>

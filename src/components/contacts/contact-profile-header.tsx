@@ -44,15 +44,9 @@ import { SendCallDialog } from "@/components/contacts/send-call-dialog";
 import { subscribeToTerritories } from "@/lib/firestore/territories";
 import { formatContactDate } from "@/lib/format";
 import { useSubAccount } from "@/context/sub-account-context";
+import { DELETED_CONTACT_RETENTION_DAYS } from "@/lib/contacts/retention";
 import type { Contact, ContactFormData } from "@/types/contacts";
 import type { TerritoryDoc } from "@/types";
-
-interface ContactBlocker {
-  type: string;
-  /** Singular noun; pluralized in the UI by appending "s". */
-  label: string;
-  count: number;
-}
 
 export function ContactProfileHeader({ contact }: { contact: Contact }) {
   const { saPath, subAccount, subAccountId, isAdmin } = useSubAccount();
@@ -72,11 +66,6 @@ export function ContactProfileHeader({ contact }: { contact: Contact }) {
   const [reviewSending, setReviewSending] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteState, setDeleteState] = useState<
-    | { phase: "checking" }
-    | { phase: "blocked"; blockers: ContactBlocker[] }
-    | { phase: "confirm" }
-  >({ phase: "checking" });
   const [territories, setTerritories] = useState<TerritoryDoc[]>([]);
 
   useEffect(() => {
@@ -184,56 +173,19 @@ export function ContactProfileHeader({ contact }: { contact: Contact }) {
 
   const contactName = contact.name || contact.email || "this contact";
 
-  // Open the delete modal and run the dry-run link check. If the contact is
-  // linked to anything the modal explains what's blocking it; otherwise it
-  // shows a final confirm.
-  async function openDeleteModal() {
-    setDeleteOpen(true);
-    setDeleteState({ phase: "checking" });
-    try {
-      const res = await fetch(`/api/contacts/${contact.id}?check=1`);
-      const data = (await res.json().catch(() => ({}))) as {
-        deletable?: boolean;
-        blockers?: ContactBlocker[];
-        error?: string;
-      };
-      if (!res.ok) {
-        toast.error(data.error ?? "Couldn't check this contact's links.");
-        setDeleteOpen(false);
-        return;
-      }
-      if (data.deletable) {
-        setDeleteState({ phase: "confirm" });
-      } else {
-        setDeleteState({ phase: "blocked", blockers: data.blockers ?? [] });
-      }
-    } catch {
-      toast.error("Couldn't check this contact's links.");
-      setDeleteOpen(false);
-    }
-  }
-
   async function confirmDelete() {
     setDeleting(true);
     try {
       const res = await fetch(`/api/contacts/${contact.id}`, {
         method: "DELETE",
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        blockers?: ContactBlocker[];
-      };
-      // Something got linked between the check and the delete — re-show the
-      // blocked state instead of erroring out.
-      if (res.status === 409) {
-        setDeleting(false);
-        setDeleteState({ phase: "blocked", blockers: data.blockers ?? [] });
-        return;
-      }
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         throw new Error(data.error ?? "Could not delete contact.");
       }
-      toast.success(`Deleted ${contactName}.`);
+      toast.success(
+        `Deleted ${contactName} — restorable from Conversations → Deleted for ${DELETED_CONTACT_RETENTION_DAYS} days.`,
+      );
       router.push(saPath("/contacts"));
     } catch (err) {
       toast.error(
@@ -327,7 +279,7 @@ export function ContactProfileHeader({ contact }: { contact: Contact }) {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={openDeleteModal}
+                onClick={() => setDeleteOpen(true)}
                 disabled={deleteOpen}
                 className="text-destructive hover:bg-destructive/5 hover:text-destructive"
                 title="Delete this contact"
@@ -447,72 +399,32 @@ export function ContactProfileHeader({ contact }: { contact: Contact }) {
         }}
       >
         <DialogContent>
-          {deleteState.phase === "checking" && (
-            <DialogHeader>
-              <DialogTitle>Checking…</DialogTitle>
-              <DialogDescription>
-                Looking for records linked to {contactName}.
-              </DialogDescription>
-            </DialogHeader>
-          )}
-
-          {deleteState.phase === "blocked" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Can&apos;t delete this contact</DialogTitle>
-                <DialogDescription>
-                  {contactName} is still linked to other records. Remove or
-                  reassign these first, then delete the contact.
-                </DialogDescription>
-              </DialogHeader>
-              <ul className="space-y-1.5 py-2">
-                {deleteState.blockers.map((b) => (
-                  <li
-                    key={b.type}
-                    className="flex items-center gap-2.5 text-sm"
-                  >
-                    <span className="inline-flex min-w-6 justify-center rounded-md bg-destructive/10 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-destructive">
-                      {b.count}
-                    </span>
-                    <span className="capitalize">
-                      {b.count === 1 ? b.label : `${b.label}s`}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <DialogFooter>
-                <Button onClick={() => setDeleteOpen(false)}>Got it</Button>
-              </DialogFooter>
-            </>
-          )}
-
-          {deleteState.phase === "confirm" && (
-            <>
-              <DialogHeader>
-                <DialogTitle>Delete contact?</DialogTitle>
-                <DialogDescription>
-                  This permanently removes {contactName} along with their
-                  notes and activity timeline. This can&apos;t be undone.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button
-                  variant="ghost"
-                  onClick={() => setDeleteOpen(false)}
-                  disabled={deleting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={confirmDelete}
-                  disabled={deleting}
-                >
-                  {deleting ? "Deleting…" : "Delete contact"}
-                </Button>
-              </DialogFooter>
-            </>
-          )}
+          <DialogHeader>
+            <DialogTitle>Delete contact?</DialogTitle>
+            <DialogDescription>
+              Moves {contactName} to Conversations → Deleted — hidden
+              everywhere else (contacts, pipeline, search), but fully
+              restorable for {DELETED_CONTACT_RETENTION_DAYS} days, after
+              which it&apos;s permanently removed. Any deals, tasks, or other
+              linked records are left exactly as they are.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Delete contact"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
