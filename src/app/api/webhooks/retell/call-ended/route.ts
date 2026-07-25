@@ -9,6 +9,7 @@ import {
   asBool,
   asString,
   durationSecFromCall,
+  extractTranscriptTurns,
   verifyRetellSignature,
   type RetellCall,
   type RetellWebhookBody,
@@ -131,6 +132,7 @@ export async function POST(request: Request) {
 
   const inbound = call.direction !== "outbound";
   const callerPhone = asString(inbound ? call.from_number : call.to_number);
+  const toPhone = asString(inbound ? call.to_number : call.from_number);
   const durationSec = durationSecFromCall(call);
   const summary = asString(call.call_analysis?.call_summary);
   const recordingUrl = asString(call.recording_url);
@@ -200,6 +202,50 @@ export async function POST(request: Request) {
   } catch (err) {
     console.error("[retell/call-ended] activity write failed", err);
   }
+
+  // Voice-call summary doc — this is what makes the call show up in the
+  // Conversations tab (conversation-thread.tsx merges in every doc under
+  // subAccounts/{id}/voiceCalls matching the contact, regardless of which
+  // provider wrote it). Doc id = Retell's call_id for natural dedup.
+  try {
+    await db.doc(`subAccounts/${subAccountId}/voiceCalls/${callId}`).set(
+      {
+        agencyId: sa.agencyId,
+        subAccountId,
+        callId,
+        callerPhone,
+        toPhone,
+        durationSec,
+        summary,
+        endedReason,
+        contactId,
+        contactCreated,
+        callbackRequested: asBool(custom.booked_strategy_call) === true,
+        capturedName: asString(custom.name),
+        capturedEmail: asString(custom.email),
+        capturedPhone: null,
+        taskId: null,
+        escalationEmailSent: false,
+        transcript: extractTranscriptTurns(call),
+        liveStatus: null,
+        liveStatusAt: null,
+        errors: [],
+        provider: "retell" as const,
+        createdAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  } catch (err) {
+    console.error("[retell/call-ended] voiceCalls doc write failed", err);
+  }
+
+  // Note: the text-back-with-info SMS is NOT sent from here. The Retell
+  // agent itself calls the `send_demo_info` custom function mid-call (see
+  // /api/webhooks/retell/send-demo-info) the moment it delivers its closing
+  // line — that fires faster (no 30-90s wait for post-call analysis) and
+  // the agent already verbally promises the text right then. This route
+  // stays focused on Conversations visibility + activity logging + the
+  // strategy-call Task below.
 
   // Booked strategy call → a follow-up Task. No pipeline-stage move: this
   // sub-account doesn't model "prospect calls" as deals, and Task is the

@@ -326,6 +326,18 @@ export interface SubAccountDoc {
    */
   googleReviewConfig?: GoogleReviewConfig | null;
   /**
+   * Customizable text-back message for the `/api/webhooks/retell/
+   * send-demo-info` route — fired mid-call when the Retell agent calls its
+   * `send_demo_info` custom function (Retell AI voice calls; currently only
+   * wired for Answer Any Call's own business line via
+   * RETELL_OWN_SUBACCOUNT_ID, not a general per-tenant feature yet). Tags:
+   * {{firstName}}, {{businessName}}. Blank falls back to
+   * DEFAULT_RETELL_DEMO_INFO_TEMPLATE in lib/comms/voice/retell-followup.ts.
+   */
+  retellConfig?: {
+    demoInfoTemplate?: string;
+  };
+  /**
    * Google Business Profile OAuth connection (Google Reviews Sync). Null/
    * undefined until the sub-account admin connects a Google account (only
    * possible when `googleReviewsSyncEnabledByAgency` is on). Distinct from

@@ -21,6 +21,7 @@ import { SubAccountMetaSection } from "@/components/settings/sub-account-meta-se
 import { SubAccountEmailDomainSection } from "@/components/settings/sub-account-email-domain-section";
 import { SubAccountPayPalSection } from "@/components/settings/sub-account-paypal-section";
 import { SubAccountGoogleReviewSection } from "@/components/settings/sub-account-google-review-section";
+import { SubAccountRetellFollowUpSection } from "@/components/settings/sub-account-retell-followup-section";
 import { SubAccountStripeSection } from "@/components/settings/sub-account-stripe-section";
 import { SubAccountApiKeysSection } from "@/components/settings/sub-account-api-keys-section";
 import { SubAccountApiRecipesSection } from "@/components/settings/sub-account-api-recipes-section";
@@ -278,6 +279,10 @@ export default function SettingsPage() {
 
           {/* Google reviews — SMS / WhatsApp review-request sends. */}
           <SubAccountGoogleReviewSection />
+
+          {/* Retell voice-call text-back templates (currently only takes
+              effect on RETELL_OWN_SUBACCOUNT_ID). */}
+          <SubAccountRetellFollowUpSection />
         </TabsContent>
 
         {/* ---------- API: recipes, keys, webhooks ---------- */}

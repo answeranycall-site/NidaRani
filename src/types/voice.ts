@@ -84,5 +84,9 @@ export interface VoiceCall {
    *  email send failed, etc.). Operators can see what went wrong
    *  without the call itself failing. */
   errors: string[];
+  /** Which voice platform produced this call. Undefined on legacy docs
+   *  written before this field existed — treat as "vapi" (the original,
+   *  only provider at the time). */
+  provider?: "vapi" | "retell";
   createdAt: Timestamp | FieldValue | null;
 }

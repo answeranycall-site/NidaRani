@@ -75,6 +75,10 @@ export interface RetellCall {
     call_summary?: string;
     user_sentiment?: string;
     call_successful?: boolean;
+    /** Retell's own voicemail-detection flag — distinct from anything an
+     *  operator configures. True means the call was answered by voicemail,
+     *  not a person. */
+    in_voicemail?: boolean;
     /** Shape is whatever the operator configured under the agent's
      *  Post-Call Analysis settings in the Retell dashboard — the caller
      *  casts this to whatever fields it actually expects. */
