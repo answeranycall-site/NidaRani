@@ -6,6 +6,11 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { reconcileContactFromCapture } from "@/lib/comms/ai/capture";
 import { createTaskServerSide } from "@/lib/server/tasks-service";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { sendSmsForSubAccount, subAccountTwilioIsConfigured } from "@/lib/comms/twilio";
+import {
+  DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE,
+  renderRetellFollowUp,
+} from "@/lib/comms/voice/retell-followup";
 import {
   asBool,
   asString,
@@ -254,13 +259,76 @@ export async function POST(request: Request) {
     console.error("[retell/call-ended] voiceCalls doc write failed", err);
   }
 
-  // Note: the text-back-with-info SMS is NOT sent from here. The Retell
-  // agent itself calls the `send_demo_info` custom function mid-call (see
-  // /api/webhooks/retell/send-demo-info) the moment it delivers its closing
-  // line — that fires faster (no 30-90s wait for post-call analysis) and
-  // the agent already verbally promises the text right then. This route
-  // stays focused on Conversations visibility + activity logging + the
-  // strategy-call Task below.
+  // Fallback text-back: normally send_demo_info (fired mid-call by the
+  // Retell agent's own closing line) is what texts the caller — faster,
+  // and the agent already verbally promises it. But a call that ends
+  // (hangup, disconnect) before the agent reaches that closing line never
+  // triggers it, so the caller would get nothing at all. call_analyzed
+  // always fires after every call regardless of duration, so it's the
+  // right place to catch that gap: if no send_demo_info claim exists for
+  // this call_id, send a distinct "that call cut out quick" message
+  // instead of silently leaving the caller with nothing.
+  try {
+    const demoInfoClaim = await db
+      .doc(`subAccounts/${subAccountId}/retellDemoInfoClaims/${callId}`)
+      .get();
+    if (!demoInfoClaim.exists && callerPhone && subAccountTwilioIsConfigured(sa.twilioConfig)) {
+      const profileSnap = await db
+        .doc(`subAccounts/${subAccountId}/aiAgent/profile`)
+        .get();
+      const businessName =
+        asString(profileSnap.data()?.businessName as string | undefined) ||
+        sa.name ||
+        "us";
+      const template =
+        sa.retellConfig?.quickHangupTemplate?.trim() ||
+        DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE;
+      const messageBody = renderRetellFollowUp(template, {
+        firstName: asString(custom.name)?.split(" ")[0] || "there",
+        businessName,
+      });
+
+      const sendResult = await sendSmsForSubAccount({
+        subAccountId,
+        subAccount: sa,
+        to: callerPhone,
+        body: messageBody,
+      });
+
+      if (sendResult.mode === "dedicated") {
+        await db
+          .collection(`contacts/${contactId}/messages`)
+          .doc(sendResult.sid)
+          .set({
+            agencyId: sa.agencyId,
+            subAccountId,
+            contactId,
+            direction: "outbound",
+            status: "sent",
+            body: messageBody,
+            from: sendResult.from,
+            to: callerPhone,
+            twilioMessageSid: sendResult.sid,
+            sentByUid: "retell-call-ended-fallback",
+            error: null,
+            readAt: null,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        await upsertConversationForMessage({
+          contactId,
+          subAccountId,
+          agencyId: sa.agencyId,
+          contactName: asString(custom.name) ?? callerPhone,
+          contactPhone: callerPhone,
+          channel: "sms",
+          direction: "outbound",
+          body: messageBody,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[retell/call-ended] quick-hangup fallback SMS failed", err);
+  }
 
   // Booked strategy call → a follow-up Task. No pipeline-stage move: this
   // sub-account doesn't model "prospect calls" as deals, and Task is the

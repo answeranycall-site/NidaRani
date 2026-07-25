@@ -6,14 +6,15 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountAdmin } from "@/lib/auth/require-tenancy";
 
 /**
- * Save the customizable Retell voice-call demo-info text-back template
- * (see lib/comms/voice/retell-followup.ts +
- * api/webhooks/retell/send-demo-info). Admin-only. Blank clears back to
- * the shipped default.
+ * Save the customizable Retell voice-call text-back templates (see
+ * lib/comms/voice/retell-followup.ts + api/webhooks/retell/send-demo-info
+ * + call-ended). Admin-only. Blank fields clear back to the shipped
+ * defaults.
  */
 
 interface PostBody {
   demoInfoTemplate?: string;
+  quickHangupTemplate?: string;
 }
 
 export async function POST(
@@ -37,6 +38,7 @@ export async function POST(
       {
         retellConfig: {
           demoInfoTemplate: body.demoInfoTemplate?.trim() || "",
+          quickHangupTemplate: body.quickHangupTemplate?.trim() || "",
         },
         updatedAt: FieldValue.serverTimestamp(),
       },

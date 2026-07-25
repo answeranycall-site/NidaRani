@@ -4,20 +4,28 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { PhoneCall } from "lucide-react";
 import { useSubAccount } from "@/context/sub-account-context";
-import { DEFAULT_RETELL_DEMO_INFO_TEMPLATE } from "@/lib/comms/voice/retell-followup";
+import {
+  DEFAULT_RETELL_DEMO_INFO_TEMPLATE,
+  DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE,
+} from "@/lib/comms/voice/retell-followup";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 /**
- * Customizable text-back message for Retell AI voice calls. The agent
- * calls its `send_demo_info` custom function mid-call (right after its
- * scripted closing line), which hits /api/webhooks/retell/send-demo-info
- * and sends this message. Only takes effect on the sub-account wired to
- * RETELL_OWN_SUBACCOUNT_ID (currently a fixed-target integration, not a
- * general per-tenant feature) — the section still renders for any
- * sub-account since there's no per-tenant Retell connection state to gate
- * on yet.
+ * Customizable text-back messages for Retell AI voice calls. Two distinct
+ * paths, each its own template:
+ *   - demoInfoTemplate — the agent calls its `send_demo_info` custom
+ *     function mid-call, right after its scripted closing line
+ *     (/api/webhooks/retell/send-demo-info).
+ *   - quickHangupTemplate — fallback sent from call-ended ONLY when
+ *     send_demo_info never fired for that call (caller hung up before the
+ *     agent reached its closing line) — different tone since this caller
+ *     never heard the pitch.
+ * Only takes effect on the sub-account wired to RETELL_OWN_SUBACCOUNT_ID
+ * (currently a fixed-target integration, not a general per-tenant
+ * feature) — the section still renders for any sub-account since there's
+ * no per-tenant Retell connection state to gate on yet.
  */
 export function SubAccountRetellFollowUpSection() {
   const { subAccountId, subAccount, isAdmin } = useSubAccount();
@@ -26,13 +34,19 @@ export function SubAccountRetellFollowUpSection() {
   const [demoInfoTemplate, setDemoInfoTemplate] = useState(
     DEFAULT_RETELL_DEMO_INFO_TEMPLATE,
   );
+  const [quickHangupTemplate, setQuickHangupTemplate] = useState(
+    DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE,
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setDemoInfoTemplate(
       cfg?.demoInfoTemplate || DEFAULT_RETELL_DEMO_INFO_TEMPLATE,
     );
-  }, [cfg?.demoInfoTemplate]);
+    setQuickHangupTemplate(
+      cfg?.quickHangupTemplate || DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE,
+    );
+  }, [cfg?.demoInfoTemplate, cfg?.quickHangupTemplate]);
 
   if (!isAdmin) return null;
 
@@ -45,12 +59,12 @@ export function SubAccountRetellFollowUpSection() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ demoInfoTemplate }),
+          body: JSON.stringify({ demoInfoTemplate, quickHangupTemplate }),
         },
       );
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to save.");
-      toast.success("Retell follow-up message saved.");
+      toast.success("Retell follow-up messages saved.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save.");
     } finally {
@@ -67,27 +81,49 @@ export function SubAccountRetellFollowUpSection() {
         <div className="min-w-0 flex-1">
           <h2 className="text-base font-semibold">Retell voice follow-up</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            The Retell AI agent texts this to a caller mid-call, right after
-            it says &ldquo;I&apos;m sending you a text right now with more
-            info&rdquo; — sent via this sub-account&apos;s dedicated Twilio
-            number.
+            Two texts, sent via this sub-account&apos;s dedicated Twilio
+            number depending on how the call went.
           </p>
         </div>
       </header>
 
-      <form onSubmit={handleSave} className="space-y-1.5">
-        <Label htmlFor="retell-demo-info">Demo-info message</Label>
-        <Textarea
-          id="retell-demo-info"
-          value={demoInfoTemplate}
-          onChange={(e) => setDemoInfoTemplate(e.target.value)}
-          rows={3}
-          className="resize-none text-sm"
-        />
-        <p className="text-[11px] text-muted-foreground">
-          Tags: <code>{"{{firstName}}"}</code>, <code>{"{{businessName}}"}</code>.
-        </p>
-        <div className="flex justify-end pt-3">
+      <form onSubmit={handleSave} className="space-y-5">
+        <div className="space-y-1.5">
+          <Label htmlFor="retell-demo-info">Demo-info message</Label>
+          <Textarea
+            id="retell-demo-info"
+            value={demoInfoTemplate}
+            onChange={(e) => setDemoInfoTemplate(e.target.value)}
+            rows={3}
+            className="resize-none text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Sent mid-call, right after the agent says &ldquo;I&apos;m
+            sending you a text right now with more info.&rdquo; Tags:{" "}
+            <code>{"{{firstName}}"}</code>, <code>{"{{businessName}}"}</code>.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="retell-quick-hangup">
+            Quick-hangup fallback message
+          </Label>
+          <Textarea
+            id="retell-quick-hangup"
+            value={quickHangupTemplate}
+            onChange={(e) => setQuickHangupTemplate(e.target.value)}
+            rows={3}
+            className="resize-none text-sm"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Sent instead, after the call ends, only when the caller hung up
+            before the agent ever reached its closing line — so the
+            demo-info message above never went out. Tags:{" "}
+            <code>{"{{firstName}}"}</code>, <code>{"{{businessName}}"}</code>.
+          </p>
+        </div>
+
+        <div className="flex justify-end">
           <Button type="submit" size="sm" disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </Button>

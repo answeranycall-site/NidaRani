@@ -326,16 +326,22 @@ export interface SubAccountDoc {
    */
   googleReviewConfig?: GoogleReviewConfig | null;
   /**
-   * Customizable text-back message for the `/api/webhooks/retell/
-   * send-demo-info` route — fired mid-call when the Retell agent calls its
-   * `send_demo_info` custom function (Retell AI voice calls; currently only
-   * wired for Answer Any Call's own business line via
+   * Customizable text-back messages for Retell AI voice calls (currently
+   * only wired for Answer Any Call's own business line via
    * RETELL_OWN_SUBACCOUNT_ID, not a general per-tenant feature yet). Tags:
-   * {{firstName}}, {{businessName}}. Blank falls back to
-   * DEFAULT_RETELL_DEMO_INFO_TEMPLATE in lib/comms/voice/retell-followup.ts.
+   * {{firstName}}, {{businessName}}. Blank falls back to the
+   * DEFAULT_RETELL_*_TEMPLATE constants in lib/comms/voice/retell-followup.ts.
    */
   retellConfig?: {
+    /** Sent by /api/webhooks/retell/send-demo-info — fired mid-call when
+     *  the agent calls its `send_demo_info` custom function after its
+     *  scripted closing line. */
     demoInfoTemplate?: string;
+    /** Sent by /api/webhooks/retell/call-ended as a fallback ONLY when
+     *  send_demo_info never fired for that call (e.g. the caller hung up
+     *  before the agent reached its closing line) — distinct tone since
+     *  this caller never heard the pitch. */
+    quickHangupTemplate?: string;
   };
   /**
    * Google Business Profile OAuth connection (Google Reviews Sync). Null/
