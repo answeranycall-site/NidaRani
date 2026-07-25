@@ -24,8 +24,16 @@ import type { Timestamp, FieldValue } from "firebase/firestore";
 /**
  * `messenger` + `instagram` are the BETA Meta channels — gated by the agency
  * `metaInboxEnabledByAgency` flag, so they only ever appear once that's on.
+ * `web-chat` only appears once a Web Chat session links to a Contact (see
+ * lib/comms/web-chat/respond.ts::finalize) — anonymous sessions never
+ * create a conversation entry.
  */
-export type ConversationChannel = "sms" | "whatsapp" | "messenger" | "instagram";
+export type ConversationChannel =
+  | "sms"
+  | "whatsapp"
+  | "messenger"
+  | "instagram"
+  | "web-chat";
 
 export type ConversationStatus = "open" | "closed" | "snoozed";
 

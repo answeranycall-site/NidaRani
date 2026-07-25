@@ -12,6 +12,7 @@ const CHANNEL_LABEL: Record<ConversationChannel, string> = {
   whatsapp: "WhatsApp",
   messenger: "Messenger",
   instagram: "Instagram",
+  "web-chat": "Web Chat",
 };
 
 const CHANNEL_BADGE: Record<ConversationChannel, string> = {
@@ -19,6 +20,7 @@ const CHANNEL_BADGE: Record<ConversationChannel, string> = {
   whatsapp: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
   messenger: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
   instagram: "bg-pink-500/10 text-pink-700 dark:text-pink-400",
+  "web-chat": "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400",
 };
 
 export function ConversationList({

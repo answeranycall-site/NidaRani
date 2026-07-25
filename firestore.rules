@@ -706,6 +706,23 @@ service cloud.firestore {
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
         allow create, delete: if false;
       }
+      // Web Chat turns mirrored into Conversations once a session links to
+      // a Contact (see lib/comms/web-chat/respond.ts::finalize) — same
+      // model as the SMS / WhatsApp / Meta threads above. The full
+      // transcript (including pre-capture anonymous turns) still lives at
+      // subAccounts/{id}/webChatSessions/{sessionId}/messages; this
+      // subcollection only carries turns from the point identity was known.
+      match /webChatMessages/{messageId} {
+        allow read: if canAccessSub(
+          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
+          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+        );
+        allow update: if canAccessSub(
+          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
+          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+        ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
+        allow create, delete: if false;
+      }
     }
 
     match /deals/{dealId} {

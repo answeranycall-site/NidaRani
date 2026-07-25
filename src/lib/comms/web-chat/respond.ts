@@ -25,6 +25,7 @@ import {
   reconcileContactFromCapture,
   type CaptureFieldId,
 } from "@/lib/comms/web-chat/capture";
+import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 import type { WebChatSession } from "@/types/web-chat";
@@ -387,6 +388,88 @@ async function finalize(
         status: "escalated",
         updatedAt: FieldValue.serverTimestamp(),
       });
+  }
+
+  // Mirror into Conversations once the session is linked to a Contact —
+  // anonymous turns before capture never get mirrored (there's nothing to
+  // key a conversation on). Both this turn's inbound visitor message AND
+  // the outbound reply land together so the first captured turn doesn't
+  // show up as reply-only. Best-effort: a failure here can't break the
+  // visitor's actual chat response.
+  const linkedContactId =
+    outcome.kind === "replied" ? outcome.contactId : session.contactId;
+  if (linkedContactId) {
+    try {
+      const db = getAdminDb();
+      const contactSnap = await db.collection("contacts").doc(linkedContactId).get();
+      const contactData = contactSnap.data() as
+        | { name?: string; phone?: string }
+        | undefined;
+      const contactName = contactData?.name || "Web chat visitor";
+      const contactPhone = contactData?.phone ?? null;
+
+      const messagesCol = db
+        .collection("contacts")
+        .doc(linkedContactId)
+        .collection("webChatMessages");
+
+      await messagesCol.add({
+        agencyId: input.agencyId,
+        subAccountId: input.subAccountId,
+        contactId: linkedContactId,
+        direction: "inbound",
+        status: "received",
+        body: input.incomingMessage,
+        from: input.sessionId,
+        to: "",
+        twilioMessageSid: null,
+        sentByUid: null,
+        error: null,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      await messagesCol.add({
+        agencyId: input.agencyId,
+        subAccountId: input.subAccountId,
+        contactId: linkedContactId,
+        direction: "outbound",
+        status: "sent",
+        body,
+        from: "",
+        to: input.sessionId,
+        twilioMessageSid: null,
+        sentByUid: aiGenerated ? null : "web-chat-bot",
+        error: null,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      await upsertConversationForMessage({
+        contactId: linkedContactId,
+        subAccountId: input.subAccountId,
+        agencyId: input.agencyId,
+        contactName,
+        contactPhone,
+        channel: "web-chat",
+        direction: "inbound",
+        body: input.incomingMessage,
+      });
+      await upsertConversationForMessage({
+        contactId: linkedContactId,
+        subAccountId: input.subAccountId,
+        agencyId: input.agencyId,
+        contactName,
+        contactPhone,
+        channel: "web-chat",
+        direction: "outbound",
+        body,
+      });
+    } catch (err) {
+      console.warn(
+        `[web-chat/respond] Conversations mirror failed sa=${input.subAccountId}`,
+        err,
+      );
+    }
   }
 
   return { session, outcome };

@@ -31,6 +31,7 @@ const CHANNEL_LABEL: Record<ConversationChannel, string> = {
   whatsapp: "WhatsApp",
   messenger: "Messenger",
   instagram: "Instagram",
+  "web-chat": "Web Chat",
 };
 
 const CHANNEL_CHIP: Record<ConversationChannel, string> = {
@@ -38,6 +39,7 @@ const CHANNEL_CHIP: Record<ConversationChannel, string> = {
   whatsapp: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
   messenger: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
   instagram: "bg-pink-500/10 text-pink-700 dark:text-pink-400",
+  "web-chat": "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400",
 };
 
 /** Meta rows carry their own channel discriminator on the doc. */
@@ -72,10 +74,12 @@ export function ConversationThread({
   const [sms, setSms] = useState<MessageDoc[]>([]);
   const [wa, setWa] = useState<MessageDoc[]>([]);
   const [meta, setMeta] = useState<MetaMessageDoc[]>([]);
+  const [webChat, setWebChat] = useState<MessageDoc[]>([]);
   const [calls, setCalls] = useState<VoiceCall[]>([]);
   const [smsReady, setSmsReady] = useState(false);
   const [waReady, setWaReady] = useState(false);
   const [metaReady, setMetaReady] = useState(false);
+  const [webChatReady, setWebChatReady] = useState(false);
   const [callsReady, setCallsReady] = useState(false);
   // Surfaced instead of silently swallowed — a permission-denied or index
   // error used to just render as an empty "No messages yet" state with no
@@ -134,6 +138,21 @@ export function ConversationThread({
         setMetaReady(true);
       },
     );
+    const unsubWebChat = onSnapshot(
+      query(
+        collection(db, `contacts/${contactId}/webChatMessages`),
+        orderBy("createdAt", "asc"),
+      ),
+      (snap) => {
+        setWebChat(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MessageDoc));
+        setWebChatReady(true);
+      },
+      (err) => {
+        console.error("[conversation-thread] web chat subscription failed", err);
+        setLoadError((prev) => prev ?? `Web Chat: ${err.message}`);
+        setWebChatReady(true);
+      },
+    );
     // Voice calls live in a per-sub-account collection (not a per-contact
     // subcollection like the chat channels), so we read the whole thing —
     // same pattern the Voice operator console uses — and filter to this
@@ -156,6 +175,7 @@ export function ConversationThread({
       unsubSms();
       unsubWa();
       unsubMeta();
+      unsubWebChat();
       unsubCalls();
     };
   }, [contactId, subAccountId]);
@@ -168,13 +188,15 @@ export function ConversationThread({
         ...m,
         channel: (m.channel ?? "messenger") as ConversationChannel,
       })),
+      ...webChat.map((m) => ({ ...m, channel: "web-chat" as const })),
       ...calls.map((c) => ({ ...c, kind: "voice" as const })),
     ];
     all.sort((a, b) => toMillis(a.createdAt) - toMillis(b.createdAt));
     return all;
-  }, [sms, wa, meta, calls]);
+  }, [sms, wa, meta, webChat, calls]);
 
-  const hydrated = smsReady && waReady && metaReady && callsReady;
+  const hydrated =
+    smsReady && waReady && metaReady && webChatReady && callsReady;
 
   useEffect(() => {
     if (scrollerRef.current) {

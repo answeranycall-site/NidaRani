@@ -14,6 +14,7 @@ const LABEL = {
   whatsapp: "WhatsApp",
   messenger: "Messenger",
   instagram: "Instagram",
+  "web-chat": "Web Chat",
 } as const;
 
 /**
