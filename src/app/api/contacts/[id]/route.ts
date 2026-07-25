@@ -137,7 +137,43 @@ export async function DELETE(
   const contactRef = db.doc(`contacts/${id}`);
   const snap = await contactRef.get();
   if (!snap.exists) {
-    return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+    // The contact itself is already gone (most likely deleted via the old
+    // hard-delete route, from before soft-delete existed, which wiped the
+    // contact + its own subcollections but never touched the separate
+    // conversations/{id} index doc) — leaving an orphaned conversation
+    // entry with nothing behind it. Rather than 404 forever with no way
+    // to clear it from the UI, clean up the orphan directly if one exists.
+    const orphanRef = db.doc(`conversations/${id}`);
+    const orphanSnap = await orphanRef.get();
+    if (!orphanSnap.exists) {
+      return NextResponse.json({ error: "Contact not found" }, { status: 404 });
+    }
+    const orphan = orphanSnap.data() as {
+      agencyId?: string;
+      subAccountId?: string;
+    };
+    const isAgencyOwner =
+      caller.claims.agencyRole === "owner" &&
+      caller.claims.agencyId === orphan.agencyId;
+    let isSubAccountAdmin = false;
+    if (!isAgencyOwner && orphan.subAccountId) {
+      const memberSnap = await db
+        .doc(`subAccounts/${orphan.subAccountId}/subAccountMembers/${caller.uid}`)
+        .get();
+      const member = memberSnap.data();
+      isSubAccountAdmin =
+        memberSnap.exists &&
+        member?.status === "active" &&
+        member?.role === "admin";
+    }
+    if (!isAgencyOwner && !isSubAccountAdmin) {
+      return NextResponse.json(
+        { error: "Only sub-account admins can delete contacts." },
+        { status: 403 },
+      );
+    }
+    await orphanRef.delete();
+    return NextResponse.json({ ok: true, contactId: id, orphanCleaned: true });
   }
   const contact = snap.data() as Omit<Contact, "id">;
   const { agencyId, subAccountId } = contact;
