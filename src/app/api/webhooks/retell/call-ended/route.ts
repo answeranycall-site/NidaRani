@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { reconcileContactFromCapture } from "@/lib/comms/ai/capture";
 import { createTaskServerSide } from "@/lib/server/tasks-service";
+import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import {
   asBool,
   asString,
@@ -203,10 +204,13 @@ export async function POST(request: Request) {
     console.error("[retell/call-ended] activity write failed", err);
   }
 
-  // Voice-call summary doc — this is what makes the call show up in the
-  // Conversations tab (conversation-thread.tsx merges in every doc under
-  // subAccounts/{id}/voiceCalls matching the contact, regardless of which
-  // provider wrote it). Doc id = Retell's call_id for natural dedup.
+  // Voice-call summary doc — conversation-thread.tsx merges in every doc
+  // under subAccounts/{id}/voiceCalls matching the contact (regardless of
+  // provider) once that contact's thread is actually open. The
+  // upsertConversationForMessage call below is the OTHER half — without
+  // it the call never bumps the Conversations LIST itself, so a call to a
+  // contact whose last conversation was days ago silently doesn't surface
+  // as new. Doc id = Retell's call_id for natural dedup.
   try {
     await db.doc(`subAccounts/${subAccountId}/voiceCalls/${callId}`).set(
       {
@@ -235,6 +239,17 @@ export async function POST(request: Request) {
       },
       { merge: true },
     );
+
+    void upsertConversationForMessage({
+      contactId,
+      subAccountId,
+      agencyId: sa.agencyId,
+      contactName: asString(custom.name) ?? callerPhone ?? "Voice call",
+      contactPhone: callerPhone,
+      channel: "voice",
+      direction: "inbound",
+      body: summary ?? "Voice call",
+    });
   } catch (err) {
     console.error("[retell/call-ended] voiceCalls doc write failed", err);
   }

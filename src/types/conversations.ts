@@ -26,14 +26,18 @@ import type { Timestamp, FieldValue } from "firebase/firestore";
  * `metaInboxEnabledByAgency` flag, so they only ever appear once that's on.
  * `web-chat` only appears once a Web Chat session links to a Contact (see
  * lib/comms/web-chat/respond.ts::finalize) — anonymous sessions never
- * create a conversation entry.
+ * create a conversation entry. `voice` is stamped whenever a completed call
+ * (Vapi or Retell) resolves to a Contact — the call transcript/summary
+ * itself still lives in voiceCalls, this only bumps the conversation index
+ * so the call surfaces in the Conversations list like any other channel.
  */
 export type ConversationChannel =
   | "sms"
   | "whatsapp"
   | "messenger"
   | "instagram"
-  | "web-chat";
+  | "web-chat"
+  | "voice";
 
 export type ConversationStatus = "open" | "closed" | "snoozed";
 

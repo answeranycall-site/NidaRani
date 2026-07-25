@@ -32,6 +32,7 @@ const CHANNEL_LABEL: Record<ConversationChannel, string> = {
   messenger: "Messenger",
   instagram: "Instagram",
   "web-chat": "Web Chat",
+  voice: "Voice",
 };
 
 const CHANNEL_CHIP: Record<ConversationChannel, string> = {
@@ -40,6 +41,7 @@ const CHANNEL_CHIP: Record<ConversationChannel, string> = {
   messenger: "bg-blue-500/10 text-blue-700 dark:text-blue-400",
   instagram: "bg-pink-500/10 text-pink-700 dark:text-pink-400",
   "web-chat": "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400",
+  voice: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
 };
 
 /** Meta rows carry their own channel discriminator on the doc. */

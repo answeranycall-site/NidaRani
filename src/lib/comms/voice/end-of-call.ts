@@ -5,6 +5,7 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import { reconcileContactFromCapture } from "@/lib/comms/ai/capture";
 import { createCaptureFollowUp } from "@/lib/comms/ai/follow-up";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
+import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 import type { SubAccountDoc, VoiceCampaignOutcome } from "@/types";
 
@@ -331,6 +332,22 @@ export async function handleVapiEndOfCall(input: {
         },
         { merge: true },
       );
+    // Bump the Conversations index so the call surfaces in the list (not
+    // just the Voice → Calls console) — the same reason a completed call
+    // was invisible in Conversations before this existed, see
+    // types/conversations.ts's "voice" channel doc comment.
+    if (contactId) {
+      void upsertConversationForMessage({
+        contactId,
+        subAccountId,
+        agencyId: subAccount.agencyId,
+        contactName: capturedName ?? callerPhone ?? "Voice call",
+        contactPhone: callerPhone,
+        channel: "voice",
+        direction: payload.direction === "outbound" ? "outbound" : "inbound",
+        body: payload.summary ?? "Voice call",
+      });
+    }
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     console.error(

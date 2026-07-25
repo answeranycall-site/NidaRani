@@ -15,6 +15,7 @@ const LABEL = {
   messenger: "Messenger",
   instagram: "Instagram",
   "web-chat": "Web Chat",
+  voice: "Voice",
 } as const;
 
 /**

@@ -17,6 +17,7 @@ const LABEL: Record<ConversationChannel, string> = {
   messenger: "Messenger",
   instagram: "Instagram",
   "web-chat": "Web Chat",
+  voice: "Voice",
 };
 
 /** Human copy for /api/comms/review-request/send's `reason` codes. */
