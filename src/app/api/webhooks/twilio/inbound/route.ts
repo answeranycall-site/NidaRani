@@ -11,6 +11,7 @@ import { upsertConversationForMessage } from "@/lib/server/conversations-service
 import { createContactServerSide } from "@/lib/server/contacts-service";
 import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
 import { maybeHandleRatingReply } from "@/lib/reviews/rating-reply";
+import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { phoneMatchVariants } from "@/lib/phone";
 import { cleanEnv } from "@/lib/env";
 import type { SubAccountDoc } from "@/types";
@@ -414,8 +415,50 @@ export async function POST(request: Request) {
       const saSnap = await db.doc(`subAccounts/${route.subAccountId}`).get();
       const subAccount = saSnap.data() as SubAccountDoc | undefined;
 
+      // sms.keyword_received workflows — an exact (trimmed, case-insensitive)
+      // keyword match short-circuits both the rating-gate reply check and
+      // the normal AI auto-reply below, same as ratingHandled does, so a
+      // contact texting "review" gets the workflow's own send_sms node
+      // (e.g. the demo intro) instead of a bot reply talking over it.
+      let keywordHandled = false;
+      const normalizedBody = bodyRaw.trim().toLowerCase();
+      if (subAccount && normalizedBody) {
+        try {
+          const kwSnap = await db
+            .collection("workflows")
+            .where("subAccountId", "==", route.subAccountId)
+            .where("status", "==", "active")
+            .where("trigger.type", "==", "sms.keyword_received")
+            .get();
+          const matched = kwSnap.docs.some((d) => {
+            const kw = (
+              (d.data().trigger as { keyword?: string } | undefined)
+                ?.keyword ?? ""
+            )
+              .trim()
+              .toLowerCase();
+            return kw.length > 0 && kw === normalizedBody;
+          });
+          if (matched) {
+            keywordHandled = true;
+            await fireWorkflowTrigger({
+              subAccountId: route.subAccountId,
+              agencyId: route.agencyId ?? "",
+              type: "sms.keyword_received",
+              contactId: contact.id,
+              context: { keyword: normalizedBody },
+            });
+          }
+        } catch (err) {
+          console.error(
+            `[twilio/inbound] keyword-trigger check failed for sa=${route.subAccountId}`,
+            err,
+          );
+        }
+      }
+
       let ratingHandled = false;
-      if (subAccount) {
+      if (!keywordHandled && subAccount) {
         try {
           const ratingResult = await maybeHandleRatingReply({
             subAccountId: route.subAccountId,
@@ -433,7 +476,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (!ratingHandled && subAccount && aiIsConfigured()) {
+      if (!keywordHandled && !ratingHandled && subAccount && aiIsConfigured()) {
         try {
           const agent = await resolveAgent(route.subAccountId, "sms");
           if (agent?.effective.enabled) {

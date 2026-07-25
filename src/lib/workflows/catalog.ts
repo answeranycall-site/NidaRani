@@ -14,6 +14,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   "pipeline.stage.changed": "Pipeline stage changed",
   "booking.created": "Booking created",
   "quote.accepted": "Quote accepted",
+  "sms.keyword_received": "SMS keyword received",
 };
 
 export const NODE_LABELS: Record<WorkflowNodeType, string> = {

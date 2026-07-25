@@ -73,6 +73,7 @@ const TRIGGER_TYPES: WorkflowTriggerType[] = [
   "pipeline.stage.changed",
   "booking.created",
   "quote.accepted",
+  "sms.keyword_received",
 ];
 
 const ICONS: Record<WorkflowNodeType, typeof Mail> = {
@@ -330,6 +331,24 @@ export function WorkflowBuilder({
                 </option>
               ))}
             </select>
+          )}
+
+          {trigger.type === "sms.keyword_received" && (
+            <div className="mt-2 space-y-1">
+              <Input
+                value={trigger.keyword ?? ""}
+                onChange={(e) =>
+                  setTrigger({ ...trigger, keyword: e.target.value || null })
+                }
+                placeholder="e.g. review"
+                className="h-9"
+              />
+              <p className="text-muted-foreground text-xs">
+                Fires when a contact texts this exact word (case-insensitive) to
+                the sub-account&apos;s dedicated Twilio number — requires
+                dedicated Twilio, not the shared sender.
+              </p>
+            </div>
           )}
 
           <div className="mt-3 border-t pt-3">

@@ -726,6 +726,11 @@ export async function fireWorkflowTrigger(input: FireInput): Promise<void> {
       ) {
         continue;
       }
+      if (wf.trigger.type === "sms.keyword_received") {
+        const configured = (wf.trigger.keyword ?? "").trim().toLowerCase();
+        const received = String(input.context?.keyword ?? "").trim().toLowerCase();
+        if (!configured || configured !== received) continue;
+      }
       if (!evalConditionGroup(wf.trigger.filters, contact)) continue;
 
       await enroll(wf, contact.id, input.context ?? {});

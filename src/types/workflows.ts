@@ -15,7 +15,8 @@ export type WorkflowTriggerType =
   | "form.submitted"
   | "pipeline.stage.changed"
   | "booking.created"
-  | "quote.accepted";
+  | "quote.accepted"
+  | "sms.keyword_received";
 
 /* ------------------------------ Conditions ----------------------------- */
 
@@ -50,6 +51,11 @@ export interface WorkflowTrigger {
   formId?: string | null;
   /** Restrict `pipeline.stage.changed` to one target stage. */
   toStage?: string | null;
+  /** Required for `sms.keyword_received` — the inbound SMS body must match
+   *  this word/phrase exactly (trimmed, case-insensitive) on the
+   *  sub-account's own dedicated Twilio number. Shared-sender mode can't
+   *  fire this trigger (no per-sub-account inbound routing). */
+  keyword?: string | null;
 }
 
 /* --------------------------------- Nodes ------------------------------- */
