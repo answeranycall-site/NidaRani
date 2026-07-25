@@ -80,9 +80,13 @@ export function subscribeToContacts(
   return onSnapshot(
     q,
     (snap) => {
-      const contacts = snap.docs.map(
-        (d) => ({ id: d.id, ...(d.data() as Omit<Contact, "id">) }),
-      );
+      const contacts = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<Contact, "id">) }))
+        // Soft-deleted contacts (see Contact.deletedAt) stay out of every
+        // list-based surface that reads through this function — contacts
+        // list, pipeline, dashboard, Cmd+K, etc. Direct single-contact reads
+        // (subscribeToContact/getContact) are intentionally NOT filtered.
+        .filter((c) => !c.deletedAt);
       contacts.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
       callback(contacts);
     },

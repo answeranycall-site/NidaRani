@@ -1,6 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountMember } from "@/lib/auth/require-tenancy";
 import {
@@ -12,22 +13,24 @@ import type { Contact } from "@/types/contacts";
 import type { MemberStatus, Role } from "@/types";
 
 /**
- * Delete a contact — but ONLY when nothing else points at it.
+ * Delete a contact — always succeeds, regardless of what else still points
+ * at it (deals, tasks, quotes, etc. are left exactly as they are; they'll
+ * just reference a contact that's now hidden).
  *
  * Auth model: caller must be a sub-account ADMIN of the contact's
  * sub-account (or the agency owner). Collaborators can edit but not
  * delete — matches the rule for `contacts/{id}` where delete requires
  * canAdminSub.
  *
- * Reference guard (no cascade): the delete is refused with 409 when the
- * contact is still linked to a deal, task, calendar event / booking, quote
- * / invoice, form submission, web-chat conversation, or voice call. The
- * 409 body carries a `blockers` list (type + count) so the UI can explain
- * what to clear first. `?check=1` runs the same check as a dry-run (200
- * with `deletable` + `blockers`, no writes) for the confirm modal.
- *
- * When allowed, a recursive delete wipes the contact + its own
- * subcollections (notes / activities / messages) and fires contact.deleted.
+ * Soft-delete, not a hard delete: stamps `deletedAt` on the contact (and
+ * its `conversations/{id}` index doc, if one exists) instead of removing
+ * anything. The contact disappears from list views and the Conversations
+ * "active" tab immediately, but is fully restorable from the Conversations
+ * "Deleted" tab until the daily cron (api/cron/purge-deleted-contacts)
+ * permanently removes anything past DELETED_CONTACT_RETENTION_DAYS.
+ * `?check=1` still runs the linked-records check as a dry-run (200 with
+ * `deletable` + `blockers`, no writes) purely for informational UI copy —
+ * it no longer blocks anything.
  */
 
 interface CallerClaims {
@@ -164,36 +167,38 @@ export async function DELETE(
     );
   }
 
-  // Refuse deletion while the contact is still linked to other records.
-  // We do NOT cascade — the operator must clear/reassign the links first.
-  const blockers = await findContactBlockers(db, subAccountId, id);
+  // Dry-run for the UI: still surfaces what's linked (informational only —
+  // it never blocks the actual delete below).
   const checkOnly = new URL(request.url).searchParams.get("check") === "1";
-
-  // Dry-run for the UI: report deletability without touching anything.
   if (checkOnly) {
-    return NextResponse.json({ deletable: blockers.length === 0, blockers });
+    const blockers = await findContactBlockers(db, subAccountId, id);
+    return NextResponse.json({ deletable: true, blockers });
   }
 
-  if (blockers.length > 0) {
-    return NextResponse.json(
-      {
-        error:
-          "This contact is linked to other records and can't be deleted. Remove or reassign them first.",
-        blockers,
-      },
-      { status: 409 },
-    );
+  // Soft-delete: stamp deletedAt rather than removing anything. Restorable
+  // from the Conversations "Deleted" tab until the daily purge cron clears
+  // it after DELETED_CONTACT_RETENTION_DAYS.
+  const deletedAt = FieldValue.serverTimestamp();
+  await contactRef.set({ deletedAt }, { merge: true });
+
+  // Mirror onto the conversation index doc too, if one exists, so the
+  // Conversations list can filter to/without an extra contact read per row.
+  try {
+    const convoRef = db.doc(`conversations/${id}`);
+    const convoSnap = await convoRef.get();
+    if (convoSnap.exists) {
+      await convoRef.set({ deletedAt }, { merge: true });
+    }
+  } catch (err) {
+    console.warn(`[contacts/${id}] conversation soft-delete mirror failed`, err);
   }
 
-  // Nothing references the contact — safe to delete it and its own
-  // subcollections (notes, activities, messages).
-  await db.recursiveDelete(contactRef);
-
-  // Fire contact.deleted from the pre-delete snapshot — by the time
-  // subscribers react the doc is gone, so we serialize what we just read.
+  // Fire contact.deleted now — from the operator's perspective the contact
+  // is gone the moment they delete it, even though the doc survives for
+  // the grace window. The eventual permanent purge does NOT re-fire this.
   emitContactDeleted({ subAccountId, agencyId, contactId: id, data: contact });
 
-  return NextResponse.json({ ok: true, contactId: id });
+  return NextResponse.json({ ok: true, contactId: id, softDeleted: true });
 }
 
 interface ContactBlocker {

@@ -61,6 +61,13 @@ const SCHEDULES: ScheduleSpec[] = [
     description:
       "Daily Google Reviews Sync for every connected sub-account + owner SMS on new reviews.",
   },
+  {
+    scheduleId: "leadstack-purge-deleted-contacts",
+    path: "/api/cron/purge-deleted-contacts",
+    cron: "0 6 * * *",
+    description:
+      "Daily permanent purge of contacts soft-deleted past DELETED_CONTACT_RETENTION_DAYS.",
+  },
 ];
 
 const MARKER_PATH = "system/scheduleRegistration";

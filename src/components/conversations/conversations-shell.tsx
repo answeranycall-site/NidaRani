@@ -3,7 +3,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, Search, Star, Tag as TagIcon, Trash2, X } from "lucide-react";
+import {
+  Loader2,
+  Search,
+  Star,
+  Tag as TagIcon,
+  Trash2,
+  Undo2,
+  X,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
 import { subscribeToConversations } from "@/lib/firestore/conversations";
@@ -20,9 +28,10 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ConversationList } from "@/components/conversations/conversation-list";
+import { DELETED_CONTACT_RETENTION_DAYS } from "@/lib/contacts/retention";
 import type { ConversationDoc } from "@/types/conversations";
 
-type Filter = "all" | "unread" | "starred";
+type Filter = "all" | "unread" | "starred" | "deleted";
 
 /**
  * Master-detail shell for the Conversations tab. Lives in layout.tsx so it
@@ -59,6 +68,9 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
   const [bulkTagOpen, setBulkTagOpen] = useState(false);
   const [bulkTagInput, setBulkTagInput] = useState("");
   const [taggingBulk, setTaggingBulk] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [confirmPurgeOpen, setConfirmPurgeOpen] = useState(false);
+  const [purging, setPurging] = useState(false);
 
   function toggleSelect(contactId: string) {
     setSelected((prev) => {
@@ -73,27 +85,31 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
     setSelected(new Set());
   }
 
+  // Selection semantics differ between "deleted" and every other tab
+  // (restore/purge vs. tag/delete) — clear it on switch so a stale
+  // selection from one tab can't be acted on under the other tab's buttons.
+  function selectFilter(next: Filter) {
+    setFilter(next);
+    clearSelection();
+  }
+
   async function handleBulkDelete() {
     setDeleting(true);
     const ids = [...selected];
     const results = await Promise.allSettled(
       ids.map((id) => fetch(`/api/contacts/${id}`, { method: "DELETE" })),
     );
-    let succeeded = 0;
-    let blocked = 0;
-    for (const r of results) {
-      if (r.status === "fulfilled" && r.value.ok) succeeded++;
-      else blocked++;
-    }
+    const succeeded = results.filter(
+      (r) => r.status === "fulfilled" && r.value.ok,
+    ).length;
     if (succeeded > 0) {
       toast.success(
-        `Deleted ${succeeded} conversation${succeeded === 1 ? "" : "s"}.`,
+        `Deleted ${succeeded} conversation${succeeded === 1 ? "" : "s"} — ` +
+          `restorable from the Deleted tab for ${DELETED_CONTACT_RETENTION_DAYS} days.`,
       );
     }
-    if (blocked > 0) {
-      toast.error(
-        `${blocked} couldn't be deleted — still linked to other records (deals, tasks, etc).`,
-      );
+    if (succeeded < ids.length) {
+      toast.error(`${ids.length - succeeded} couldn't be deleted.`);
     }
     // If the thread currently open just got deleted, back out to the list.
     const basePathNow = saPath("/conversations");
@@ -104,6 +120,49 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
     }
     setDeleting(false);
     setConfirmDeleteOpen(false);
+    clearSelection();
+  }
+
+  async function handleBulkRestore() {
+    setRestoring(true);
+    const ids = [...selected];
+    const results = await Promise.allSettled(
+      ids.map((id) => fetch(`/api/contacts/${id}/restore`, { method: "POST" })),
+    );
+    const succeeded = results.filter(
+      (r) => r.status === "fulfilled" && r.value.ok,
+    ).length;
+    if (succeeded > 0) {
+      toast.success(
+        `Restored ${succeeded} conversation${succeeded === 1 ? "" : "s"}.`,
+      );
+    }
+    if (succeeded < ids.length) {
+      toast.error(`${ids.length - succeeded} couldn't be restored.`);
+    }
+    setRestoring(false);
+    clearSelection();
+  }
+
+  async function handleBulkPurge() {
+    setPurging(true);
+    const ids = [...selected];
+    const results = await Promise.allSettled(
+      ids.map((id) => fetch(`/api/contacts/${id}/purge`, { method: "POST" })),
+    );
+    const succeeded = results.filter(
+      (r) => r.status === "fulfilled" && r.value.ok,
+    ).length;
+    if (succeeded > 0) {
+      toast.success(
+        `Permanently deleted ${succeeded} conversation${succeeded === 1 ? "" : "s"}.`,
+      );
+    }
+    if (succeeded < ids.length) {
+      toast.error(`${ids.length - succeeded} couldn't be purged.`);
+    }
+    setPurging(false);
+    setConfirmPurgeOpen(false);
     clearSelection();
   }
 
@@ -166,24 +225,36 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
     return () => unsub();
   }, [user, subAccountId, agencyId, authLoading]);
 
-  const unreadTotal = conversations.filter((c) => (c.unreadCount ?? 0) > 0).length;
-  const starredTotal = conversations.filter((c) => c.starred).length;
+  const active = useMemo(
+    () => conversations.filter((c) => !c.deletedAt),
+    [conversations],
+  );
+  const deletedConversations = useMemo(
+    () => conversations.filter((c) => !!c.deletedAt),
+    [conversations],
+  );
+  const unreadTotal = active.filter((c) => (c.unreadCount ?? 0) > 0).length;
+  const starredTotal = active.filter((c) => c.starred).length;
+  const deletedTotal = deletedConversations.length;
 
   // Tags to offer as filter pills — only tags actually present on a contact
   // with a conversation, so every pill is guaranteed at least one match.
+  // Deleted conversations don't contribute tag pills (nothing useful to
+  // filter by while they're not actionable anyway).
   const availableTags = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const c of conversations) {
+    for (const c of active) {
       for (const tag of contactTags.get(c.contactId) ?? []) {
         counts.set(tag, (counts.get(tag) ?? 0) + 1);
       }
     }
     return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [conversations, contactTags]);
+  }, [active, contactTags]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return conversations.filter((c) => {
+    const base = filter === "deleted" ? deletedConversations : active;
+    return base.filter((c) => {
       if (filter === "unread" && !((c.unreadCount ?? 0) > 0)) return false;
       if (filter === "starred" && !c.starred) return false;
       if (tagFilter && !(contactTags.get(c.contactId) ?? []).includes(tagFilter)) {
@@ -195,7 +266,7 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
         (c.contactPhone ?? "").toLowerCase().includes(q)
       );
     });
-  }, [conversations, filter, search, tagFilter, contactTags]);
+  }, [active, deletedConversations, filter, search, tagFilter, contactTags]);
 
   const basePath = saPath("/conversations");
   const detailSelected = pathname !== basePath;
@@ -224,26 +295,58 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
               {selected.size} selected
             </span>
             <div className="ml-auto flex items-center gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => setBulkTagOpen(true)}
-              >
-                <TagIcon className="mr-1 h-3 w-3" />
-                Add tag
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                onClick={() => setConfirmDeleteOpen(true)}
-              >
-                <Trash2 className="mr-1 h-3 w-3" />
-                Delete
-              </Button>
+              {filter === "deleted" ? (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={handleBulkRestore}
+                    disabled={restoring}
+                  >
+                    {restoring ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Undo2 className="mr-1 h-3 w-3" />
+                    )}
+                    Restore
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setConfirmPurgeOpen(true)}
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    Delete permanently
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setBulkTagOpen(true)}
+                  >
+                    <TagIcon className="mr-1 h-3 w-3" />
+                    Add tag
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    Delete
+                  </Button>
+                </>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -259,17 +362,27 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
         ) : null}
 
         <div className="flex flex-wrap items-center gap-2">
-          <FilterPill active={filter === "all"} onClick={() => setFilter("all")}>
+          <FilterPill active={filter === "all"} onClick={() => selectFilter("all")}>
             All
           </FilterPill>
-          <FilterPill active={filter === "unread"} onClick={() => setFilter("unread")}>
+          <FilterPill active={filter === "unread"} onClick={() => selectFilter("unread")}>
             Unread{unreadTotal > 0 ? ` (${unreadTotal})` : ""}
           </FilterPill>
-          <FilterPill active={filter === "starred"} onClick={() => setFilter("starred")}>
+          <FilterPill active={filter === "starred"} onClick={() => selectFilter("starred")}>
             <Star className="mr-1 inline h-3 w-3" />
             Starred{starredTotal > 0 ? ` (${starredTotal})` : ""}
           </FilterPill>
+          <FilterPill active={filter === "deleted"} onClick={() => selectFilter("deleted")}>
+            <Trash2 className="mr-1 inline h-3 w-3" />
+            Deleted{deletedTotal > 0 ? ` (${deletedTotal})` : ""}
+          </FilterPill>
         </div>
+
+        {filter === "deleted" && deletedTotal > 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            Restorable for {DELETED_CONTACT_RETENTION_DAYS} days, then permanently removed.
+          </p>
+        )}
 
         {availableTags.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
@@ -327,10 +440,12 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
               Delete {selected.size} conversation{selected.size === 1 ? "" : "s"}?
             </DialogTitle>
             <DialogDescription>
-              This deletes the underlying contact{selected.size === 1 ? "" : "s"}{" "}
-              entirely, along with their message history. Any contact still
-              linked to a deal, task, quote, or other record is skipped
-              instead of deleted. This action can&apos;t be undone.
+              Moves the underlying contact{selected.size === 1 ? "" : "s"} to
+              the Deleted tab — hidden everywhere else (contacts, pipeline,
+              search), but fully restorable for{" "}
+              {DELETED_CONTACT_RETENTION_DAYS} days, after which it&apos;s
+              permanently removed. Any deals, tasks, or other linked records
+              are left exactly as they are.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -354,6 +469,46 @@ export function ConversationsShell({ children }: { children: React.ReactNode }) 
                 <Trash2 className="mr-1 h-3.5 w-3.5" />
               )}
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmPurgeOpen} onOpenChange={setConfirmPurgeOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Permanently delete {selected.size} conversation
+              {selected.size === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              This removes the contact{selected.size === 1 ? "" : "s"} and
+              their message history for good, right now — skipping the
+              remainder of the {DELETED_CONTACT_RETENTION_DAYS}-day recovery
+              window. This action can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmPurgeOpen(false)}
+              disabled={purging}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleBulkPurge}
+              disabled={purging}
+            >
+              {purging ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="mr-1 h-3.5 w-3.5" />
+              )}
+              Delete permanently
             </Button>
           </DialogFooter>
         </DialogContent>

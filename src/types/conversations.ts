@@ -94,4 +94,11 @@ export interface ConversationDoc {
   pendingDraft: ConversationDraft | null;
   createdAt: Timestamp | FieldValue | null;
   updatedAt: Timestamp | FieldValue | null;
+  /**
+   * Mirrors the contact's own `deletedAt` (see types/contacts.ts) — stamped
+   * by the same DELETE /api/contacts/[id] call so the Conversations list
+   * can filter to/from a "Deleted" view without an extra contact read per
+   * row. Cleared on restore.
+   */
+  deletedAt?: Timestamp | FieldValue | null;
 }

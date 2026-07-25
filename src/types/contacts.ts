@@ -137,6 +137,18 @@ export interface Contact {
   lastNoteSnippet?: string | null;
   lastNoteAt?: Timestamp | FieldValue | null;
   /**
+   * Soft-delete stamp. Set by DELETE /api/contacts/[id] instead of an
+   * immediate hard delete — the contact (and every linked deal/task/etc.)
+   * stays fully intact, it just disappears from list views
+   * (subscribeToContacts filters it out) and the Conversations "active"
+   * view (surfaces instead under the "Deleted" filter, with a restore
+   * action). A daily cron permanently purges anything past
+   * DELETED_CONTACT_RETENTION_DAYS (see lib/contacts/retention.ts). Direct
+   * reads (subscribeToContact/getContact) are NOT filtered — a link from a
+   * Deal/Task to a deleted contact still resolves during the grace window.
+   */
+  deletedAt?: Timestamp | FieldValue | null;
+  /**
    * Stamp of the last Google review request sent to this contact. Powers the
    * cooldown that stops auto-triggers re-asking the same person. Undefined =
    * never asked.
