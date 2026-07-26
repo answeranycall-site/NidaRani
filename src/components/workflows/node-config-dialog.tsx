@@ -334,7 +334,7 @@ export function NodeConfigDialog({
           {step.type === "notify_owner_sms" && (
             <Field
               label="Message"
-              hint="Sent as an SMS to the business owner's phone (Settings → Admin → Account contact) — not the contact/lead. Plain text, except {{reviewRating}} and {{reviewOutcome}} — populated when this step follows an “Ask for a rating” step (blank/generic otherwise)."
+              hint="Sent as an SMS to the business owner's phone (Settings → Admin → Account contact) — not the contact/lead. Supports merge tags like {{contact.firstName}} and {{contact.phone}}, plus {{reviewRating}} / {{reviewOutcome}} when this step follows an “Ask for a rating” step (blank/generic otherwise)."
             >
               <Textarea
                 rows={3}

@@ -431,7 +431,14 @@ const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
   const cfg = ctx.node.config as unknown as NotifyOwnerSmsConfig;
   const to = ctx.subAccount?.accountContact?.phone?.trim();
   if (!to) return { result: { kind: "next" }, log: "skipped:no_owner_phone" };
-  const body = resolveReviewTokens((cfg.body ?? "").trim(), ctx);
+  // Review tokens first (plain substitution, not the {{...}} merge-tag
+  // regex), then the standard contact/owner/workspace merge tags — so an
+  // operator can write "New lead: {{contact.firstName}} {{contact.phone}}"
+  // just like they would in a send_sms step.
+  const body = resolveMergeTags(
+    resolveReviewTokens((cfg.body ?? "").trim(), ctx),
+    mergeSubject(ctx, ""),
+  );
   if (!body) return { result: { kind: "next" }, log: "skipped:no_body" };
   // Same resolution send_sms uses — dedicated Twilio when configured, else
   // the shared env creds if the agency still permits it.

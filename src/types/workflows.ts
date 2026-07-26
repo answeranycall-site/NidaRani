@@ -194,12 +194,14 @@ export interface WebhookConfig {
   url: string;
 }
 /**
- * Sends a plain-text SMS to the business OWNER (subAccount.accountContact
- * .phone), not the contact/lead — an internal heads-up, not a customer-
- * facing message. No merge tags: unlike send_sms/notify, this is meant for
- * short fixed copy an operator types once ("we just texted back a missed
- * call from..."). Reuses the same Twilio send path as send_sms, just with
- * a fixed recipient instead of contact.phone.
+ * Sends an SMS to the business OWNER (subAccount.accountContact.phone), not
+ * the contact/lead — an internal heads-up, not a customer-facing message.
+ * Supports the same contact/owner/workspace merge tags as send_sms
+ * ({{contact.firstName}}, {{contact.lastName}}, {{contact.phone}}, etc. —
+ * see lib/automations/merge-tags.ts), PLUS two review-specific tokens,
+ * {{reviewRating}} / {{reviewOutcome}}, populated when this step follows a
+ * `review_rating_request` step. Reuses the same Twilio send path as
+ * send_sms, just with a fixed recipient instead of contact.phone.
  */
 export interface NotifyOwnerSmsConfig {
   body: string;
