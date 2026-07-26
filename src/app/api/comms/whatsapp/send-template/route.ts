@@ -129,6 +129,7 @@ export async function POST(request: Request) {
     owner,
     workspace: { name: subAccount?.name ?? "" },
     bookingLink: subAccount?.bookingLink ?? "",
+    paymentLink: subAccount?.paymentLink ?? "",
     unsubscribeLink: "",
   };
 

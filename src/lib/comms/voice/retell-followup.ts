@@ -21,17 +21,23 @@ export const DEFAULT_RETELL_DEMO_INFO_TEMPLATE =
 export const DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE =
   "Hey, looks like that call cut out quick! If you're curious how {{businessName}} helps businesses stop missing leads, just reply here or give us a call back anytime.";
 
-/** Fill {{firstName}} / {{businessName}} / {{bookingLink}} into a Retell
- *  follow-up template. {{bookingLink}} resolves to the sub-account's
- *  configured booking link (Settings → Messaging → Booking link) — empty
- *  string when unset, same convention as the other {{bookingLink}} uses
- *  (send_sms, broadcasts, etc.) in lib/automations/merge-tags.ts. */
+/** Fill {{firstName}} / {{businessName}} / {{bookingLink}} / {{paymentLink}}
+ *  into a Retell follow-up template. {{bookingLink}} / {{paymentLink}}
+ *  resolve to the sub-account's configured links (Settings → Messaging →
+ *  Quick links) — empty string when unset, same convention as the other
+ *  uses of these tags in lib/automations/merge-tags.ts. */
 export function renderRetellFollowUp(
   template: string,
-  vars: { firstName: string; businessName: string; bookingLink?: string },
+  vars: {
+    firstName: string;
+    businessName: string;
+    bookingLink?: string;
+    paymentLink?: string;
+  },
 ): string {
   return template
     .replaceAll("{{firstName}}", vars.firstName)
     .replaceAll("{{businessName}}", vars.businessName)
-    .replaceAll("{{bookingLink}}", vars.bookingLink ?? "");
+    .replaceAll("{{bookingLink}}", vars.bookingLink ?? "")
+    .replaceAll("{{paymentLink}}", vars.paymentLink ?? "");
 }

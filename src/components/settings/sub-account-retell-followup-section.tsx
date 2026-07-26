@@ -101,7 +101,8 @@ export function SubAccountRetellFollowUpSection() {
             Sent mid-call, right after the agent says &ldquo;I&apos;m
             sending you a text right now with more info.&rdquo; Tags:{" "}
             <code>{"{{firstName}}"}</code>, <code>{"{{businessName}}"}</code>,{" "}
-            <code>{"{{bookingLink}}"}</code> (set above).
+            <code>{"{{bookingLink}}"}</code>, <code>{"{{paymentLink}}"}</code>{" "}
+            (set above).
           </p>
         </div>
 
@@ -121,7 +122,8 @@ export function SubAccountRetellFollowUpSection() {
             before the agent ever reached its closing line — so the
             demo-info message above never went out. Tags:{" "}
             <code>{"{{firstName}}"}</code>, <code>{"{{businessName}}"}</code>,{" "}
-            <code>{"{{bookingLink}}"}</code> (set above).
+            <code>{"{{bookingLink}}"}</code>, <code>{"{{paymentLink}}"}</code>{" "}
+            (set above).
           </p>
         </div>
 

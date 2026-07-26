@@ -191,6 +191,7 @@ export async function POST(request: Request) {
       owner: { displayName: "", email: "" },
       workspace: { name: "" },
       bookingLink: "",
+      paymentLink: "",
       unsubscribeLink: "",
     }),
     audienceFilter,

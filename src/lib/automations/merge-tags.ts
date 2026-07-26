@@ -11,6 +11,9 @@
  *   {{workspace.name}}
  *   {{bookingLink}}        — sub-account's configured Calendly / Cal.com /
  *                            TidyCal URL. Empty string when not set.
+ *   {{paymentLink}}        — sub-account's configured payment URL (Stripe
+ *                            Payment Link, PayPal.me, etc). Empty string
+ *                            when not set.
  *   {{booking.time}}, {{booking.title}}, {{booking.rescheduleLink}} — the
  *                            THIS-appointment fields, only populated on a
  *                            workflow enrolled via the `booking.created`
@@ -41,6 +44,9 @@ export interface MergeTagSubject {
    * rather than leaking the raw `{{bookingLink}}` placeholder.
    */
   bookingLink: string;
+  /** Sub-account's configured payment URL, surfaced via {{paymentLink}}.
+   *  Empty string when not set. */
+  paymentLink: string;
   /**
    * THIS-appointment fields, only present when the workflow run's trigger
    * was `booking.created` (native Booking Pages feature — see
@@ -91,6 +97,8 @@ export function resolveMergeTags(
         return subject.workspace.name ?? "";
       case "bookingLink":
         return subject.bookingLink ?? "";
+      case "paymentLink":
+        return subject.paymentLink ?? "";
       case "booking.time":
         return subject.booking?.time ?? "";
       case "booking.title":
@@ -121,6 +129,7 @@ export const SUPPORTED_TAGS_EMAIL: ReadonlyArray<{ tag: string; description: str
   { tag: "owner.email", description: "Agency owner's email" },
   { tag: "workspace.name", description: "Sub-account name" },
   { tag: "bookingLink", description: "Booking page URL (set in Automations → Settings)" },
+  { tag: "paymentLink", description: "Payment URL (set in Settings → Messaging)" },
   { tag: "booking.time", description: "This appointment's date/time (booking.created trigger only)" },
   { tag: "booking.title", description: "This appointment's title (booking.created trigger only)" },
   { tag: "booking.rescheduleLink", description: "Link to reschedule/cancel THIS appointment (booking.created trigger only)" },
@@ -133,6 +142,7 @@ export const SUPPORTED_TAGS_SMS: ReadonlyArray<{ tag: string; description: strin
   { tag: "owner.firstName", description: "Agency owner's first name" },
   { tag: "workspace.name", description: "Sub-account name" },
   { tag: "bookingLink", description: "Booking page URL (set in Automations → Settings)" },
+  { tag: "paymentLink", description: "Payment URL (set in Settings → Messaging)" },
   { tag: "booking.time", description: "This appointment's date/time (booking.created trigger only)" },
   { tag: "booking.title", description: "This appointment's title (booking.created trigger only)" },
   { tag: "booking.rescheduleLink", description: "Link to reschedule/cancel THIS appointment (booking.created trigger only)" },

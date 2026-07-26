@@ -416,6 +416,7 @@ async function buildSubject(
     owner,
     workspace: { name: subAccount.name ?? "" },
     bookingLink: subAccount.bookingLink ?? "",
+    paymentLink: subAccount.paymentLink ?? "",
     unsubscribeLink: "",
   };
 }

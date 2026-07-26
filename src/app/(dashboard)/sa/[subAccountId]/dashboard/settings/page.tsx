@@ -281,8 +281,9 @@ export default function SettingsPage() {
           {/* Google reviews — SMS / WhatsApp review-request sends. */}
           <SubAccountGoogleReviewSection />
 
-          {/* {{bookingLink}} merge tag — feeds send_sms/send_email/
-              notify_owner_sms/broadcasts AND the Retell templates below. */}
+          {/* {{bookingLink}} / {{paymentLink}} merge tags — feed send_sms/
+              send_email/notify_owner_sms/broadcasts AND the Retell
+              templates below. */}
           <SubAccountBookingLinkSection />
 
           {/* Retell voice-call text-back templates (currently only takes

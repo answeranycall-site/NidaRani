@@ -175,6 +175,7 @@ export async function POST(request: Request) {
       firstName: "there",
       businessName,
       bookingLink: sa.bookingLink ?? "",
+      paymentLink: sa.paymentLink ?? "",
     });
 
     const sendResult = await sendSmsForSubAccount({

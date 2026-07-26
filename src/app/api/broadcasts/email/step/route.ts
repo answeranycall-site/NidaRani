@@ -184,6 +184,7 @@ export async function POST(request: Request) {
     owner: { displayName: ownerDisplayName, email: ownerEmail },
     workspace: { name: subAccount?.name ?? "" },
     bookingLink: subAccount?.bookingLink ?? "",
+    paymentLink: subAccount?.paymentLink ?? "",
   } as const;
 
   const text = resolveMergeTags(template.body, {

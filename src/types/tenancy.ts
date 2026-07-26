@@ -287,6 +287,17 @@ export interface SubAccountDoc {
    */
   bookingLink: string | null;
   /**
+   * Generic payment URL surfaced via the {{paymentLink}} merge tag —
+   * distinct from `bookingLink` since a business often wants to text/email
+   * BOTH a "book a call" link and a separate "pay / sign up" link. Any URL
+   * works: a Stripe Payment Link (recurring or one-time — set up directly
+   * in the operator's own Stripe account; this deployment's own Stripe
+   * wiring is reserved for LeadStack-template billing, not for buyers to
+   * charge their own clients), a PayPal.me link, etc. Null when unset —
+   * {{paymentLink}} resolves to empty string.
+   */
+  paymentLink: string | null;
+  /**
    * Single source of truth for the Reply-To header on every email LeadStack
    * sends on behalf of this sub-account — automation lead-step emails AND
    * manual contact-profile sends. Null falls back to no Reply-To (current

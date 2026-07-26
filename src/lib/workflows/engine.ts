@@ -101,6 +101,7 @@ function mergeSubject(
     owner: ctx.owner,
     workspace: { name: ctx.subAccount?.name ?? "" },
     bookingLink: ctx.subAccount?.bookingLink ?? "",
+    paymentLink: ctx.subAccount?.paymentLink ?? "",
     booking: booking
       ? {
           time: booking.time ?? "",

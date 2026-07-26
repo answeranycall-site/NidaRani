@@ -179,6 +179,7 @@ export async function POST(request: Request) {
       bookingConfig: null,
       sendWindow: null,
       bookingLink: null,
+      paymentLink: null,
       replyToEmail: null,
       automationsPaused: false,
       accountContact,

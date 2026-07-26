@@ -11,6 +11,7 @@ interface PatchBody {
   timezone?: string;
   sendWindow?: SendWindow | null;
   bookingLink?: string | null;
+  paymentLink?: string | null;
   replyToEmail?: string | null;
   automationsPaused?: boolean;
   accountContact?: {
@@ -41,7 +42,7 @@ function isValidSendWindow(v: unknown): v is SendWindow {
 
 /**
  * Patch a sub-account doc. Allowed fields: name, timezone, sendWindow,
- * bookingLink, replyToEmail, automationsPaused, accountContact. Caller must
+ * bookingLink, paymentLink, replyToEmail, automationsPaused, accountContact. Caller must
  * be an active sub-account admin (agency owners pass via the implicit
  * shortcut in requireSubAccountAdmin).
  */
@@ -119,6 +120,26 @@ export async function PATCH(
         );
       }
       update.bookingLink = trimmed;
+    }
+  }
+
+  if (body.paymentLink !== undefined) {
+    if (body.paymentLink === null || body.paymentLink === "") {
+      update.paymentLink = null;
+    } else if (typeof body.paymentLink !== "string") {
+      return NextResponse.json(
+        { error: "Payment link must be a string URL or null." },
+        { status: 400 },
+      );
+    } else {
+      const trimmed = body.paymentLink.trim();
+      if (!URL_RE.test(trimmed)) {
+        return NextResponse.json(
+          { error: "Payment link must start with http:// or https://." },
+          { status: 400 },
+        );
+      }
+      update.paymentLink = trimmed;
     }
   }
 
