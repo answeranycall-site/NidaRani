@@ -12,6 +12,7 @@ import {
 import { reconcileContactFromCapture } from "@/lib/comms/web-chat/capture";
 import { createFollowUpActions } from "@/lib/comms/web-chat/follow-up";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
+import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { ipFromRequest } from "@/lib/contacts/location";
 import type { SubAccountDoc } from "@/types";
 
@@ -334,6 +335,77 @@ export async function POST(request: Request) {
     tokens: 0,
     aiGenerated: false,
   });
+
+  // Mirror into Conversations — this exchange happens entirely inside this
+  // route (unlike the normal chat flow, whose finalize() in respond.ts does
+  // the equivalent mirroring), so without this a lead captured via the
+  // form — especially the very-first-message forced capture, which may be
+  // the visitor's ONLY exchange — would create a Contact + Task but never
+  // show up in the Conversations list/thread. Best-effort; a failure here
+  // can't break the visitor's thank-you reply.
+  if (contactId) {
+    try {
+      const messagesCol = db
+        .collection("contacts")
+        .doc(contactId)
+        .collection("webChatMessages");
+      await messagesCol.add({
+        agencyId: sa.agencyId,
+        subAccountId,
+        contactId,
+        direction: "inbound",
+        status: "received",
+        body: `Shared contact details: ${submittedSummary}`,
+        from: sessionId,
+        to: "",
+        twilioMessageSid: null,
+        sentByUid: null,
+        error: null,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      await messagesCol.add({
+        agencyId: sa.agencyId,
+        subAccountId,
+        contactId,
+        direction: "outbound",
+        status: "sent",
+        body: reply,
+        from: "",
+        to: sessionId,
+        twilioMessageSid: null,
+        sentByUid: "web-chat-bot",
+        error: null,
+        readAt: null,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      await upsertConversationForMessage({
+        contactId,
+        subAccountId,
+        agencyId: sa.agencyId,
+        contactName: name ?? "Web chat visitor",
+        contactPhone: phone,
+        channel: "web-chat",
+        direction: "inbound",
+        body: `Shared contact details: ${submittedSummary}`,
+      });
+      await upsertConversationForMessage({
+        contactId,
+        subAccountId,
+        agencyId: sa.agencyId,
+        contactName: name ?? "Web chat visitor",
+        contactPhone: phone,
+        channel: "web-chat",
+        direction: "outbound",
+        body: reply,
+      });
+    } catch (err) {
+      console.warn(
+        `[web-chat/capture] Conversations mirror failed sa=${subAccountId}`,
+        err,
+      );
+    }
+  }
 
   return NextResponse.json(
     {
