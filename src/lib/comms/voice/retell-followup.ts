@@ -8,7 +8,7 @@
  * server route and the client settings UI can import it directly.
  */
 export const DEFAULT_RETELL_DEMO_INFO_TEMPLATE =
-  "Thanks for calling {{businessName}}! Here's how to get started: book your Free Strategy Call at https://answeranycall.com, or just reply here with any questions.";
+  "Thanks for calling {{businessName}}! Here's how to get started: book your Free Strategy Call at {{bookingLink}}, or just reply here with any questions.";
 
 /**
  * Fallback for a call that ended (hangup, disconnect) before the agent
@@ -21,12 +21,17 @@ export const DEFAULT_RETELL_DEMO_INFO_TEMPLATE =
 export const DEFAULT_RETELL_QUICK_HANGUP_TEMPLATE =
   "Hey, looks like that call cut out quick! If you're curious how {{businessName}} helps businesses stop missing leads, just reply here or give us a call back anytime.";
 
-/** Fill {{firstName}} / {{businessName}} into the demo-info template. */
+/** Fill {{firstName}} / {{businessName}} / {{bookingLink}} into a Retell
+ *  follow-up template. {{bookingLink}} resolves to the sub-account's
+ *  configured booking link (Settings → Messaging → Booking link) — empty
+ *  string when unset, same convention as the other {{bookingLink}} uses
+ *  (send_sms, broadcasts, etc.) in lib/automations/merge-tags.ts. */
 export function renderRetellFollowUp(
   template: string,
-  vars: { firstName: string; businessName: string },
+  vars: { firstName: string; businessName: string; bookingLink?: string },
 ): string {
   return template
     .replaceAll("{{firstName}}", vars.firstName)
-    .replaceAll("{{businessName}}", vars.businessName);
+    .replaceAll("{{businessName}}", vars.businessName)
+    .replaceAll("{{bookingLink}}", vars.bookingLink ?? "");
 }

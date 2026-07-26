@@ -174,6 +174,7 @@ export async function POST(request: Request) {
     const messageBody = renderRetellFollowUp(template, {
       firstName: "there",
       businessName,
+      bookingLink: sa.bookingLink ?? "",
     });
 
     const sendResult = await sendSmsForSubAccount({
