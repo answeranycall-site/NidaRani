@@ -220,6 +220,20 @@ export interface WebChatChannelConfig {
   accentColor: string;
   /** Where the floating bubble sits on the host page. */
   position: "right" | "left";
+  /**
+   * When true, the visitor's very first message always gets an inline
+   * name+phone capture form appended to the bot's reply — regardless of
+   * what the visitor said or whether the LLM decided intent was "clear
+   * enough." Enforced deterministically in code (lib/comms/web-chat/
+   * respond.ts), not just via prompt instruction, since relying on the
+   * model to always remember a one-off first-turn rule proved unreliable
+   * in practice. Default false = the standard intent-based capture
+   * (form/capture markers fire whenever the persona's lead-capture
+   * triggers are met, which may be several turns in). Naturally only
+   * fires once per session — after the first reply, `capturePromptShownAt`
+   * suppresses it like every other capture path.
+   */
+  forceCaptureOnFirstMessage: boolean;
 }
 
 /** WhatsApp-channel-only settings. Lives at
@@ -260,6 +274,7 @@ export const DEFAULT_WEB_CHAT_CONFIG: WebChatChannelConfig = {
   welcomeMessage: "Hi! How can I help?",
   accentColor: "#7c3aed",
   position: "right",
+  forceCaptureOnFirstMessage: false,
 };
 
 export const DEFAULT_VOICE_CONFIG: VoiceChannelConfig = {

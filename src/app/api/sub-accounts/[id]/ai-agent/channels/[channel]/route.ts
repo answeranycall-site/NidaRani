@@ -204,6 +204,12 @@ function sanitiseWebChatBlock(raw: unknown): Partial<WebChatChannelConfig> {
   ) {
     out.position = r.position;
   }
+  if (
+    "forceCaptureOnFirstMessage" in r &&
+    typeof r.forceCaptureOnFirstMessage === "boolean"
+  ) {
+    out.forceCaptureOnFirstMessage = r.forceCaptureOnFirstMessage;
+  }
 
   return out;
 }

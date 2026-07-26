@@ -48,6 +48,8 @@ export function WebChatChannelSection() {
   const [accentColor, setAccentColor] = useState("#7c3aed");
   const [position, setPosition] = useState<"right" | "left">("right");
   const [allowedDomainsText, setAllowedDomainsText] = useState("");
+  const [forceCaptureOnFirstMessage, setForceCaptureOnFirstMessage] =
+    useState(false);
 
   const [contextCount, setContextCount] = useState(10);
   const [modelOverride, setModelOverride] = useState("");
@@ -96,6 +98,7 @@ export function WebChatChannelSection() {
           setAccentColor(wc.accentColor);
           setPosition(wc.position);
           setAllowedDomainsText(wc.allowedDomains.join("\n"));
+          setForceCaptureOnFirstMessage(!!wc.forceCaptureOnFirstMessage);
         }
       }
     } catch (err) {
@@ -162,6 +165,7 @@ export function WebChatChannelSection() {
           accentColor,
           position,
           allowedDomains,
+          forceCaptureOnFirstMessage,
         },
       };
 
@@ -339,6 +343,27 @@ export function WebChatChannelSection() {
               the widget. Leave empty during testing to allow{" "}
               <code>localhost</code> + your LeadStack domain.
             </p>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-lg border p-4">
+            <Checkbox
+              id="wc-force-capture"
+              checked={forceCaptureOnFirstMessage}
+              onCheckedChange={(v) => setForceCaptureOnFirstMessage(!!v)}
+            />
+            <div className="flex-1">
+              <Label htmlFor="wc-force-capture" className="text-sm font-medium">
+                Ask for name + phone on the visitor&rsquo;s very first message
+              </Label>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                Off by default, the bot only asks once intent becomes clear
+                (pricing, booking, wanting a human, etc.), which can take a
+                few turns. Turn this on to show the capture form immediately
+                on the first reply, before any conversation happens — good
+                for aggressively converting every visitor into a lead.
+                Enforced directly (not just prompted), so it always fires.
+              </p>
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

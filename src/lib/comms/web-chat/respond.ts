@@ -304,7 +304,22 @@ export async function respondToWebChat(
   // since the prompt also tells the bot not to repeat — but bots drift.
   const formAlreadyHandled =
     !!session.contactId || !!session.capturePromptShownAt;
-  const formFields = formAlreadyHandled ? null : afterForm.fields;
+  let formFields = formAlreadyHandled ? null : afterForm.fields;
+
+  // Deterministic override: when the operator wants name+phone captured
+  // on the visitor's very first message no matter what, don't rely on the
+  // LLM to remember a one-off prompt instruction — force it here. Only
+  // engages on a session's first-ever reply (nothing captured/shown yet)
+  // and only if the model didn't already ask for something itself, so a
+  // model that DID follow instructions isn't double-prompted or overridden.
+  if (
+    !formAlreadyHandled &&
+    !formFields &&
+    !capture &&
+    agent.channel.webChat?.forceCaptureOnFirstMessage
+  ) {
+    formFields = ["name", "phone"];
+  }
 
   let contactId = session.contactId;
 
