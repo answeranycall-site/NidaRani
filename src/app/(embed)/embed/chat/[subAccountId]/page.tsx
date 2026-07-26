@@ -39,6 +39,7 @@ export default async function EmbedChatPage({
       subAccountId={subAccountId}
       welcomeMessage={welcomeMessage}
       accentColor={accentColor}
+      forceCaptureOnFirstMessage={config.webChat.forceCaptureOnFirstMessage === true}
       embedded
     />
   );

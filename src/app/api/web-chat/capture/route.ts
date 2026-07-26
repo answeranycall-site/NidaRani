@@ -5,6 +5,7 @@ import { getChannelConfig } from "@/lib/comms/ai/agent";
 import { checkAndCount } from "@/lib/comms/web-chat/rate-limit";
 import {
   appendMessage,
+  getOrCreateSession,
   isValidSessionId,
   markCaptureSkipped,
 } from "@/lib/comms/web-chat/session";
@@ -107,21 +108,33 @@ export async function POST(request: Request) {
     );
   }
 
+  // Need agencyId for tenancy stamps below, and to create the session if
+  // this is the visitor's very first server round-trip (the forced
+  // first-message capture form can now be the FIRST thing submitted,
+  // before /message has ever run — so the session may not exist yet).
   const db = getAdminDb();
-  const sessionRef = db.doc(
-    `subAccounts/${subAccountId}/webChatSessions/${sessionId}`,
-  );
-  const sessionSnap = await sessionRef.get();
-  if (!sessionSnap.exists) {
+  const saSnapForSession = await db.doc(`subAccounts/${subAccountId}`).get();
+  if (!saSnapForSession.exists) {
     return NextResponse.json(
-      { error: "Session not found" },
+      { error: "Sub-account not found" },
       { status: 404, headers },
     );
   }
-  const session = sessionSnap.data() as {
-    contactId: string | null;
-    agencyId: string;
-  };
+  const saForSession = saSnapForSession.data() as SubAccountDoc;
+
+  const sessionRef = db.doc(
+    `subAccounts/${subAccountId}/webChatSessions/${sessionId}`,
+  );
+  const session = await getOrCreateSession({
+    subAccountId,
+    agencyId: saForSession.agencyId,
+    sessionId,
+    pageUrl: body.pageUrl?.slice(0, 500) ?? null,
+    referrer: null,
+    origin: request.headers.get("origin"),
+    visitorIp: ip,
+    visitorUserAgent: request.headers.get("user-agent")?.slice(0, 500) ?? null,
+  });
 
   // ----- Skip branch -----
   if (body.skip) {
@@ -169,15 +182,7 @@ export async function POST(request: Request) {
     );
   }
 
-  // Need agencyId tenancy stamp on the contact create.
-  const saSnap = await db.doc(`subAccounts/${subAccountId}`).get();
-  if (!saSnap.exists) {
-    return NextResponse.json(
-      { error: "Sub-account not found" },
-      { status: 404, headers },
-    );
-  }
-  const sa = saSnap.data() as SubAccountDoc;
+  const sa = saForSession;
 
   // Echo the visitor's submission into the thread as an inbound row so
   // the conversation history reads naturally. Not strictly required —

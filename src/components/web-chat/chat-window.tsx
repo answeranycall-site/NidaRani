@@ -30,6 +30,11 @@ interface ChatWindowProps {
   subAccountId: string;
   welcomeMessage: string;
   accentColor: string;
+  /** When true, the capture form is attached to the welcome message itself
+   *  (before the visitor types anything) and can't be skipped — the
+   *  composer stays locked until name+phone are submitted. Mirrors the
+   *  channel's `forceCaptureOnFirstMessage` setting. */
+  forceCaptureOnFirstMessage: boolean;
   /** Tells the parent loader to remove/hide the iframe on close. */
   embedded: boolean;
 }
@@ -45,6 +50,9 @@ type LocalMessage = {
   /** When present on an assistant message, render an inline capture form
    *  below the bubble with these fields. Cleared once submitted/skipped. */
   formFields?: CaptureFieldId[];
+  /** When true, this form has no Skip button and every field is required —
+   *  the visitor can't dismiss it or send a chat message until it's done. */
+  mandatory?: boolean;
 };
 
 function sessionStorageKey(saId: string): string {
@@ -80,7 +88,13 @@ function postToParent(message: Record<string, unknown>): void {
 }
 
 export function ChatWindow(props: ChatWindowProps) {
-  const { subAccountId, welcomeMessage, accentColor, embedded } = props;
+  const {
+    subAccountId,
+    welcomeMessage,
+    accentColor,
+    forceCaptureOnFirstMessage,
+    embedded,
+  } = props;
 
   const [sessionId, setSessionId] = useState<string>("");
   const [messages, setMessages] = useState<LocalMessage[]>([]);
@@ -102,9 +116,22 @@ export function ChatWindow(props: ChatWindowProps) {
       // No-op — parent URL is purely for server-side logging.
     }
     setMessages([
-      { id: "welcome", role: "assistant", text: welcomeMessage },
+      {
+        id: "welcome",
+        role: "assistant",
+        text: welcomeMessage,
+        formFields: forceCaptureOnFirstMessage ? ["name", "phone"] : undefined,
+        mandatory: forceCaptureOnFirstMessage,
+      },
     ]);
-  }, [subAccountId, welcomeMessage]);
+  }, [subAccountId, welcomeMessage, forceCaptureOnFirstMessage]);
+
+  // While a mandatory capture form is showing (unresolved), the visitor
+  // can't type around it — same "no skipping" rule as the missing Skip
+  // button, enforced on the composer too.
+  const mandatoryFormPending = messages.some(
+    (m) => m.mandatory && m.formFields && m.formFields.length > 0,
+  );
 
   // Auto-scroll to bottom on every message change.
   useEffect(() => {
@@ -394,6 +421,7 @@ export function ChatWindow(props: ChatWindowProps) {
               <InlineCaptureForm
                 fields={m.formFields}
                 accentColor={accentColor}
+                mandatory={!!m.mandatory}
                 onSubmit={(payload) => handleCaptureFormDone(m.id, payload)}
                 onSkip={() => handleCaptureFormDone(m.id, { skip: true })}
               />
@@ -430,8 +458,14 @@ export function ChatWindow(props: ChatWindowProps) {
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={sending ? "Waiting for reply…" : "Type a message…"}
-          disabled={sending || !sessionId}
+          placeholder={
+            mandatoryFormPending
+              ? "Please fill in the form above first…"
+              : sending
+                ? "Waiting for reply…"
+                : "Type a message…"
+          }
+          disabled={sending || !sessionId || mandatoryFormPending}
           aria-label="Type a message"
           style={{
             flex: 1,
@@ -446,7 +480,7 @@ export function ChatWindow(props: ChatWindowProps) {
         />
         <button
           type="submit"
-          disabled={sending || !input.trim() || !sessionId}
+          disabled={sending || !input.trim() || !sessionId || mandatoryFormPending}
           aria-label="Send"
           style={{
             background: accentColor,
@@ -455,8 +489,11 @@ export function ChatWindow(props: ChatWindowProps) {
             borderRadius: 10,
             padding: "0 16px",
             fontSize: 16,
-            cursor: sending || !input.trim() ? "not-allowed" : "pointer",
-            opacity: sending || !input.trim() ? 0.5 : 1,
+            cursor:
+              sending || !input.trim() || mandatoryFormPending
+                ? "not-allowed"
+                : "pointer",
+            opacity: sending || !input.trim() || mandatoryFormPending ? 0.5 : 1,
           }}
         >
           ↑
@@ -489,10 +526,13 @@ export function ChatWindow(props: ChatWindowProps) {
 function InlineCaptureForm(props: {
   fields: CaptureFieldId[];
   accentColor: string;
+  /** No Skip button, and every listed field is required — not just
+   *  email/phone. Used for the forced first-message capture. */
+  mandatory: boolean;
   onSubmit: (payload: { name?: string; email?: string; phone?: string }) => void;
   onSkip: () => void;
 }) {
-  const { fields, accentColor, onSubmit, onSkip } = props;
+  const { fields, accentColor, mandatory, onSubmit, onSkip } = props;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -524,15 +564,17 @@ function InlineCaptureForm(props: {
     phone: setPhone,
   };
 
-  // Submit is enabled when at least email OR phone is filled (server
-  // requires one of these — name alone isn't enough to follow up).
+  // Mandatory forms (forced first-message capture) require every listed
+  // field, no exceptions. Regular (LLM-triggered) forms keep the original
+  // rule: at least email OR phone filled — name alone isn't enough for the
+  // team to follow up.
   const canSubmit =
     !submitting &&
-    (!fields.includes("email") || email.trim().length > 0
-      ? true
-      : false) &&
-    (!fields.includes("phone") || phone.trim().length > 0 ? true : false) &&
-    (email.trim().length > 0 || phone.trim().length > 0);
+    (mandatory
+      ? fields.every((f) => valueFor[f].trim().length > 0)
+      : (!fields.includes("email") || email.trim().length > 0) &&
+        (!fields.includes("phone") || phone.trim().length > 0) &&
+        (email.trim().length > 0 || phone.trim().length > 0));
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -575,7 +617,7 @@ function InlineCaptureForm(props: {
             onChange={(e) => setterFor[f](e.target.value)}
             placeholder={placeholderFor[f]}
             disabled={submitting}
-            required={f === "email" || f === "phone"}
+            required={mandatory || f === "email" || f === "phone"}
             style={{
               padding: "8px 10px",
               border: "1px solid #e2e8f0",
@@ -607,25 +649,27 @@ function InlineCaptureForm(props: {
         >
           {submitting ? "Sending…" : "Send details"}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setSubmitting(true);
-            onSkip();
-          }}
-          disabled={submitting}
-          style={{
-            background: "transparent",
-            color: "#64748b",
-            border: "1px solid #e2e8f0",
-            borderRadius: 8,
-            padding: "9px 12px",
-            fontSize: 13,
-            cursor: submitting ? "not-allowed" : "pointer",
-          }}
-        >
-          Skip
-        </button>
+        {!mandatory && (
+          <button
+            type="button"
+            onClick={() => {
+              setSubmitting(true);
+              onSkip();
+            }}
+            disabled={submitting}
+            style={{
+              background: "transparent",
+              color: "#64748b",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              padding: "9px 12px",
+              fontSize: 13,
+              cursor: submitting ? "not-allowed" : "pointer",
+            }}
+          >
+            Skip
+          </button>
+        )}
       </div>
     </form>
   );
