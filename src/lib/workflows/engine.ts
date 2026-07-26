@@ -89,6 +89,9 @@ function mergeSubject(
   ctx: NodeContext,
   unsubscribeLink: string
 ): MergeTagSubject {
+  const booking = ctx.triggerContext?.booking as
+    | { time?: string; title?: string; rescheduleLink?: string }
+    | undefined;
   return {
     contact: {
       name: ctx.contact.name,
@@ -98,6 +101,13 @@ function mergeSubject(
     owner: ctx.owner,
     workspace: { name: ctx.subAccount?.name ?? "" },
     bookingLink: ctx.subAccount?.bookingLink ?? "",
+    booking: booking
+      ? {
+          time: booking.time ?? "",
+          title: booking.title ?? "",
+          rescheduleLink: booking.rescheduleLink ?? "",
+        }
+      : null,
     unsubscribeLink,
   };
 }

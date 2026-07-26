@@ -11,6 +11,11 @@
  *   {{workspace.name}}
  *   {{bookingLink}}        — sub-account's configured Calendly / Cal.com /
  *                            TidyCal URL. Empty string when not set.
+ *   {{booking.time}}, {{booking.title}}, {{booking.rescheduleLink}} — the
+ *                            THIS-appointment fields, only populated on a
+ *                            workflow enrolled via the `booking.created`
+ *                            trigger (native Booking Pages feature, not the
+ *                            `bookingLink` above). Empty string otherwise.
  *   {{unsubscribeLink}}    — required in email bodies.
  *
  * Per-type slugged booking tags ({{bookingLink:30min}}) are reserved for a
@@ -36,6 +41,14 @@ export interface MergeTagSubject {
    * rather than leaking the raw `{{bookingLink}}` placeholder.
    */
   bookingLink: string;
+  /**
+   * THIS-appointment fields, only present when the workflow run's trigger
+   * was `booking.created` (native Booking Pages feature — see
+   * lib/booking/lifecycle.ts::fireBookingTrigger). Null on every other
+   * trigger type, so {{booking.*}} tags resolve to empty rather than
+   * leaking the raw placeholder.
+   */
+  booking?: { time: string; title: string; rescheduleLink: string } | null;
   /** Pre-built fully-qualified unsubscribe URL. Empty string for SMS templates. */
   unsubscribeLink: string;
 }
@@ -78,6 +91,12 @@ export function resolveMergeTags(
         return subject.workspace.name ?? "";
       case "bookingLink":
         return subject.bookingLink ?? "";
+      case "booking.time":
+        return subject.booking?.time ?? "";
+      case "booking.title":
+        return subject.booking?.title ?? "";
+      case "booking.rescheduleLink":
+        return subject.booking?.rescheduleLink ?? "";
       case "unsubscribeLink":
         return subject.unsubscribeLink ?? "";
       default:
@@ -102,6 +121,9 @@ export const SUPPORTED_TAGS_EMAIL: ReadonlyArray<{ tag: string; description: str
   { tag: "owner.email", description: "Agency owner's email" },
   { tag: "workspace.name", description: "Sub-account name" },
   { tag: "bookingLink", description: "Booking page URL (set in Automations → Settings)" },
+  { tag: "booking.time", description: "This appointment's date/time (booking.created trigger only)" },
+  { tag: "booking.title", description: "This appointment's title (booking.created trigger only)" },
+  { tag: "booking.rescheduleLink", description: "Link to reschedule/cancel THIS appointment (booking.created trigger only)" },
   { tag: "unsubscribeLink", description: "Per-contact unsubscribe URL (required in email)" },
 ];
 
@@ -111,6 +133,9 @@ export const SUPPORTED_TAGS_SMS: ReadonlyArray<{ tag: string; description: strin
   { tag: "owner.firstName", description: "Agency owner's first name" },
   { tag: "workspace.name", description: "Sub-account name" },
   { tag: "bookingLink", description: "Booking page URL (set in Automations → Settings)" },
+  { tag: "booking.time", description: "This appointment's date/time (booking.created trigger only)" },
+  { tag: "booking.title", description: "This appointment's title (booking.created trigger only)" },
+  { tag: "booking.rescheduleLink", description: "Link to reschedule/cancel THIS appointment (booking.created trigger only)" },
 ];
 
 /**

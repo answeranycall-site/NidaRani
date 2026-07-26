@@ -97,10 +97,18 @@ function defaultContent(
  * Dispatch a workflow trigger. v1 ships the dispatch plumbing but no
  * recipe type subscribes to booking events yet — mirrors the quote
  * triggers' v1 caveat. Safe to call from any path.
+ *
+ * `booking` (optional) carries THIS appointment's display fields —
+ * time, title, and its reschedule/cancel link (the SAME token already
+ * minted for the confirmation email, not re-issued — re-minting would
+ * rotate the stored hash and invalidate that email's link). Surfaced to
+ * send_sms/send_email/notify_owner_sms steps via {{booking.time}} /
+ * {{booking.title}} / {{booking.rescheduleLink}} — see merge-tags.ts.
  */
 export async function fireBookingTrigger(
   event: Pick<CalendarEvent, "agencyId" | "subAccountId" | "contactId">,
   trigger: Extract<AutomationTriggerType, `event_${string}`>,
+  booking?: { time: string; title: string; rescheduleLink: string },
 ): Promise<void> {
   if (!event.contactId) return;
   // Workflow Builder: only new bookings are a v1 trigger.
@@ -110,6 +118,7 @@ export async function fireBookingTrigger(
       subAccountId: event.subAccountId,
       type: "booking.created",
       contactId: event.contactId,
+      context: booking ? { booking } : undefined,
     });
   }
 }

@@ -571,6 +571,19 @@ export async function POST(
       contactId: created.contactId,
     },
     "event_booked",
+    {
+      time: new Intl.DateTimeFormat("en-US", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZone: page.timezone,
+        timeZoneName: "short",
+      }).format(slotStart),
+      title: created.title,
+      rescheduleLink: publicEventUrl,
+    },
   );
   void emitBookingWebhook({
     eventId: created.eventDocRef.id,
