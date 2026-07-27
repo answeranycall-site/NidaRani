@@ -122,6 +122,19 @@ export interface BookingPage {
   logoUrl: string | null;
   /** Hex string. Overrides brand on the public page. */
   accentColor: string | null;
+  /**
+   * Marketing-style H1 shown on the PUBLIC page hero — deliberately
+   * separate from `name`, which also does double-duty as the meeting
+   * title in confirmation emails/calendar invites/reminders (see `name`'s
+   * doc comment) and would look wrong there if set to ad copy. Null/unset
+   * falls back to `name`, preserving pre-existing pages' behavior.
+   */
+  publicHeadline?: string | null;
+  /** Public-page hero subheading. Same rationale as `publicHeadline` —
+   *  independent of `description` (which is markdown shown in the same
+   *  spot for pages that don't set this). Null/unset falls back to
+   *  `description`. */
+  publicSubheading?: string | null;
 
   // ── Meeting link ──────────────────────────────────────────────
   /**
@@ -228,6 +241,8 @@ export type BookingPageFormData = Pick<
   | "hosts"
   | "logoUrl"
   | "accentColor"
+  | "publicHeadline"
+  | "publicSubheading"
   | "meetingUrl"
   | "confirmationMessage"
   | "redirectUrl"

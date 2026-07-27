@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   Building2,
   Compass,
-  Download,
   Image as ImageIcon,
   Loader2,
   MessageSquareText,
@@ -20,15 +18,12 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSubAccount } from "@/context/sub-account-context";
-import { getFirebaseStorage } from "@/lib/firebase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { DEFAULT_REVIEW_SMS_TEMPLATE } from "@/lib/reviews/constants";
-
-const MAX_OLD_LEADS_BYTES = 20 * 1024 * 1024; // 20 MB, matches storage.rules
 
 /**
  * Client Onboarding — rendered on the sub-account Dashboard, consolidating
@@ -39,9 +34,12 @@ const MAX_OLD_LEADS_BYTES = 20 * 1024 * 1024; // 20 MB, matches storage.rules
  *
  * The dedicated Twilio number itself is a separate, read-only display kept
  * in Settings → Admin (not here) — it's edited at Settings → Messaging → SMS.
+ *
+ * Logo + old-leads-file are pasted links, not uploads — this deployment
+ * doesn't have Firebase Storage enabled, so there's nowhere to receive an
+ * uploaded file. Operators host the image/file themselves (Google Drive,
+ * Dropbox, their own site) and paste the resulting link.
  */
-
-const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB, matches storage.rules
 
 /** slug -> display label (+ optional client-facing benefit line), in the
  *  exact order requested. Slugs are the storage key
@@ -154,44 +152,50 @@ function OnboardingChecklist() {
   );
 }
 
-/** Upload/download slot for the operator's exported "old leads" list —
- *  feeds the Dead Lead Reactivation item above. Purely a durable file
- *  reference (upload once, download again later); nothing in the app
- *  reads or imports it automatically. Use the CSV importer at
- *  /sa/[id]/import to actually load contacts from a file. */
+/** Link slot for the operator's exported "old leads" list — feeds the
+ *  Dead Lead Reactivation item above. Points at a file the operator hosts
+ *  themselves (Google Drive, Dropbox, etc.) rather than an upload, since
+ *  this deployment doesn't have Firebase Storage enabled. Purely a
+ *  durable reference; nothing in the app reads or imports it
+ *  automatically — use the CSV importer at /sa/[id]/import to actually
+ *  load contacts from a file. */
 function OldLeadsUpload() {
   const { subAccountId, subAccount, isAdmin } = useSubAccount();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const file = subAccount?.oldLeadsFile ?? null;
+  const existing = subAccount?.oldLeadsFile ?? null;
+  const [url, setUrl] = useState("");
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setUrl(existing?.url ?? "");
+    setLabel(existing?.fileName ?? "");
+  }, [existing?.url, existing?.fileName]);
 
   if (!isAdmin) return null;
 
-  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const picked = e.target.files?.[0];
-    e.target.value = "";
-    if (!picked) return;
-    if (picked.size > MAX_OLD_LEADS_BYTES) {
-      toast.error("File is too large — keep it under 20 MB.");
-      return;
-    }
-    setUploading(true);
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
     try {
-      const path = `old-leads/${subAccountId}/${Date.now()}-${picked.name}`;
-      const storageRef = ref(getFirebaseStorage(), path);
-      await uploadBytes(storageRef, picked, { contentType: picked.type || undefined });
-      const url = await getDownloadURL(storageRef);
+      const trimmedUrl = url.trim();
       const res = await fetch(`/api/sub-accounts/${subAccountId}/old-leads-file`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, fileName: picked.name }),
+        body: JSON.stringify(
+          trimmedUrl
+            ? { url: trimmedUrl, fileName: label.trim() || "Old leads list" }
+            : { url: null },
+        ),
       });
-      if (!res.ok) throw new Error("save failed");
-      toast.success("Old leads file uploaded.");
-    } catch {
-      toast.error("Couldn't upload that file.");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? "Couldn't save.");
+      }
+      toast.success(trimmedUrl ? "Old leads link saved." : "Old leads link cleared.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't save.");
     } finally {
-      setUploading(false);
+      setSaving(false);
     }
   }
 
@@ -204,64 +208,57 @@ function OldLeadsUpload() {
         <div>
           <h2 className="text-sm font-semibold">Old leads file</h2>
           <p className="text-xs text-muted-foreground">
-            For Dead Lead Reactivation above — park your exported list of old
-            leads here so it stays put and you can download it again anytime.
+            For Dead Lead Reactivation above. Host your exported list
+            somewhere (Google Drive shared as &ldquo;Anyone with the
+            link&rdquo;, Dropbox, etc.) and paste the link here so it stays put and you
+            can get back to it anytime.
           </p>
         </div>
       </div>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-
-      {file ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">{file.fileName}</p>
-            <p className="text-xs text-muted-foreground">Uploaded — ready to download</p>
+      <form onSubmit={handleSave} className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
+          <div className="space-y-1.5">
+            <Label htmlFor="ob-old-leads-url">Link</Label>
+            <Input
+              id="ob-old-leads-url"
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://drive.google.com/…"
+            />
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              render={<a href={file.url} download={file.fileName} target="_blank" rel="noreferrer" />}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Download
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={uploading}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : null}
-              Replace
-            </Button>
+          <div className="space-y-1.5">
+            <Label htmlFor="ob-old-leads-label">Label</Label>
+            <Input
+              id="ob-old-leads-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Old leads list"
+            />
           </div>
         </div>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          disabled={uploading}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          {uploading ? (
-            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+        <div className="flex items-center justify-between">
+          {existing?.url ? (
+            <a
+              href={existing.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Open current link
+            </a>
           ) : (
-            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            <span />
           )}
-          Upload old leads file
-        </Button>
-      )}
+          <Button type="submit" size="sm" disabled={saving}>
+            {saving ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : null}
+            Save
+          </Button>
+        </div>
+      </form>
     </section>
   );
 }
@@ -342,7 +339,6 @@ function CustomizationPointers() {
 
 export function ClientOnboardingForm() {
   const { subAccountId, subAccount, isAdmin } = useSubAccount();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [businessName, setBusinessName] = useState("");
   const [ownerName, setOwnerName] = useState("");
@@ -353,7 +349,6 @@ export function ClientOnboardingForm() {
   const [reviewUrl, setReviewUrl] = useState("");
 
   const [hydrated, setHydrated] = useState(false);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Hydrate once from the live sub-account doc + a one-time profile fetch
@@ -377,34 +372,6 @@ export function ClientOnboardingForm() {
   }, [hydrated, subAccount, subAccountId]);
 
   if (!isAdmin) return null;
-
-  async function handleLogoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file later
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Choose an image file (JPG, PNG, WebP, or GIF).");
-      return;
-    }
-    if (file.size > MAX_LOGO_BYTES) {
-      toast.error("Image is too large — keep it under 5 MB.");
-      return;
-    }
-    setUploadingLogo(true);
-    try {
-      const ext = file.name.includes(".") ? file.name.split(".").pop() : "img";
-      const path = `branding/${subAccountId}/logo-${Date.now()}.${ext}`;
-      const storageRef = ref(getFirebaseStorage(), path);
-      await uploadBytes(storageRef, file, { contentType: file.type });
-      const url = await getDownloadURL(storageRef);
-      setLogoUrl(url);
-      toast.success("Logo uploaded — click Save to apply it.");
-    } catch {
-      toast.error("Couldn't upload that image.");
-    } finally {
-      setUploadingLogo(false);
-    }
-  }
 
   async function handleSave(e: FormEvent) {
     e.preventDefault();
@@ -584,7 +551,10 @@ export function ClientOnboardingForm() {
             <div>
               <h2 className="text-sm font-semibold">Logo</h2>
               <p className="text-xs text-muted-foreground">
-                Renders on quotes/invoices and the public quote page.
+                Renders on the Dashboard, quotes/invoices, and the public
+                quote page. Paste a public image link — host it on Google
+                Drive (shared as &ldquo;Anyone with the link&rdquo;), Dropbox, or your
+                own site, then paste the direct link here.
               </p>
             </div>
           </div>
@@ -600,26 +570,13 @@ export function ClientOnboardingForm() {
                 }}
               />
             )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleLogoFileChange}
+            <Input
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://…"
+              type="url"
+              className="flex-1"
             />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingLogo}
-            >
-              {uploadingLogo ? (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ImageIcon className="mr-1.5 h-3.5 w-3.5" />
-              )}
-              {logoUrl ? "Replace logo" : "Upload logo"}
-            </Button>
           </div>
         </section>
 

@@ -120,6 +120,8 @@ export function BookingPageEditor({ mode, initial }: Props) {
         hosts: initial.hosts ?? [],
         logoUrl: initial.logoUrl,
         accentColor: initial.accentColor,
+        publicHeadline: initial.publicHeadline ?? null,
+        publicSubheading: initial.publicSubheading ?? null,
         meetingUrl: initial.meetingUrl ?? null,
         confirmationMessage: initial.confirmationMessage,
         redirectUrl: initial.redirectUrl ?? null,
@@ -853,6 +855,41 @@ export function BookingPageEditor({ mode, initial }: Props) {
             }
             placeholder="#5B5BD6"
             className="w-32"
+          />
+        </Field>
+        <Field
+          label="Public page headline"
+          htmlFor="publicHeadline"
+          hint="Marketing-style H1 for the public booking page only — separate from Name, which stays your internal meeting title (used in confirmation emails/calendar invites). Leave blank to just show Name."
+        >
+          <Input
+            id="publicHeadline"
+            value={form.publicHeadline ?? ""}
+            onChange={(e) =>
+              set(
+                "publicHeadline",
+                e.target.value.length > 0 ? e.target.value : null,
+              )
+            }
+            placeholder="Stop Losing Customers to Missed Calls."
+          />
+        </Field>
+        <Field
+          label="Public page subheading"
+          htmlFor="publicSubheading"
+          hint="Shown under the headline on the public page — separate from Description, which stays internal-facing. Leave blank to just show Description."
+        >
+          <Textarea
+            id="publicSubheading"
+            value={form.publicSubheading ?? ""}
+            onChange={(e) =>
+              set(
+                "publicSubheading",
+                e.target.value.length > 0 ? e.target.value : null,
+              )
+            }
+            rows={2}
+            placeholder="See how missed-call text-back, review automation, and follow-up can be running for your business this week."
           />
         </Field>
       </Section>

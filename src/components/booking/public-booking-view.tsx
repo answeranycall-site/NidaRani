@@ -184,33 +184,42 @@ export function PublicBookingView({ subAccountId, page, branding }: Props) {
     ? { backgroundColor: accent, borderColor: accent }
     : {};
 
+  const headline = page.publicHeadline || page.name;
+  const subheading = page.publicSubheading || page.description;
+
   return (
     <main className="min-h-screen bg-muted/30 px-4 py-10 text-foreground sm:py-16">
+      {/* ── Site header — brand mark, independent of the meeting hero below ── */}
+      <div className="mx-auto mb-6 flex max-w-3xl items-center justify-center gap-2.5 sm:justify-start">
+        {branding.logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={branding.logoUrl}
+            alt={branding.name}
+            className="h-8 w-auto rounded-md object-contain"
+          />
+        ) : (
+          <span
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-white"
+            style={{ backgroundColor: accent ?? "#0F766E" }}
+          >
+            <CalendarClock className="h-4 w-4" />
+          </span>
+        )}
+        <span className="text-sm font-semibold tracking-tight">
+          {branding.name}
+        </span>
+      </div>
+
       <article className="mx-auto max-w-3xl space-y-8 rounded-3xl border bg-card p-6 shadow-sm sm:p-10">
         {/* ── Hero ──────────────────────────────────────────── */}
         <header className="space-y-3 text-center">
-          {branding.logoUrl ? (
-            // Decorative; alt is the business name.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={branding.logoUrl}
-              alt={branding.name}
-              className="mx-auto h-12 w-auto rounded-md object-contain"
-            />
-          ) : (
-            <span
-              className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-white"
-              style={{ backgroundColor: accent ?? "#0F766E" }}
-            >
-              <CalendarClock className="h-6 w-6" />
-            </span>
-          )}
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            {page.name}
+            {headline}
           </h1>
-          {page.description && (
+          {subheading && (
             <p className="mx-auto max-w-prose whitespace-pre-wrap text-sm text-muted-foreground">
-              {page.description}
+              {subheading}
             </p>
           )}
           <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">

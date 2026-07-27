@@ -484,6 +484,30 @@ export function validateAccentColor(input: unknown): Validated<string | null> {
   return { ok: true, value: input.trim().toUpperCase() };
 }
 
+export function validatePublicHeadline(input: unknown): Validated<string | null> {
+  if (input == null || input === "") return { ok: true, value: null };
+  if (typeof input !== "string") {
+    return { ok: false, error: "Public headline must be text." };
+  }
+  const value = input.trim();
+  if (value.length > 150) {
+    return { ok: false, error: "Public headline is too long (max 150 chars)." };
+  }
+  return { ok: true, value };
+}
+
+export function validatePublicSubheading(input: unknown): Validated<string | null> {
+  if (input == null || input === "") return { ok: true, value: null };
+  if (typeof input !== "string") {
+    return { ok: false, error: "Public subheading must be text." };
+  }
+  const value = input.trim();
+  if (value.length > 300) {
+    return { ok: false, error: "Public subheading is too long (max 300 chars)." };
+  }
+  return { ok: true, value };
+}
+
 export function validateLogoUrl(input: unknown): Validated<string | null> {
   if (input == null || input === "") return { ok: true, value: null };
   if (typeof input !== "string") {
@@ -644,6 +668,10 @@ export function validateBookingPageFormData(
   if (!logoUrl.ok) return logoUrl;
   const accentColor = validateAccentColor(b.accentColor);
   if (!accentColor.ok) return accentColor;
+  const publicHeadline = validatePublicHeadline(b.publicHeadline);
+  if (!publicHeadline.ok) return publicHeadline;
+  const publicSubheading = validatePublicSubheading(b.publicSubheading);
+  if (!publicSubheading.ok) return publicSubheading;
 
   const meetingUrl = validateMeetingUrl(b.meetingUrl);
   if (!meetingUrl.ok) return meetingUrl;
@@ -687,6 +715,8 @@ export function validateBookingPageFormData(
       hosts: hosts.value,
       logoUrl: logoUrl.value,
       accentColor: accentColor.value,
+      publicHeadline: publicHeadline.value,
+      publicSubheading: publicSubheading.value,
       meetingUrl: meetingUrl.value,
       confirmationMessage: confirmationMessage.value,
       redirectUrl: redirectUrl.value,
