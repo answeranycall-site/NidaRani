@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   Briefcase,
-  Building2,
   Users,
   TrendingUp,
   Trophy,
@@ -14,8 +13,6 @@ import {
   GitBranch,
   Clock,
   FileText,
-  Mail,
-  Phone,
   Upload,
   Download,
   Zap,
@@ -37,7 +34,7 @@ import type { AutomationDoc } from "@/types";
 import type { LeadForm } from "@/types/forms";
 import { Button } from "@/components/ui/button";
 import { NewDealDialog } from "@/components/pipeline/new-deal-dialog";
-import { LeadsMap } from "@/components/dashboard/leads-map";
+import { DashboardMasthead } from "@/components/dashboard/dashboard-masthead";
 import { ClientOnboardingForm } from "@/components/onboarding/client-onboarding-form";
 
 export default function DashboardPage() {
@@ -89,10 +86,6 @@ export default function DashboardPage() {
       unsubA();
     };
   }, [user, agencyId, subAccountId, filterReady, territoryFilter]);
-
-  const displayName =
-    subAccount?.name ??
-    (user?.displayName ?? user?.email ?? "").split("@")[0];
 
   const openDeals = useMemo(
     () => deals.filter((d) => d.stageId !== "won" && d.stageId !== "lost"),
@@ -149,49 +142,9 @@ export default function DashboardPage() {
     day: "numeric",
   });
 
-  const accountContact = subAccount?.accountContact ?? null;
-  const hasContact =
-    !!accountContact &&
-    (!!accountContact.name || !!accountContact.email || !!accountContact.phone);
-  const dedicatedSmsNumber =
-    subAccount?.twilioConfig?.enabled && subAccount.twilioConfig.fromNumber
-      ? subAccount.twilioConfig.fromNumber
-      : null;
-
   return (
     <div className="space-y-6">
-      {hasContact && accountContact && (
-        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
-            <Building2 className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-            Account contact
-          </span>
-          {accountContact.name && <span>{accountContact.name}</span>}
-          {accountContact.email && (
-            <span className="inline-flex items-center gap-1">
-              <Mail className="h-3 w-3" />
-              {accountContact.email}
-            </span>
-          )}
-          {accountContact.phone && (
-            <span className="inline-flex items-center gap-1">
-              <Phone className="h-3 w-3" />
-              {accountContact.phone}
-            </span>
-          )}
-        </div>
-      )}
-
-      {dedicatedSmsNumber && (
-        <Link
-          href={saPath("/dashboard/settings")}
-          className="flex w-fit items-center gap-1.5 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
-        >
-          <Phone className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
-          <span className="font-medium text-foreground">Your SMS number</span>
-          <span>{dedicatedSmsNumber}</span>
-        </Link>
-      )}
+      <DashboardMasthead />
 
       {isAdmin && (
         <section className="rounded-2xl border bg-card p-4">
@@ -216,14 +169,6 @@ export default function DashboardPage() {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {today}
           </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tighter sm:text-4xl">
-            Welcome back
-            {displayName ? (
-              <>
-                , <span className="font-serif font-normal italic">{displayName}</span>
-              </>
-            ) : null}
-          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Here&apos;s what&apos;s moving in your pipeline.
           </p>
@@ -313,8 +258,6 @@ export default function DashboardPage() {
               loading={loading}
             />
           </div>
-
-      <LeadsMap contacts={contacts} deals={deals} />
 
       {isEmpty ? (
         <GettingStarted />

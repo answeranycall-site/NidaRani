@@ -1,15 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import {
   Building2,
+  Compass,
+  Download,
   Image as ImageIcon,
   Loader2,
+  MessageSquareText,
   Phone,
+  PhoneMissed,
   Save,
   Star,
+  Upload,
   UserPlus,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -21,6 +27,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { DEFAULT_REVIEW_SMS_TEMPLATE } from "@/lib/reviews/constants";
+
+const MAX_OLD_LEADS_BYTES = 20 * 1024 * 1024; // 20 MB, matches storage.rules
 
 /**
  * Client Onboarding — rendered on the sub-account Dashboard, consolidating
@@ -35,16 +43,41 @@ import { DEFAULT_REVIEW_SMS_TEMPLATE } from "@/lib/reviews/constants";
 
 const MAX_LOGO_BYTES = 5 * 1024 * 1024; // 5 MB, matches storage.rules
 
-/** slug -> display label, in the exact order requested. Slugs are the
- *  storage key (SubAccountDoc.onboardingChecklist) so relabeling later
- *  doesn't lose anyone's progress. */
-const CHECKLIST_ITEMS: { slug: string; label: string }[] = [
-  { slug: "website", label: "Website" },
-  { slug: "twilioNumber", label: "New Twilio Number" },
-  { slug: "missedCallAiChat", label: "Missed Call Text-Back & AI Chat" },
-  { slug: "deadLeadReactivation", label: "Dead Lead Reactivation" },
-  { slug: "googleReviewAutomation", label: "Google Review Automation" },
-  { slug: "websiteChatToSms", label: "Website Chat-to-SMS" },
+/** slug -> display label (+ optional client-facing benefit line), in the
+ *  exact order requested. Slugs are the storage key
+ *  (SubAccountDoc.onboardingChecklist) so relabeling later doesn't lose
+ *  anyone's progress. */
+const CHECKLIST_ITEMS: { slug: string; label: string; description?: string }[] = [
+  {
+    slug: "website",
+    label: "Website",
+    description: "Builds trust the moment someone finds you",
+  },
+  {
+    slug: "twilioNumber",
+    label: "New Twilio Number",
+    description: "Catches every call you'd otherwise miss",
+  },
+  {
+    slug: "missedCallAiChat",
+    label: "Missed Call Text-Back & AI Chat",
+    description: "No lead ever goes unanswered, day or night",
+  },
+  {
+    slug: "deadLeadReactivation",
+    label: "Dead Lead Reactivation",
+    description: "Turns old \"no's\" into new bookings",
+  },
+  {
+    slug: "googleReviewAutomation",
+    label: "Google Review Automation",
+    description: "More 5-star reviews, more trust, higher rank",
+  },
+  {
+    slug: "websiteChatToSms",
+    label: "Website Chat-to-SMS",
+    description: "Website visitors become real conversations",
+  },
   { slug: "localSeo", label: "Local SEO Visibility (Optional)" },
 ];
 
@@ -93,25 +126,215 @@ function OnboardingChecklist() {
           " Only the agency owner can check items off; you can see progress here."}
       </p>
       <ul className="space-y-2.5">
-        {CHECKLIST_ITEMS.map(({ slug, label }) => {
+        {CHECKLIST_ITEMS.map(({ slug, label, description }) => {
           const done = checklist[slug] === true;
           return (
-            <li key={slug} className="flex items-center gap-2.5 text-sm">
+            <li key={slug} className="flex items-start gap-2.5 text-sm">
               <Checkbox
                 checked={done}
                 disabled={!isAgencyOwner}
                 onCheckedChange={(v) => toggle(slug, !!v)}
+                className="mt-0.5"
               />
               <span
                 className={cn(
                   done && "text-muted-foreground line-through decoration-2",
                 )}
               >
-                {label}
+                <strong className="font-semibold">{label}</strong>
+                {description && (
+                  <span className="text-muted-foreground"> → {description}</span>
+                )}
               </span>
             </li>
           );
         })}
+      </ul>
+    </section>
+  );
+}
+
+/** Upload/download slot for the operator's exported "old leads" list —
+ *  feeds the Dead Lead Reactivation item above. Purely a durable file
+ *  reference (upload once, download again later); nothing in the app
+ *  reads or imports it automatically. Use the CSV importer at
+ *  /sa/[id]/import to actually load contacts from a file. */
+function OldLeadsUpload() {
+  const { subAccountId, subAccount, isAdmin } = useSubAccount();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const file = subAccount?.oldLeadsFile ?? null;
+
+  if (!isAdmin) return null;
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    e.target.value = "";
+    if (!picked) return;
+    if (picked.size > MAX_OLD_LEADS_BYTES) {
+      toast.error("File is too large — keep it under 20 MB.");
+      return;
+    }
+    setUploading(true);
+    try {
+      const path = `old-leads/${subAccountId}/${Date.now()}-${picked.name}`;
+      const storageRef = ref(getFirebaseStorage(), path);
+      await uploadBytes(storageRef, picked, { contentType: picked.type || undefined });
+      const url = await getDownloadURL(storageRef);
+      const res = await fetch(`/api/sub-accounts/${subAccountId}/old-leads-file`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, fileName: picked.name }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      toast.success("Old leads file uploaded.");
+    } catch {
+      toast.error("Couldn't upload that file.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-600 dark:text-orange-400">
+          <Upload className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold">Old leads file</h2>
+          <p className="text-xs text-muted-foreground">
+            For Dead Lead Reactivation above — park your exported list of old
+            leads here so it stays put and you can download it again anytime.
+          </p>
+        </div>
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
+      {file ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-background p-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{file.fileName}</p>
+            <p className="text-xs text-muted-foreground">Uploaded — ready to download</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              render={<a href={file.url} download={file.fileName} target="_blank" rel="noreferrer" />}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Download
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              ) : null}
+              Replace
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="outline"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Upload old leads file
+        </Button>
+      )}
+    </section>
+  );
+}
+
+/** Points the operator at the settings pages for the messages/instructions
+ *  that need per-client customization — this section has no fields of its
+ *  own, just links to where the real config lives. */
+function CustomizationPointers() {
+  const { saPath } = useSubAccount();
+  const items = [
+    {
+      icon: <Star className="h-4 w-4" />,
+      tone: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      title: "Google review messages",
+      desc: "The ask, confirm, and thank-you texts sent when requesting a review.",
+      href: saPath("/dashboard/settings"),
+      linkLabel: "Settings → Messaging → Google reviews",
+    },
+    {
+      icon: <PhoneMissed className="h-4 w-4" />,
+      tone: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+      title: "Missed call text-back",
+      desc: "What gets texted automatically when a call is missed.",
+      href: saPath("/dashboard/settings"),
+      linkLabel: "Settings → Messaging → SMS",
+    },
+    {
+      icon: <MessageSquareText className="h-4 w-4" />,
+      tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+      title: "AI instructions",
+      desc: "The persona + business hours + escalation rules the AI follows on every channel.",
+      href: saPath("/ai-agents"),
+      linkLabel: "AI Agents → Overview",
+    },
+  ];
+
+  return (
+    <section className="rounded-2xl border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400">
+          <Compass className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold">Where to customize</h2>
+          <p className="text-xs text-muted-foreground">
+            The messages below aren&apos;t edited here — here&apos;s where to
+            go for each.
+          </p>
+        </div>
+      </div>
+      <ul className="space-y-3">
+        {items.map((item) => (
+          <li key={item.title} className="flex items-start gap-3">
+            <span
+              className={cn(
+                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                item.tone,
+              )}
+            >
+              {item.icon}
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{item.title}</p>
+              <p className="text-xs text-muted-foreground">{item.desc}</p>
+              <Link
+                href={item.href}
+                className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+              >
+                {item.linkLabel}
+              </Link>
+            </div>
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -264,6 +487,8 @@ export function ClientOnboardingForm() {
   return (
     <div className="space-y-6">
       <OnboardingChecklist />
+      <OldLeadsUpload />
+      <CustomizationPointers />
 
       <form onSubmit={handleSave} className="space-y-6">
         <section className="rounded-2xl border bg-card p-5">

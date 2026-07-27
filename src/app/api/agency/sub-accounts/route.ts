@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminAuth, getAdminDb } from "@/lib/firebase/admin";
 import { seedDefaultTemplates } from "@/lib/automations/seed-templates";
+import { cloneTemplateWorkflowsForNewSubAccount } from "@/lib/workflows/templates";
 import { GLOBAL_TERRITORY_ID, type MemberStatus, type Role } from "@/types";
 
 interface CreateBody {
@@ -222,6 +223,12 @@ export async function POST(request: Request) {
     });
 
     return current;
+  });
+
+  await cloneTemplateWorkflowsForNewSubAccount({
+    agencyId,
+    subAccountId,
+    createdByUid: uid,
   });
 
   return NextResponse.json({

@@ -61,6 +61,17 @@ export interface AgencyDoc {
     reminderTimeout?: string;
     reminderSent?: string;
   };
+  /**
+   * Sub-account id whose ACTIVE workflows get cloned into every newly
+   * created sub-account in this agency (see lib/workflows/templates.ts::
+   * cloneTemplateWorkflowsForNewSubAccount, called from
+   * POST /api/agency/sub-accounts). Live reference, not a one-time
+   * snapshot — editing the template sub-account's workflows changes what
+   * future new sub-accounts get, without a code change. Null/unset =
+   * no template cloning (new sub-accounts start with zero workflows, the
+   * original behavior).
+   */
+  templateWorkflowsSubAccountId?: string | null;
 }
 
 export interface SubAccountDoc {
@@ -297,6 +308,20 @@ export interface SubAccountDoc {
    * {{paymentLink}} resolves to empty string.
    */
   paymentLink: string | null;
+  /**
+   * Old-leads file uploaded on the Dashboard (Dead Lead Reactivation) —
+   * a durable reference doc, not a workflow input. The operator uploads
+   * their exported "old leads" list here so it's parked somewhere they
+   * can download it again later; nothing in the app currently reads or
+   * imports this file automatically (see the CSV importer at
+   * /sa/[id]/import for actually loading contacts). Null/unset until
+   * uploaded.
+   */
+  oldLeadsFile?: {
+    url: string;
+    fileName: string;
+    uploadedAt: Timestamp | FieldValue;
+  } | null;
   /**
    * Single source of truth for the Reply-To header on every email LeadStack
    * sends on behalf of this sub-account — automation lead-step emails AND
