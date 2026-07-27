@@ -654,9 +654,18 @@ export function ClientOnboardingForm() {
               <h2 className="text-sm font-semibold">Logo</h2>
               <p className="text-xs text-muted-foreground">
                 Renders on the Dashboard, quotes/invoices, and the public
-                quote page. Paste a public image link — host it on Google
-                Drive (shared as &ldquo;Anyone with the link&rdquo;), Dropbox, or your
-                own site, then paste the direct link here.
+                quote page. Paste a public image link — host it on{" "}
+                <a
+                  href="https://postimages.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  postimages.org
+                </a>
+                , Google Drive (shared as &ldquo;Anyone with the
+                link&rdquo;), Dropbox, or your own site, then paste the
+                direct link here.
               </p>
             </div>
           </div>

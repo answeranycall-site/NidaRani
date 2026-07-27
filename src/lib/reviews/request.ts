@@ -66,8 +66,13 @@ export interface SendReviewResult {
   reason?: string;
 }
 
+/** First word of a name, for {{firstName}} in customer-facing templates.
+ *  Falls back to "there" when the contact has no name on file (e.g. an
+ *  SMS lead who never gave one) — "Hi there," reads naturally where "Hi ,"
+ *  would look broken. */
 export function firstWord(s: string): string {
   const t = (s ?? "").trim();
+  if (!t) return "there";
   const i = t.indexOf(" ");
   return i === -1 ? t : t.slice(0, i);
 }

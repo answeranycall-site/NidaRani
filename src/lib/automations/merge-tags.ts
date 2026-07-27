@@ -61,8 +61,11 @@ export interface MergeTagSubject {
 
 const TAG_RE = /\{\{\s*([a-zA-Z0-9_.:-]+)\s*\}\}/g;
 
+/** First word of a name, for {{contact.firstName}}. Falls back to "there"
+ *  when the contact has no name on file (e.g. an SMS lead who never gave
+ *  one) — "Hi there," reads naturally where "Hi ," would look broken. */
 function firstWord(s: string | null | undefined): string {
-  if (!s) return "";
+  if (!s?.trim()) return "there";
   const trimmed = s.trim();
   const space = trimmed.indexOf(" ");
   return space === -1 ? trimmed : trimmed.slice(0, space);
