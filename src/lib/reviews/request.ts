@@ -14,6 +14,7 @@ import {
 import { resolveTemplateVariables } from "@/lib/comms/whatsapp/resolve-template-variables";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { buildReviewClickUrl } from "@/lib/reviews/click-token";
+import { isSystemLeadLabel } from "@/lib/leads/lead-label";
 import {
   DEFAULT_RATING_ASK_TEMPLATE,
   DEFAULT_REVIEW_COOLDOWN_DAYS,
@@ -67,12 +68,14 @@ export interface SendReviewResult {
 }
 
 /** First word of a name, for {{firstName}} in customer-facing templates.
- *  Falls back to "there" when the contact has no name on file (e.g. an
- *  SMS lead who never gave one) — "Hi there," reads naturally where "Hi ,"
- *  would look broken. */
+ *  Falls back to "there" when the contact has no real name on file —
+ *  either genuinely blank, or one of the auto-generated "Lead text #N"
+ *  placeholders stamped on an anonymous lead (lib/leads/lead-label.ts) —
+ *  "Hi there," reads naturally where "Hi ," or "Hi Lead," would look
+ *  broken. */
 export function firstWord(s: string): string {
   const t = (s ?? "").trim();
-  if (!t) return "there";
+  if (!t || isSystemLeadLabel(t)) return "there";
   const i = t.indexOf(" ");
   return i === -1 ? t : t.slice(0, i);
 }

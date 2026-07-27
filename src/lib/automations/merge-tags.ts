@@ -61,12 +61,19 @@ export interface MergeTagSubject {
 
 const TAG_RE = /\{\{\s*([a-zA-Z0-9_.:-]+)\s*\}\}/g;
 
+// Mirrors lib/leads/lead-label.ts::isSystemLeadLabel — duplicated (rather
+// than imported) because that module is server-only and this file is
+// imported by a client component (components/automations/template-editor.tsx).
+const SYSTEM_LEAD_LABEL_RE = /^Lead (call|chat|text) #\d+$/;
+
 /** First word of a name, for {{contact.firstName}}. Falls back to "there"
- *  when the contact has no name on file (e.g. an SMS lead who never gave
- *  one) — "Hi there," reads naturally where "Hi ," would look broken. */
+ *  when the contact has no real name on file — either genuinely blank, or
+ *  one of the auto-generated "Lead text #N" placeholders stamped on an
+ *  anonymous lead — so a template reads "Hi there," instead of "Hi ," or
+ *  "Hi Lead,". */
 function firstWord(s: string | null | undefined): string {
-  if (!s?.trim()) return "there";
-  const trimmed = s.trim();
+  const trimmed = (s ?? "").trim();
+  if (!trimmed || SYSTEM_LEAD_LABEL_RE.test(trimmed)) return "there";
   const space = trimmed.indexOf(" ");
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }

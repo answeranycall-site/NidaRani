@@ -22,6 +22,15 @@ const KIND_TO_LABEL: Record<LeadLabelKind, string> = {
   sms: "Lead text",
 };
 
+/** True when `name` is one of THIS module's own auto-generated placeholder
+ *  labels ("Lead call #3", "Lead chat #5", "Lead text #12") rather than a
+ *  real name the lead gave. Not blank, so a plain empty-string check
+ *  misses it — used by {{firstName}} resolvers so customer-facing
+ *  templates say "Hi there," instead of "Hi Lead," for an unnamed lead. */
+export function isSystemLeadLabel(name: string | null | undefined): boolean {
+  return /^Lead (call|chat|text) #\d+$/.test((name ?? "").trim());
+}
+
 export async function issueLeadLabel(
   subAccountId: string,
   kind: LeadLabelKind,
