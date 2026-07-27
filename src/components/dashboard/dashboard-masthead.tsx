@@ -2,15 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  Building2,
-  Globe,
-  ImageIcon,
-  Mail,
-  Phone,
-  Star,
-  UserPlus,
-} from "lucide-react";
+import { Building2, Globe, ImageIcon, Mail, Phone } from "lucide-react";
 import { useSubAccount } from "@/context/sub-account-context";
 
 /**
@@ -46,7 +38,6 @@ export function DashboardMasthead() {
   const contact = subAccount?.accountContact ?? null;
   const hasContact =
     !!contact && (!!contact.name || !!contact.email || !!contact.phone);
-  const reviewUrl = subAccount?.googleReviewConfig?.reviewUrl ?? null;
   const logoUrl = subAccount?.logoUrl ?? null;
 
   return (
@@ -72,7 +63,7 @@ export function DashboardMasthead() {
           <h1 className="truncate text-2xl font-semibold tracking-tight sm:text-3xl">
             {businessName}
           </h1>
-          <p className="mt-0.5 text-sm text-muted-foreground">
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-muted-foreground">
             {dedicatedNumber ? (
               <span className="inline-flex items-center gap-1.5">
                 <Phone className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
@@ -87,12 +78,23 @@ export function DashboardMasthead() {
                 No dedicated number yet — set one up
               </Link>
             ) : null}
+            {websiteUrl && (
+              <a
+                href={websiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                {websiteUrl.replace(/^https?:\/\//, "")}
+              </a>
+            )}
           </p>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3 text-xs text-muted-foreground">
-        {hasContact && contact && (
+      {hasContact && contact && (
+        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t pt-3 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Building2 className="h-3.5 w-3.5" />
             {contact.name && <span className="text-foreground">{contact.name}</span>}
@@ -109,42 +111,8 @@ export function DashboardMasthead() {
               </span>
             )}
           </span>
-        )}
-        {websiteUrl && (
-          <a
-            href={websiteUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline"
-          >
-            <Globe className="h-3.5 w-3.5" />
-            {websiteUrl.replace(/^https?:\/\//, "")}
-          </a>
-        )}
-        {reviewUrl && (
-          <a
-            href={reviewUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline"
-          >
-            <Star className="h-3.5 w-3.5" />
-            Google reviews
-          </a>
-        )}
-        {isAdmin && (
-          <Link
-            href={saPath("/dashboard/settings")}
-            className="inline-flex items-center gap-1.5 hover:text-foreground hover:underline"
-          >
-            <UserPlus className="h-3.5 w-3.5" />
-            Add another person
-          </Link>
-        )}
-        {!hasContact && !websiteUrl && !reviewUrl && (
-          <span>Fill in your business details below to complete this card.</span>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

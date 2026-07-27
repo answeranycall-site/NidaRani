@@ -263,6 +263,106 @@ function OldLeadsUpload() {
   );
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Inline "invite a teammate" form — actually sends the invite here
+ *  instead of just pointing at Settings → Admin → Members (still the
+ *  place for the full roster / pending-invites list / removal, but
+ *  adding someone shouldn't require leaving this page). Reuses the same
+ *  invite endpoint the Members settings section uses. */
+function AddPersonInline() {
+  const { subAccountId, isAdmin } = useSubAccount();
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "collaborator">("collaborator");
+  const [inviting, setInviting] = useState(false);
+
+  if (!isAdmin) return null;
+
+  async function handleInvite() {
+    const trimmed = email.trim().toLowerCase();
+    if (!EMAIL_RE.test(trimmed)) {
+      toast.error("Enter a valid email.");
+      return;
+    }
+    setInviting(true);
+    try {
+      const res = await fetch(`/api/sub-accounts/${subAccountId}/invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed, role }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        mailed?: boolean;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Couldn't invite.");
+      toast.success(
+        data.mailed
+          ? `Invite emailed to ${trimmed}`
+          : `Invited ${trimmed} — see Settings → Admin → Members for the link`,
+      );
+      setEmail("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't invite.");
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  return (
+    <section className="rounded-2xl border bg-card p-5">
+      <div className="mb-4 flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+          <UserPlus className="h-4 w-4" />
+        </span>
+        <div>
+          <h2 className="text-sm font-semibold">Add another person</h2>
+          <p className="text-xs text-muted-foreground">
+            Give an employee of this client their own login. Full roster +
+            pending invites live at Settings → Admin → Members.
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-[220px] flex-1 space-y-1.5">
+          <Label htmlFor="ob-invite-email" className="text-xs">
+            Email
+          </Label>
+          <Input
+            id="ob-invite-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="teammate@example.com"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ob-invite-role" className="text-xs">
+            Role
+          </Label>
+          <select
+            id="ob-invite-role"
+            value={role}
+            onChange={(e) => setRole(e.target.value as "admin" | "collaborator")}
+            className="h-9 w-48 rounded-md border border-input bg-background py-0 pl-3 pr-8 text-sm"
+          >
+            <option value="collaborator">Collaborator</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <Button type="button" onClick={handleInvite} disabled={inviting}>
+          {inviting ? (
+            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+          )}
+          Invite
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 /** Points the operator at the settings pages for the messages/instructions
  *  that need per-client customization — this section has no fields of its
  *  own, just links to where the real config lives. */
@@ -543,6 +643,8 @@ export function ClientOnboardingForm() {
           </div>
         </section>
 
+        <AddPersonInline />
+
         <section className="rounded-2xl border bg-card p-5">
           <div className="mb-4 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400">
@@ -606,27 +708,6 @@ export function ClientOnboardingForm() {
               placeholder="https://g.page/r/…/review"
             />
           </div>
-        </section>
-
-        <section className="rounded-2xl border bg-card p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
-              <UserPlus className="h-4 w-4" />
-            </span>
-            <div>
-              <h2 className="text-sm font-semibold">Add another person</h2>
-              <p className="text-xs text-muted-foreground">
-                Give an employee of this client their own login.
-              </p>
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Go to <strong className="text-foreground">Settings → Admin</strong>{" "}
-            → Members section → invite by email → choose{" "}
-            <strong className="text-foreground">Admin</strong> (full access)
-            or <strong className="text-foreground">Collaborator</strong>{" "}
-            (day-to-day access, no member management).
-          </p>
         </section>
 
         <Button type="submit" disabled={saving}>
