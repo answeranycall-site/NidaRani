@@ -64,16 +64,16 @@ const TAG_RE = /\{\{\s*([a-zA-Z0-9_.:-]+)\s*\}\}/g;
 // Mirrors lib/leads/lead-label.ts::isSystemLeadLabel — duplicated (rather
 // than imported) because that module is server-only and this file is
 // imported by a client component (components/automations/template-editor.tsx).
-const SYSTEM_LEAD_LABEL_RE = /^Lead (call|chat|text) #\d+$/;
+const SYSTEM_LEAD_LABELS = new Set(["New call lead", "New chat lead", "New SMS lead"]);
 
 /** First word of a name, for {{contact.firstName}}. Falls back to "there"
  *  when the contact has no real name on file — either genuinely blank, or
- *  one of the auto-generated "Lead text #N" placeholders stamped on an
+ *  one of the auto-generated "New {X} lead" placeholders stamped on an
  *  anonymous lead — so a template reads "Hi there," instead of "Hi ," or
- *  "Hi Lead,". */
+ *  "Hi New," (the first word of "New SMS lead"). */
 function firstWord(s: string | null | undefined): string {
   const trimmed = (s ?? "").trim();
-  if (!trimmed || SYSTEM_LEAD_LABEL_RE.test(trimmed)) return "there";
+  if (!trimmed || SYSTEM_LEAD_LABELS.has(trimmed)) return "there";
   const space = trimmed.indexOf(" ");
   return space === -1 ? trimmed : trimmed.slice(0, space);
 }

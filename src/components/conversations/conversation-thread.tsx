@@ -216,7 +216,7 @@ export function ConversationThread({
           <div className="h-12 w-2/3 animate-pulse rounded-lg bg-muted" />
           <div className="ml-auto h-12 w-3/4 animate-pulse rounded-lg bg-muted" />
         </div>
-      ) : loadError ? (
+      ) : loadError && merged.length === 0 ? (
         <div className="flex h-full min-h-[150px] items-center justify-center text-center">
           <p className="max-w-sm text-xs text-destructive">
             Couldn&apos;t load this thread: {loadError}
@@ -229,18 +229,25 @@ export function ConversationThread({
           </p>
         </div>
       ) : (
-        merged.map((m) =>
-          m.kind === "voice" ? (
-            <VoiceCallCard key={`voice:${m.id}`} call={m} saPath={saPath} />
-          ) : (
-            <ChannelBubble
-              key={`${m.channel}:${m.id}`}
-              message={m}
-              theme={theme}
-              contactId={contactId}
-            />
-          ),
-        )
+        <>
+          {loadError && (
+            <p className="mb-2 text-center text-[11px] text-destructive">
+              One channel didn&apos;t load: {loadError}
+            </p>
+          )}
+          {merged.map((m) =>
+            m.kind === "voice" ? (
+              <VoiceCallCard key={`voice:${m.id}`} call={m} saPath={saPath} />
+            ) : (
+              <ChannelBubble
+                key={`${m.channel}:${m.id}`}
+                message={m}
+                theme={theme}
+                contactId={contactId}
+              />
+            ),
+          )}
+        </>
       )}
     </div>
   );

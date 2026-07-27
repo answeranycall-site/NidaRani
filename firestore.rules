@@ -676,50 +676,59 @@ service cloud.firestore {
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
         allow create, delete: if false;
       }
-      // WhatsApp chat thread — same model as the SMS `messages` thread above.
-      // Populated server-side by the WhatsApp inbound webhook + the
-      // whatsapp/send route. Reads are member-scoped; creates + deletes are
-      // server-only; the only client mutation is stamping `readAt`.
+      // WhatsApp chat thread — same model as the SMS `messages` thread above,
+      // INCLUDING reading subAccountId/agencyId off the MESSAGE ROW itself
+      // rather than joining to the parent contact doc (see the `messages`
+      // rule's comment above for why — an orphaned/unknown-contact thread,
+      // or a get() query-evaluation quirk on an otherwise-valid parent,
+      // would deny the read outright under the join-based version this
+      // used to be). Populated server-side by the WhatsApp inbound webhook
+      // + the whatsapp/send route. Reads are member-scoped; creates +
+      // deletes are server-only; the only client mutation is `readAt`.
       match /whatsappMessages/{messageId} {
         allow read: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         );
         allow update: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
         allow create, delete: if false;
       }
       // BETA Facebook Messenger + Instagram DM chat thread — same model as the
-      // SMS / WhatsApp threads above. Populated server-side by the Meta inbound
-      // webhook + the /api/comms/meta/send route. Reads are member-scoped;
-      // creates + deletes are server-only; the only client mutation is `readAt`.
+      // SMS / WhatsApp threads above (including reading tenancy off the row
+      // itself, not a parent join — see `messages` rule comment). Populated
+      // server-side by the Meta inbound webhook + the /api/comms/meta/send
+      // route. Reads are member-scoped; creates + deletes are server-only;
+      // the only client mutation is `readAt`.
       match /metaMessages/{messageId} {
         allow read: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         );
         allow update: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
         allow create, delete: if false;
       }
       // Web Chat turns mirrored into Conversations once a session links to
       // a Contact (see lib/comms/web-chat/respond.ts::finalize) — same
-      // model as the SMS / WhatsApp / Meta threads above. The full
-      // transcript (including pre-capture anonymous turns) still lives at
-      // subAccounts/{id}/webChatSessions/{sessionId}/messages; this
-      // subcollection only carries turns from the point identity was known.
+      // model as the SMS / WhatsApp / Meta threads above, including reading
+      // tenancy off the row itself rather than a parent join (see `messages`
+      // rule comment). The full transcript (including pre-capture anonymous
+      // turns) still lives at subAccounts/{id}/webChatSessions/{sessionId}/
+      // messages; this subcollection only carries turns from the point
+      // identity was known.
       match /webChatMessages/{messageId} {
         allow read: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         );
         allow update: if canAccessSub(
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.subAccountId,
-          get(/databases/$(database)/documents/contacts/$(contactId)).data.agencyId
+          resource.data.subAccountId,
+          resource.data.agencyId
         ) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['readAt']);
         allow create, delete: if false;
       }
