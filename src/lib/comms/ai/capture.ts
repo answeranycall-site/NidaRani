@@ -172,14 +172,18 @@ export async function reconcileContactFromCapture(
   const db = getAdminDb();
   const contactsCol = db.collection("contacts");
 
+  // limit(5) + in-memory filter rather than limit(1): a soft-deleted
+  // contact (Contact.deletedAt) must never be silently reattached to —
+  // that would skip contact.created (breaking any workflow keyed off it)
+  // and hide the "new" lead inside a trashed record the operator can't see.
   const tryEmailMatch = async (): Promise<string | null> => {
     if (!input.capture.email) return null;
     const snap = await contactsCol
       .where("subAccountId", "==", input.subAccountId)
       .where("email", "==", input.capture.email)
-      .limit(1)
+      .limit(5)
       .get();
-    return snap.empty ? null : snap.docs[0].id;
+    return snap.docs.find((d) => !d.data().deletedAt)?.id ?? null;
   };
 
   const tryPhoneMatch = async (): Promise<string | null> => {
@@ -187,9 +191,9 @@ export async function reconcileContactFromCapture(
     const snap = await contactsCol
       .where("subAccountId", "==", input.subAccountId)
       .where("phone", "in", phoneMatchVariants(input.capture.phone, "US"))
-      .limit(1)
+      .limit(5)
       .get();
-    return snap.empty ? null : snap.docs[0].id;
+    return snap.docs.find((d) => !d.data().deletedAt)?.id ?? null;
   };
 
   const matchOrder =

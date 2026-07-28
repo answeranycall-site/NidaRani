@@ -84,10 +84,10 @@ async function findContactByPhone(
     .collection("contacts")
     .where("subAccountId", "==", subAccountId)
     .where("phone", "in", phoneMatchVariants(phone))
-    .limit(1)
+    .limit(5)
     .get();
-  if (snap.empty) return null;
-  const doc = snap.docs[0];
+  const doc = snap.docs.find((d) => !d.data().deletedAt);
+  if (!doc) return null;
   return { id: doc.id, ...(doc.data() as Omit<Contact, "id">) };
 }
 

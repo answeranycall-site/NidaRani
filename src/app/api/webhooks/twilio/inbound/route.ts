@@ -250,8 +250,13 @@ export async function POST(request: Request) {
   // Contact instead of a placeholder thread — see the header comment.
   // Shared mode can't do this (no subAccountId to scope a new contact to),
   // so it's left to fall through and drop below, same as before.
-  let contactDocs: DocumentSnapshot[] = matches.docs;
-  if (matches.empty && route.mode === "dedicated" && route.subAccountId) {
+  // Soft-deleted contacts (see Contact.deletedAt) are excluded — otherwise
+  // an inbound would silently reattach to a trashed contact instead of
+  // creating a fresh one.
+  let contactDocs: DocumentSnapshot[] = matches.docs.filter(
+    (d) => !d.data()?.deletedAt,
+  );
+  if (contactDocs.length === 0 && route.mode === "dedicated" && route.subAccountId) {
     if (nextOptedOut !== null) {
       // A never-seen number's FIRST message is STOP/START — don't mint a
       // contact just to immediately opt it out.

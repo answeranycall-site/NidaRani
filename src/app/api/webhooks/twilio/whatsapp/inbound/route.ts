@@ -180,8 +180,13 @@ export async function POST(request: Request) {
   // to brand-new leads. The one exception: a never-seen number whose FIRST
   // message is STOP/START — don't mint a contact just to immediately opt it
   // out; drop silently.
-  let contactDocs: DocumentSnapshot[] = matches.docs;
-  if (matches.empty) {
+  // Soft-deleted contacts (see Contact.deletedAt) are excluded — otherwise
+  // an inbound would silently reattach to a trashed contact instead of
+  // creating a fresh one.
+  let contactDocs: DocumentSnapshot[] = matches.docs.filter(
+    (d) => !d.data()?.deletedAt,
+  );
+  if (contactDocs.length === 0) {
     if (nextOptedOut !== null) {
       return twimlResponse(emptyTwimlResponse());
     }

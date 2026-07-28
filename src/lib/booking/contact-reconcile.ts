@@ -56,16 +56,19 @@ export async function reconcileBookingContact(
   const name = input.name.trim();
   const phone = input.phone.trim();
 
-  // Email-match within the sub-account. Cheap query: 0-1 results.
+  // Email-match within the sub-account. limit(5) + in-memory filter so a
+  // soft-deleted contact (Contact.deletedAt) is never silently reattached
+  // to instead of minting a fresh one.
   const existing = await db
     .collection("contacts")
     .where("subAccountId", "==", input.subAccountId)
     .where("email", "==", email)
-    .limit(1)
+    .limit(5)
     .get();
+  const liveMatch = existing.docs.find((d) => !d.data().deletedAt);
 
-  if (!existing.empty) {
-    const doc = existing.docs[0];
+  if (liveMatch) {
+    const doc = liveMatch;
     const data = doc.data() as Contact;
     // Best-effort update of missing fields (name + phone) — never
     // overwrites operator-curated data. Territory is left alone (see
