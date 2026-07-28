@@ -181,6 +181,8 @@ export async function POST(request: Request) {
       sendWindow: null,
       bookingLink: null,
       paymentLink: null,
+      industry: null,
+      ltv: null,
       replyToEmail: null,
       automationsPaused: false,
       accountContact,

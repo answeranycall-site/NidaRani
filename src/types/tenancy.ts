@@ -323,6 +323,20 @@ export interface SubAccountDoc {
     uploadedAt: Timestamp | FieldValue;
   } | null;
   /**
+   * This sub-account's industry — one of INDUSTRY_OPTIONS
+   * (src/lib/industries.ts), or any free-text value when the operator
+   * picked "Other" and typed their own. Surfaced via the {{industry}}
+   * merge tag. Null/unset — {{industry}} resolves to empty string.
+   */
+  industry?: string | null;
+  /**
+   * Lifetime value of one customer to this business (first job plus
+   * referrals and repeat work), in whole dollars. Surfaced via the
+   * {{ltv}} merge tag, formatted as a dollar figure (e.g. "$2,500").
+   * Null/unset — {{ltv}} resolves to empty string.
+   */
+  ltv?: number | null;
+  /**
    * Single source of truth for the Reply-To header on every email LeadStack
    * sends on behalf of this sub-account — automation lead-step emails AND
    * manual contact-profile sends. Null falls back to no Reply-To (current

@@ -130,6 +130,8 @@ export async function POST(request: Request) {
     workspace: { name: subAccount?.name ?? "" },
     bookingLink: subAccount?.bookingLink ?? "",
     paymentLink: subAccount?.paymentLink ?? "",
+    industry: subAccount?.industry ?? "",
+    ltv: subAccount?.ltv ?? null,
     unsubscribeLink: "",
   };
 

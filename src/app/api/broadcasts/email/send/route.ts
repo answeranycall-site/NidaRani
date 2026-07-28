@@ -192,6 +192,8 @@ export async function POST(request: Request) {
       workspace: { name: "" },
       bookingLink: "",
       paymentLink: "",
+      industry: "",
+      ltv: null,
       unsubscribeLink: "",
     }),
     audienceFilter,

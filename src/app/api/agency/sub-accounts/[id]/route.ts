@@ -19,6 +19,8 @@ interface PatchBody {
     email?: string | null;
     phone?: string | null;
   } | null;
+  industry?: string | null;
+  ltv?: number | null;
 }
 
 const URL_RE = /^https?:\/\/.+/i;
@@ -42,9 +44,9 @@ function isValidSendWindow(v: unknown): v is SendWindow {
 
 /**
  * Patch a sub-account doc. Allowed fields: name, timezone, sendWindow,
- * bookingLink, paymentLink, replyToEmail, automationsPaused, accountContact. Caller must
- * be an active sub-account admin (agency owners pass via the implicit
- * shortcut in requireSubAccountAdmin).
+ * bookingLink, paymentLink, industry, ltv, replyToEmail, automationsPaused,
+ * accountContact. Caller must be an active sub-account admin (agency
+ * owners pass via the implicit shortcut in requireSubAccountAdmin).
  */
 export async function PATCH(
   request: Request,
@@ -140,6 +142,36 @@ export async function PATCH(
         );
       }
       update.paymentLink = trimmed;
+    }
+  }
+
+  if (body.industry !== undefined) {
+    if (body.industry === null || body.industry === "") {
+      update.industry = null;
+    } else if (typeof body.industry !== "string") {
+      return NextResponse.json(
+        { error: "Industry must be a string or null." },
+        { status: 400 },
+      );
+    } else {
+      update.industry = body.industry.trim().slice(0, 100);
+    }
+  }
+
+  if (body.ltv !== undefined) {
+    if (body.ltv === null) {
+      update.ltv = null;
+    } else if (
+      typeof body.ltv !== "number" ||
+      !Number.isFinite(body.ltv) ||
+      body.ltv < 0
+    ) {
+      return NextResponse.json(
+        { error: "LTV must be a non-negative number or null." },
+        { status: 400 },
+      );
+    } else {
+      update.ltv = Math.round(body.ltv);
     }
   }
 

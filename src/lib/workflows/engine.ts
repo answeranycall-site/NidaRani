@@ -109,6 +109,8 @@ function mergeSubject(
           rescheduleLink: booking.rescheduleLink ?? "",
         }
       : null,
+    industry: ctx.subAccount?.industry ?? "",
+    ltv: ctx.subAccount?.ltv ?? null,
     unsubscribeLink,
   };
 }

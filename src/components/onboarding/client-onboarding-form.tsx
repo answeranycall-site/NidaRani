@@ -699,12 +699,20 @@ export function ClientOnboardingForm() {
             <div>
               <h2 className="text-sm font-semibold">Google review page</h2>
               <p className="text-xs text-muted-foreground">
-                Feeds the <code>{"{{reviewLink}}"}</code>-style text used by
-                the &ldquo;Job Completed – Review Request&rdquo; workflow.{" "}
-                <strong className="text-destructive">
-                  That workflow&apos;s SMS won&apos;t resolve correctly until
-                  this is filled in.
+                Go to your{" "}
+                <a
+                  href="https://business.google.com/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Google Business Profile Manager
+                </a>{" "}
+                and sign in. Select the business, then look for{" "}
+                <strong className="text-foreground">
+                  &ldquo;Get more reviews&rdquo;
                 </strong>
+                . That&apos;s your review link.
               </p>
             </div>
           </div>

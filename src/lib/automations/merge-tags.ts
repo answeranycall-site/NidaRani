@@ -19,6 +19,11 @@
  *                            workflow enrolled via the `booking.created`
  *                            trigger (native Booking Pages feature, not the
  *                            `bookingLink` above). Empty string otherwise.
+ *   {{industry}}           — sub-account's configured industry (Dashboard).
+ *                            Empty string when not set.
+ *   {{ltv}}                — sub-account's configured customer lifetime
+ *                            value (Dashboard), formatted as a dollar
+ *                            figure (e.g. "$2,500"). Empty string when not set.
  *   {{unsubscribeLink}}    — required in email bodies.
  *
  * Per-type slugged booking tags ({{bookingLink:30min}}) are reserved for a
@@ -55,6 +60,13 @@ export interface MergeTagSubject {
    * leaking the raw placeholder.
    */
   booking?: { time: string; title: string; rescheduleLink: string } | null;
+  /** Sub-account's configured industry, surfaced via {{industry}}. Empty
+   *  string when not set. */
+  industry: string;
+  /** Sub-account's configured customer lifetime value in whole dollars,
+   *  surfaced via {{ltv}} formatted as e.g. "$2,500". Null/0 resolves to
+   *  empty string. */
+  ltv: number | null;
   /** Pre-built fully-qualified unsubscribe URL. Empty string for SMS templates. */
   unsubscribeLink: string;
 }
@@ -115,6 +127,10 @@ export function resolveMergeTags(
         return subject.booking?.title ?? "";
       case "booking.rescheduleLink":
         return subject.booking?.rescheduleLink ?? "";
+      case "industry":
+        return subject.industry ?? "";
+      case "ltv":
+        return subject.ltv ? `$${subject.ltv.toLocaleString("en-US")}` : "";
       case "unsubscribeLink":
         return subject.unsubscribeLink ?? "";
       default:
@@ -143,6 +159,8 @@ export const SUPPORTED_TAGS_EMAIL: ReadonlyArray<{ tag: string; description: str
   { tag: "booking.time", description: "This appointment's date/time (booking.created trigger only)" },
   { tag: "booking.title", description: "This appointment's title (booking.created trigger only)" },
   { tag: "booking.rescheduleLink", description: "Link to reschedule/cancel THIS appointment (booking.created trigger only)" },
+  { tag: "industry", description: "Sub-account's industry (set on Dashboard)" },
+  { tag: "ltv", description: "Customer lifetime value, e.g. \"$2,500\" (set on Dashboard)" },
   { tag: "unsubscribeLink", description: "Per-contact unsubscribe URL (required in email)" },
 ];
 
@@ -156,6 +174,8 @@ export const SUPPORTED_TAGS_SMS: ReadonlyArray<{ tag: string; description: strin
   { tag: "booking.time", description: "This appointment's date/time (booking.created trigger only)" },
   { tag: "booking.title", description: "This appointment's title (booking.created trigger only)" },
   { tag: "booking.rescheduleLink", description: "Link to reschedule/cancel THIS appointment (booking.created trigger only)" },
+  { tag: "industry", description: "Sub-account's industry (set on Dashboard)" },
+  { tag: "ltv", description: "Customer lifetime value, e.g. \"$2,500\" (set on Dashboard)" },
 ];
 
 /**
