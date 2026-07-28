@@ -223,7 +223,14 @@ export function DashboardMasthead() {
                 />
               </label>
             </div>
-          ) : (
+          ) : null}
+          {isAdmin && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              LTV = what one customer is worth to your business over time —
+              first job plus referrals and repeat work.
+            </p>
+          )}
+          {!isAdmin && (
             (subAccount?.industry || subAccount?.ltv) && (
               <p className="mt-2 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
                 {subAccount?.industry && <span>Industry: {subAccount.industry}</span>}
