@@ -156,21 +156,32 @@ export interface ReconcileResult {
 /**
  * Find an existing Contact within the sub-account, otherwise create a
  * new one. Safe to call multiple times — short-circuits when
- * existingContactId is set. Returns null when neither an email nor a
- * phone was extracted (nothing to match on, and creating a contact with
- * just a name risks storing hallucinations).
+ * existingContactId is set AND still resolves to a live (non-deleted)
+ * contact. Returns null when neither an email nor a phone was extracted
+ * (nothing to match on, and creating a contact with just a name risks
+ * storing hallucinations).
  */
 export async function reconcileContactFromCapture(
   input: ReconcileInput,
 ): Promise<ReconcileResult | null> {
+  const db = getAdminDb();
+  const contactsCol = db.collection("contacts");
+
   if (input.existingContactId) {
-    return { contactId: input.existingContactId, created: false };
+    // Verify the link is still live before trusting it — a session (or a
+    // Voice call) can carry a contactId from days ago, and the operator may
+    // have trashed that contact since. Trusting a dead reference silently
+    // "matches" a lead to a contact that no longer exists anywhere the
+    // operator can see, and skips contact.created for what is, from the
+    // operator's perspective, a brand-new lead. Fall through to a fresh
+    // match/create below when the link no longer resolves.
+    const existingSnap = await contactsCol.doc(input.existingContactId).get();
+    if (existingSnap.exists && !existingSnap.data()?.deletedAt) {
+      return { contactId: input.existingContactId, created: false };
+    }
   }
 
   if (!input.capture.email && !input.capture.phone) return null;
-
-  const db = getAdminDb();
-  const contactsCol = db.collection("contacts");
 
   // limit(5) + in-memory filter rather than limit(1): a soft-deleted
   // contact (Contact.deletedAt) must never be silently reattached to —

@@ -106,26 +106,26 @@ export async function POST(
   });
 
   // Migrate the placeholder's message history + conversation state onto the
-  // new contact id, then remove the placeholder docs. Message counts on an
-  // unconverted thread are small (a handful of texts before conversion), so
-  // one batch comfortably covers it.
-  const messagesSnap = await db
-    .collection("contacts")
-    .doc(pseudoId)
-    .collection("messages")
-    .get();
-
+  // new contact id, then remove the placeholder docs. Covers every channel
+  // that can leave an "unlinked" conversation behind, not just SMS — a Web
+  // Chat session (or WhatsApp/Meta thread) whose linked contact was deleted
+  // can end up here too, and losing that transcript on conversion would be
+  // worse than the orphan itself. Message counts on an unconverted thread
+  // are small, so one batch per subcollection comfortably covers it.
   const batch = db.batch();
-  for (const msgDoc of messagesSnap.docs) {
-    batch.set(
-      db
-        .collection("contacts")
-        .doc(newContactId)
-        .collection("messages")
-        .doc(msgDoc.id),
-      { ...msgDoc.data(), contactId: newContactId },
-    );
-    batch.delete(msgDoc.ref);
+  for (const sub of ["messages", "whatsappMessages", "webChatMessages", "metaMessages"]) {
+    const subSnap = await db
+      .collection("contacts")
+      .doc(pseudoId)
+      .collection(sub)
+      .get();
+    for (const msgDoc of subSnap.docs) {
+      batch.set(
+        db.collection("contacts").doc(newContactId).collection(sub).doc(msgDoc.id),
+        { ...msgDoc.data(), contactId: newContactId },
+      );
+      batch.delete(msgDoc.ref);
+    }
   }
   batch.set(db.doc(`conversations/${newContactId}`), {
     ...convo,
