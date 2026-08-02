@@ -49,7 +49,7 @@ const CHECKLIST_ITEMS: { slug: string; label: string; description?: string }[] =
   {
     slug: "website",
     label: "Website",
-    description: "Builds trust the moment someone finds you",
+    description: "Optimized to capture every visitor's information before they leave",
   },
   {
     slug: "twilioNumber",
