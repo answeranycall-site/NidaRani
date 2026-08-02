@@ -46,6 +46,7 @@ export interface CustomBrand {
   /** Public contact phone, E.164 (e.g. "+16158191829"). Shown in the footer. */
   phone: string;
   primaryDomain: string;
+  pricingNote?: string;
   pricing: {
     starter: CustomPricingTier;
     pro: CustomPricingTier;
@@ -98,6 +99,9 @@ export const CUSTOM_BRAND: CustomBrand = {
 
   /** Used in footer, og:url, canonical. No https://, no trailing slash. */
   primaryDomain: "answeranycall.com",
+
+  pricingNote:
+    "Add-on: Social Media — $500/mo for social media posts with 30 days of content creation and posting.",
 
   /**
    * Pricing tiers. HIDDEN BY DEFAULT — the custom landing is wired for

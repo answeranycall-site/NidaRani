@@ -150,6 +150,12 @@ export function Pricing() {
           })}
         </div>
 
+        {CUSTOM_BRAND.pricingNote && (
+          <p className="mx-auto mt-8 max-w-2xl text-center text-sm font-medium text-primary">
+            {CUSTOM_BRAND.pricingNote}
+          </p>
+        )}
+
         <p className="mx-auto mt-8 max-w-lg text-center text-xs text-muted-foreground">
           All plans include unlimited contacts, pipeline, forms, automations,
           and the website builder. No per-contact tax, no per-message
