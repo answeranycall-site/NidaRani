@@ -52,6 +52,8 @@ export function WebChatChannelSection() {
     useState(false);
 
   const [contextCount, setContextCount] = useState(10);
+  // String, not number, so the field can be genuinely empty ("no limit").
+  const [messageCap, setMessageCap] = useState("");
   const [modelOverride, setModelOverride] = useState("");
   const [overrideKeywords, setOverrideKeywords] = useState(false);
   const [keywordsText, setKeywordsText] = useState("");
@@ -80,6 +82,11 @@ export function WebChatChannelSection() {
       if (channelData.config) {
         setEnabled(channelData.config.enabled);
         setContextCount(channelData.config.contextMessageCount);
+        setMessageCap(
+          channelData.config.outboundMessageLimitPerContact
+            ? String(channelData.config.outboundMessageLimitPerContact)
+            : "",
+        );
         setModelOverride(channelData.config.modelOverride ?? "");
         setOverrideKeywords(
           channelData.config.escalationKeywordsOverride !== null,
@@ -150,6 +157,9 @@ export function WebChatChannelSection() {
       const body: Record<string, unknown> = {
         enabled,
         contextMessageCount: contextCount,
+        outboundMessageLimitPerContact: messageCap.trim()
+          ? Number(messageCap)
+          : null,
         modelOverride: modelOverride.trim() || null,
         escalationKeywordsOverride: overrideKeywords
           ? keywordsText
@@ -388,6 +398,32 @@ export function WebChatChannelSection() {
                 className="font-mono text-xs"
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="wc-msg-cap">
+              Max AI replies per contact (blank = no limit)
+            </Label>
+            <Input
+              id="wc-msg-cap"
+              type="number"
+              min={1}
+              max={500}
+              value={messageCap}
+              placeholder="No limit"
+              onChange={(e) => setMessageCap(e.target.value)}
+              className="sm:max-w-[220px]"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Caps how many messages the agent will ever send to one
+              identified visitor — the guard against trolls and scammers
+              running up your model bill. Only applies once a visitor has
+              been captured to a Contact; anonymous browsing is already
+              bounded by the 30-message-per-session limit. Once someone
+              hits the cap the agent goes silent and you get a one-time
+              email so a real lead who just asked a lot of questions
+              doesn&apos;t get ghosted.
+            </p>
           </div>
 
           <div className="space-y-3 rounded-lg border p-3">

@@ -13,14 +13,19 @@ import type { AiChannelConfig } from "@/types/ai";
  * and a status grid of every visible channel.
  *
  * Per-channel "enabled" state shown on each card is pulled from each
- * channel's config doc. As channels graduate from comingSoon, add their
- * fetch alongside the SMS one here.
+ * channel's config doc — every visible channel needs its fetch wired in
+ * here or its badge is permanently stuck on "Not configured" no matter
+ * what's actually saved (this happened to Web Chat for a while). As
+ * channels graduate from comingSoon, add their fetch alongside these.
  */
 export default function AiAgentsOverviewPage() {
   const { subAccountId, subAccount } = useSubAccount();
   const [smsConfig, setSmsConfig] = useState<AiChannelConfig | null>(null);
   const [voiceConfig, setVoiceConfig] = useState<AiChannelConfig | null>(null);
   const [whatsappConfig, setWhatsappConfig] = useState<AiChannelConfig | null>(
+    null,
+  );
+  const [webChatConfig, setWebChatConfig] = useState<AiChannelConfig | null>(
     null,
   );
   const [loaded, setLoaded] = useState(false);
@@ -30,10 +35,11 @@ export default function AiAgentsOverviewPage() {
     let cancelled = false;
     (async () => {
       try {
-        const [smsRes, voiceRes, whatsappRes] = await Promise.all([
+        const [smsRes, voiceRes, whatsappRes, webChatRes] = await Promise.all([
           fetch(`/api/sub-accounts/${subAccountId}/ai-agent/channels/sms`),
           fetch(`/api/sub-accounts/${subAccountId}/ai-agent/channels/voice`),
           fetch(`/api/sub-accounts/${subAccountId}/ai-agent/channels/whatsapp`),
+          fetch(`/api/sub-accounts/${subAccountId}/ai-agent/channels/web-chat`),
         ]);
         const smsData = smsRes.ok
           ? ((await smsRes.json()) as { config: AiChannelConfig | null })
@@ -44,10 +50,14 @@ export default function AiAgentsOverviewPage() {
         const whatsappData = whatsappRes.ok
           ? ((await whatsappRes.json()) as { config: AiChannelConfig | null })
           : { config: null };
+        const webChatData = webChatRes.ok
+          ? ((await webChatRes.json()) as { config: AiChannelConfig | null })
+          : { config: null };
         if (!cancelled) {
           setSmsConfig(smsData.config);
           setVoiceConfig(voiceData.config);
           setWhatsappConfig(whatsappData.config);
+          setWebChatConfig(webChatData.config);
           setLoaded(true);
         }
       } catch {
@@ -61,13 +71,27 @@ export default function AiAgentsOverviewPage() {
 
   const dedicatedSmsConfigured = !!subAccount?.twilioConfig?.enabled;
   const smsEnabled = !!smsConfig?.enabled && dedicatedSmsConfigured;
-  const voiceEnabled = !!voiceConfig?.enabled && dedicatedSmsConfigured;
+  // Voice's phone-number prerequisite depends on numberMode: twilio-byoc
+  // needs the dedicated Twilio number, vapi-managed just needs its own
+  // pasted phone-number id. ANDing on Twilio unconditionally (as this used
+  // to) meant a correctly-configured vapi-managed sub-account could never
+  // show "Active" here even though calls actually worked.
+  const voicePhoneReady =
+    voiceConfig?.voice?.numberMode === "vapi-managed"
+      ? !!voiceConfig.voice.vapiPhoneNumberId
+      : dedicatedSmsConfigured;
+  const voiceEnabled = !!voiceConfig?.enabled && voicePhoneReady;
   const whatsappSenderConfigured =
     !!subAccount?.twilioConfig?.whatsappFromNumber;
   const whatsappEnabled =
     !!whatsappConfig?.enabled &&
     whatsappSenderConfigured &&
     subAccount?.whatsappEnabledByAgency === true;
+  // No dedicated-Twilio / sender prerequisite — the widget just needs the
+  // channel doc's own toggle on. (Previously this card never even fetched
+  // the web-chat config, so it silently showed "Not configured" forever,
+  // regardless of the real state.)
+  const webChatEnabled = !!webChatConfig?.enabled;
 
   // Overview grid shows the inbound channels only — Outbound has its own
   // tab + config and isn't a shared-persona inbound channel.
@@ -145,7 +169,9 @@ export default function AiAgentsOverviewPage() {
                       ? voiceEnabled
                       : channel.id === "whatsapp"
                         ? whatsappEnabled
-                        : undefined
+                        : channel.id === "web-chat"
+                          ? webChatEnabled
+                          : undefined
                 }
               />
             ))}

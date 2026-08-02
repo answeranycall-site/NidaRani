@@ -25,7 +25,14 @@ import {
   reconcileContactFromCapture,
   type CaptureFieldId,
 } from "@/lib/comms/web-chat/capture";
-import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import {
+  getConversationControls,
+  upsertConversationForMessage,
+} from "@/lib/server/conversations-service";
+import {
+  countAiRepliesSent,
+  notifyOwnerOfCapReached,
+} from "@/lib/comms/ai/message-cap";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 import type { WebChatSession } from "@/types/web-chat";
@@ -54,6 +61,9 @@ export type WebChatSkipReason =
   | "no_prompt"
   | "outside_hours"
   | "escalation_keyword"
+  | "bot_paused"
+  | "bot_off"
+  | "contact_cap_reached"
   | "llm_failed";
 
 export type WebChatOutcome =
@@ -215,6 +225,70 @@ export async function respondToWebChat(
       keyword: triggered,
       fallbackReply: FALLBACK_REPLY,
     });
+  }
+
+  // Per-conversation AI controls (unified inbox — Conversations → Auto /
+  // Suggest / Off) + the per-contact outbound cap. Both only apply once the
+  // visitor is linked to a contact: pre-capture turns have no conversation
+  // index doc to key on, and are already bounded by the per-session (30) /
+  // per-IP (60/hr) caps in rate-limit.ts.
+  if (session.contactId) {
+    const controls = await getConversationControls(session.contactId);
+    if (controls.botPausedUntilMs && controls.botPausedUntilMs > Date.now()) {
+      return finalize(input, session, {
+        kind: "skipped",
+        reason: "bot_paused",
+        fallbackReply: FALLBACK_REPLY,
+      });
+    }
+    // Web chat has no live "operator approves the draft" path the way the
+    // Conversations inbox does for SMS/WhatsApp — the visitor's browser is
+    // blocked on THIS HTTP response right now, so there's nothing to defer
+    // to later. Suggest mode therefore behaves like Off here: the bot stays
+    // quiet and the operator picks the thread up from Conversations instead.
+    if (controls.botMode === "off" || controls.botMode === "suggest") {
+      return finalize(input, session, {
+        kind: "skipped",
+        reason: "bot_off",
+        fallbackReply: FALLBACK_REPLY,
+      });
+    }
+
+    const cap = eff.outboundMessageLimitPerContact ?? null;
+    if (cap && cap > 0) {
+      const sent = await countAiRepliesSent(session.contactId, "webChatMessages");
+      if (sent !== null && sent >= cap) {
+        try {
+          const [contactSnap, saSnap] = await Promise.all([
+            db.collection("contacts").doc(session.contactId).get(),
+            db.doc(`subAccounts/${input.subAccountId}`).get(),
+          ]);
+          const subAccountForAlert = saSnap.data() as SubAccountDoc | undefined;
+          if (contactSnap.exists && subAccountForAlert) {
+            void notifyOwnerOfCapReached({
+              subAccountId: input.subAccountId,
+              subAccount: subAccountForAlert,
+              contact: {
+                id: contactSnap.id,
+                ...(contactSnap.data() as Omit<Contact, "id">),
+              },
+              fallbackIdentity:
+                session.capturedName ?? session.capturedEmail ?? input.sessionId,
+              channelId: "web-chat",
+              channelLabel: "Web Chat",
+              cap,
+            });
+          }
+        } catch (err) {
+          console.warn("[web-chat/respond] cap-alert lookup failed", err);
+        }
+        return finalize(input, session, {
+          kind: "skipped",
+          reason: "contact_cap_reached",
+          fallbackReply: FALLBACK_REPLY,
+        });
+      }
+    }
   }
 
   // Load identified-contact context if the session is linked.
@@ -454,6 +528,10 @@ async function finalize(
         to: input.sessionId,
         twilioMessageSid: null,
         sentByUid: aiGenerated ? null : "web-chat-bot",
+        // Needed so the per-contact AI message cap (message-cap.ts) can
+        // count replies via a Firestore aggregation — the SMS/WhatsApp
+        // mirrors have carried this since day one, this one never did.
+        aiGenerated,
         error: null,
         readAt: null,
         createdAt: FieldValue.serverTimestamp(),
