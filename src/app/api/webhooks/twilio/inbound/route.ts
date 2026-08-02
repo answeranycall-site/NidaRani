@@ -10,6 +10,7 @@ import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { createContactServerSide } from "@/lib/server/contacts-service";
 import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
+import { alertOwnerOfNewLeadOnce } from "@/lib/leads/new-lead-alert";
 import { maybeHandleRatingReply } from "@/lib/reviews/rating-reply";
 import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { phoneMatchVariants } from "@/lib/phone";
@@ -95,6 +96,9 @@ interface ResolvedRoute {
   /** Only populated for dedicated mode. Scopes contact lookups to this sub-account. */
   subAccountId: string | null;
   agencyId: string | null;
+  /** Dedicated mode only — the sub-account doc resolveRoute already read, so
+   *  downstream (owner alert, sends) doesn't re-fetch it. */
+  subAccount: SubAccountDoc | null;
 }
 
 /**
@@ -123,6 +127,7 @@ async function resolveRoute(
         authToken: sa.twilioConfig.authToken,
         subAccountId: dedicated.docs[0].id,
         agencyId: sa.agencyId,
+        subAccount: sa,
       };
     }
   }
@@ -141,6 +146,7 @@ async function resolveRoute(
       authToken: envToken,
       subAccountId: null,
       agencyId: null,
+      subAccount: null,
     };
   }
 
@@ -276,12 +282,26 @@ export async function POST(request: Request) {
         source: "sms",
         tags: [],
       });
-      await applyLeadLabelIfUnnamed({
+      const leadLabel = await applyLeadLabelIfUnnamed({
         subAccountId: route.subAccountId,
         contactId: created.id,
         created: true,
         currentName: "",
+        phone: from,
         kind: "sms",
+      });
+      // One alert to the owner, ever, for this person — the gate lives in
+      // lib/leads/new-lead-alert.ts (contacts/{id}.ownerAlertedAt), so their
+      // follow-up texts don't re-notify.
+      void alertOwnerOfNewLeadOnce({
+        subAccountId: route.subAccountId,
+        agencyId: route.agencyId ?? "",
+        subAccount: route.subAccount,
+        contactId: created.id,
+        channel: "sms",
+        contactName: leadLabel,
+        contactPhone: from,
+        preview: previewBody,
       });
       contactDocs = [await db.collection("contacts").doc(created.id).get()];
     } catch (err) {

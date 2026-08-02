@@ -68,6 +68,7 @@ export async function reconcileContactFromCapture(
     contactId: result.contactId,
     created: result.created,
     currentName: input.capture.name,
+    phone: input.capture.phone,
     kind: "chat",
   });
 

@@ -38,6 +38,8 @@ export function WhatsappChannelSection() {
   const [enabled, setEnabled] = useState(false);
   const [contextCount, setContextCount] = useState(10);
   const [replyDelaySec, setReplyDelaySec] = useState(0);
+  // String, not number, so the field can be genuinely empty ("no limit").
+  const [messageCap, setMessageCap] = useState("");
   const [modelOverride, setModelOverride] = useState("");
   const [overrideKeywords, setOverrideKeywords] = useState(false);
   const [keywordsText, setKeywordsText] = useState("");
@@ -68,6 +70,11 @@ export function WhatsappChannelSection() {
         setEnabled(channelData.config.enabled);
         setContextCount(channelData.config.contextMessageCount);
         setReplyDelaySec(channelData.config.replyDelaySec ?? 0);
+        setMessageCap(
+          channelData.config.outboundMessageLimitPerContact
+            ? String(channelData.config.outboundMessageLimitPerContact)
+            : "",
+        );
         setModelOverride(channelData.config.modelOverride ?? "");
         setOverrideKeywords(
           channelData.config.escalationKeywordsOverride !== null,
@@ -146,6 +153,9 @@ export function WhatsappChannelSection() {
             enabled,
             contextMessageCount: contextCount,
             replyDelaySec,
+            outboundMessageLimitPerContact: messageCap.trim()
+              ? Number(messageCap)
+              : null,
             modelOverride: modelOverride.trim() || null,
             escalationKeywordsOverride: overrideKeywords ? keywords : null,
             escalationNotifyEmailOverride: overrideEmail ? email : null,
@@ -282,6 +292,20 @@ export function WhatsappChannelSection() {
                 }
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="wa-msg-cap">
+                Max AI replies per contact (blank = no limit)
+              </Label>
+              <Input
+                id="wa-msg-cap"
+                type="number"
+                min={1}
+                max={500}
+                value={messageCap}
+                placeholder="No limit"
+                onChange={(e) => setMessageCap(e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="wa-model">
@@ -301,6 +325,17 @@ export function WhatsappChannelSection() {
             {" "}Reply delay waits this many seconds after generating a reply
             before actually sending it — purely cosmetic, so the bot
             doesn&apos;t feel instant. 0 = send immediately.
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            <strong className="font-medium text-foreground">
+              Max AI replies per contact
+            </strong>{" "}
+            caps how many messages the agent will ever send to one person on
+            WhatsApp — the guard against trolls and scammers running up your
+            model bill. Once someone hits the limit the agent goes silent on
+            them and you get a one-time email, so a real lead who just asked a
+            lot of questions doesn&apos;t get ghosted. Counted separately from
+            the SMS limit; leave blank for no limit.
           </p>
 
           <div className="space-y-2 rounded-lg border bg-muted/20 p-3">

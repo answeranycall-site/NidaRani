@@ -276,6 +276,22 @@ function sanitisePatch(
     // "typing" and starts looking like a broken bot.
     patch.replyDelaySec = Math.max(0, Math.min(60, Math.floor(input.replyDelaySec)));
   }
+  if ("outboundMessageLimitPerContact" in input) {
+    // Nullable on purpose: null / "" / 0 all mean "no cap", which is the
+    // default. A positive number caps how many AI replies one person can pull
+    // out of the agent on this channel before it goes quiet on them — the
+    // guard against trolls and scam loops burning model + SMS spend. Upper
+    // bound is generous (500); the point is a ceiling, not a tight budget.
+    const raw = input.outboundMessageLimitPerContact;
+    if (raw === null || raw === "" || raw === 0) {
+      patch.outboundMessageLimitPerContact = null;
+    } else if (typeof raw === "number" && Number.isFinite(raw)) {
+      patch.outboundMessageLimitPerContact = Math.max(
+        1,
+        Math.min(500, Math.floor(raw)),
+      );
+    }
+  }
   if ("modelOverride" in input) {
     const raw = input.modelOverride;
     if (raw === null || raw === "") {

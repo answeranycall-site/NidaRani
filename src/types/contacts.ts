@@ -219,6 +219,31 @@ export interface Contact {
    */
   pendingRatingConfirm?: number | null;
   /**
+   * Stamped the first (and only) time the business owner is alerted that this
+   * person is a brand-new lead — see lib/leads/new-lead-alert.ts. The claim is
+   * written transactionally BEFORE the alert goes out, so two inbound messages
+   * racing on the same cold number can't both notify. Read as a hard gate:
+   * once set, no inbound channel ever alerts about this contact again, however
+   * many times they come back.
+   */
+  ownerAlertedAt?: Timestamp | FieldValue | null;
+  /** Which channel produced the one-and-only new-lead alert. Diagnostics
+   *  only — the gate is `ownerAlertedAt`, not this. */
+  ownerAlertedChannel?: string | null;
+  /**
+   * Stamped once the AI hits its per-contact outbound message cap for this
+   * person and the owner has been told the bot went quiet. Prevents a
+   * re-alert on every subsequent message from a contact who is already
+   * over the cap. Per-channel keys live inside `aiCapAlertedChannels`.
+   */
+  aiCapAlertedAt?: Timestamp | FieldValue | null;
+  /** Channels whose cap has already produced an owner alert, so hitting the
+   *  SMS cap and later the WhatsApp cap each notify once. */
+  aiCapAlertedChannels?: string[] | null;
+  /** Stamped once a low (1-3) review rating has produced an owner email, so
+   *  repeat low ratings from the same contact don't re-notify. */
+  ownerNotifiedLowRatingAt?: Timestamp | FieldValue | null;
+  /**
    * Page-scoped Meta user id (PSID / IGSID) for a contact who has messaged this
    * sub-account via the BETA Facebook Messenger / Instagram DM inbox. Server-
    * managed (stamped by /api/webhooks/meta on first inbound) and used to

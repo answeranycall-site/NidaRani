@@ -6,6 +6,10 @@ import { GLOBAL_TERRITORY_ID } from "@/types";
 import type { SubAccountDoc } from "@/types";
 import { resolveAgent, type ConfiguredChannelId } from "@/lib/comms/ai/agent";
 import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
+import {
+  claimOwnerAlertSlot,
+  releaseOwnerAlertSlot,
+} from "@/lib/leads/new-lead-alert";
 
 /**
  * Channel-agnostic post-capture obligations. Web Chat and Voice both
@@ -137,10 +141,24 @@ export async function createCaptureFollowUp(
   }
 
   // ----- 2. Send the escalation email -----
+  //
+  // Gated by the shared once-per-contact slot (lib/leads/new-lead-alert.ts).
+  // This used to fire on EVERY capture-form submit and every callback-
+  // requested call, so one chatty visitor or a repeat caller could email the
+  // owner over and over about the same person. The Task above is deliberately
+  // NOT gated — a task is work to do, not a notification.
   let emailSent = false;
+  let alertClaimed = false;
   if (!emailIsConfigured()) {
     errors.push("email: not configured");
   } else {
+    alertClaimed = await claimOwnerAlertSlot(
+      input.contactId,
+      input.channelId === "voice" ? "voice" : "web-chat",
+    );
+  }
+
+  if (alertClaimed) {
     try {
       const db = getAdminDb();
       const [agent, subSnap] = await Promise.all([
@@ -213,6 +231,15 @@ export async function createCaptureFollowUp(
       );
       errors.push(`email: ${msg}`);
     }
+  } else if (emailIsConfigured()) {
+    errors.push("email: owner already alerted about this contact");
+  }
+
+  // Claimed the one-shot but never actually delivered (no escalation address
+  // on file, Resend threw). Hand the slot back so the owner still hears about
+  // their next new lead once the config/outage is sorted.
+  if (alertClaimed && !emailSent) {
+    await releaseOwnerAlertSlot(input.contactId);
   }
 
   return { taskId, emailSent, errors };

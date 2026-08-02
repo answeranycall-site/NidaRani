@@ -579,30 +579,47 @@ async function notifyLowRating(input: {
     const subAccount = subSnap.data() as SubAccountDoc | undefined;
     const to = agent?.effective.escalationNotifyEmail?.trim();
     if (!to) return;
+      // Dedupe: avoid sending duplicate low-rating emails for the same
+      // contact repeatedly. Check and set `ownerNotifiedLowRatingAt` on the
+      // contact doc atomically.
+      const contactRef = db.collection("contacts").doc(input.contact.id);
+      const contactSnap = await contactRef.get();
+      const contactData = contactSnap.exists ? contactSnap.data() : null;
+      if (contactData && contactData.ownerNotifiedLowRatingAt) {
+        // Already notified — skip email send.
+        return;
+      }
 
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://leadstack.dev";
-    const contactUrl = `${appUrl}/sa/${input.subAccountId}/contacts/${input.contact.id}`;
-    const subject = `${input.rating}/5 review reply from ${identity}`;
-    const text = [
-      `${identity} replied ${input.rating}/5 to a Google review request.`,
-      "",
-      "They were automatically sent an apology text — a follow-up Task has",
-      "been created due today so someone can reach out personally.",
-      "",
-      `Contact: ${contactUrl}`,
-    ].join("\n");
-    const html = `<!doctype html>
-<html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;margin:0;padding:24px;">
-  <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:28px;">
-    <div style="font-size:11px;text-transform:uppercase;color:#dc2626;letter-spacing:0.08em;font-weight:600;">Low review rating</div>
-    <h1 style="margin:8px 0 4px;font-size:20px;color:#0f172a;">${escHtml(identity)} rated ${input.rating}/5</h1>
-    <p style="margin:0 0 20px;color:#64748b;font-size:14px;">An automatic apology text was sent. A follow-up Task has been created, due today — someone should reach out personally.</p>
-    <a href="${escHtml(contactUrl)}" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;">View contact</a>
-  </div>
-</body></html>`;
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://leadstack.dev";
+      const contactUrl = `${appUrl}/sa/${input.subAccountId}/contacts/${input.contact.id}`;
+      const subject = `${input.rating}/5 review reply from ${identity}`;
+      const text = [
+        `${identity} replied ${input.rating}/5 to a Google review request.`,
+        "",
+        "They were automatically sent an apology text — a follow-up Task has",
+        "been created due today so someone can reach out personally.",
+        "",
+        `Contact: ${contactUrl}`,
+      ].join("\n");
+      const html = `<!doctype html>
+  <html><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;margin:0;padding:24px;">
+    <div style="max-width:560px;margin:0 auto;background:white;border-radius:12px;padding:28px;">
+      <div style="font-size:11px;text-transform:uppercase;color:#dc2626;letter-spacing:0.08em;font-weight:600;">Low review rating</div>
+      <h1 style="margin:8px 0 4px;font-size:20px;color:#0f172a;">${escHtml(identity)} rated ${input.rating}/5</h1>
+      <p style="margin:0 0 20px;color:#64748b;font-size:14px;">An automatic apology text was sent. A follow-up Task has been created, due today — someone should reach out personally.</p>
+      <a href="${escHtml(contactUrl)}" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:600;">View contact</a>
+    </div>
+  </body></html>`;
 
-    await sendEmail({ to, subject, text, html, from: tenantFrom(subAccount) });
+      await sendEmail({ to, subject, text, html, from: tenantFrom(subAccount) });
+
+      // Mark the contact so we don't send this low-rating email again.
+      try {
+        await contactRef.set({ ownerNotifiedLowRatingAt: FieldValue.serverTimestamp() }, { merge: true });
+      } catch (err) {
+        console.warn("[reviews/rating-reply] failed to mark ownerNotifiedLowRatingAt", err);
+      }
   } catch (err) {
     console.error("[reviews/rating-reply] email send failed", err);
   }

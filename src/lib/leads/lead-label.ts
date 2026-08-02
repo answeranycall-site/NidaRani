@@ -22,10 +22,18 @@ const KIND_TO_LABEL: Record<LeadLabelKind, string> = {
  *  labels ("New call lead", "New chat lead", "New SMS lead") rather than a
  *  real name the lead gave. Not blank, so a plain empty-string check
  *  misses it — used by {{firstName}} resolvers so customer-facing
- *  templates say "Hi there," instead of "Hi New SMS Lead," for an
- *  unnamed lead. */
+ *  templates say "Hi there," instead of "Hi New," for an unnamed lead.
+ *
+ *  Prefix match, NOT equality: `applyLeadLabelIfUnnamed` appends a phone
+ *  suffix ("New SMS lead (…4821)") whenever the number is known, which is
+ *  every auto-create path. An equality check therefore never matched a
+ *  real-world label and every unnamed lead got greeted "Hi New,". */
 export function isSystemLeadLabel(name: string | null | undefined): boolean {
-  return Object.values(KIND_TO_LABEL).includes((name ?? "").trim());
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return false;
+  return Object.values(KIND_TO_LABEL).some(
+    (label) => trimmed === label || trimmed.startsWith(`${label} (`),
+  );
 }
 
 export function issueLeadLabel(kind: LeadLabelKind): string {
@@ -46,12 +54,20 @@ export async function applyLeadLabelIfUnnamed(input: {
   created: boolean;
   currentName: string | null | undefined;
   kind: LeadLabelKind;
+  /** Optional phone to include a snippet in the auto label (last 4 digits).
+   *  Improves recognizability in the contact list. */
+  phone?: string | null;
 }): Promise<string> {
   const trimmed = (input.currentName ?? "").trim();
   if (!input.created || trimmed) return trimmed;
 
   try {
-    const label = issueLeadLabel(input.kind);
+    let label = issueLeadLabel(input.kind);
+    if (input.phone) {
+      const p = input.phone.replace(/[^0-9]/g, "");
+      const last4 = p.slice(-4);
+      if (last4) label = `${label} (…${last4})`;
+    }
     await getAdminDb()
       .doc(`contacts/${input.contactId}`)
       .update({ name: label, updatedAt: FieldValue.serverTimestamp() });

@@ -14,6 +14,7 @@ import {
 import { publishCallback } from "@/lib/automations/qstash";
 import { buildContactContextBlock } from "@/lib/comms/ai/context";
 import { buildSystemPrompt } from "@/lib/comms/ai/prompt";
+import { emailIsConfigured, sendEmail, tenantFrom } from "@/lib/comms/resend";
 import {
   matchEscalationKeyword,
   sendEscalationNotification,
@@ -54,6 +55,7 @@ type AiSkipReason =
   | "contact_opted_out"
   | "bot_off"
   | "bot_paused"
+  | "contact_cap_reached"
   | "llm_failed";
 
 type RespondOutcome =
@@ -215,6 +217,109 @@ async function logActivity({
       });
   } catch (err) {
     console.warn("[ai/respond] activity write failed", err);
+  }
+}
+
+/**
+ * How many AI-generated replies this contact has already received on this
+ * channel. Uses a Firestore count aggregation rather than fetching the docs —
+ * this runs on every inbound message once a cap is configured, and a chatty
+ * thread would otherwise mean downloading the whole history each time.
+ *
+ * Returns null on failure, which callers treat as "don't enforce" — a
+ * transient Firestore blip should not silence a working agent.
+ */
+async function countAiRepliesSent(
+  contactId: string,
+  messagesCollection: string,
+): Promise<number | null> {
+  try {
+    const snap = await getAdminDb()
+      .collection("contacts")
+      .doc(contactId)
+      .collection(messagesCollection)
+      .where("aiGenerated", "==", true)
+      .count()
+      .get();
+    return snap.data().count;
+  } catch (err) {
+    console.warn("[ai/respond] AI reply count failed — cap not enforced", err);
+    return null;
+  }
+}
+
+/**
+ * One-time "the bot stopped replying to this person" heads-up, so a capped
+ * contact who turns out to be a real lead doesn't just vanish. Deduped per
+ * contact PER CHANNEL via `contacts/{id}.aiCapAlertedChannels`, so hitting
+ * the SMS cap and later the WhatsApp cap each notify exactly once.
+ */
+async function notifyOwnerOfCapReached(input: {
+  subAccountId: string;
+  subAccount: SubAccountDoc;
+  contact: Contact;
+  contactPhone: string;
+  channelId: ConfiguredChannelId;
+  channelLabel: string;
+  cap: number;
+}): Promise<void> {
+  const db = getAdminDb();
+  const ref = db.collection("contacts").doc(input.contact.id);
+
+  // Transactional claim so two inbound messages landing together can't both
+  // notify — same pattern as the new-lead alert.
+  let claimed = false;
+  try {
+    claimed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return false;
+      const already = (snap.get("aiCapAlertedChannels") as string[] | null) ?? [];
+      if (already.includes(input.channelId)) return false;
+      tx.set(
+        ref,
+        {
+          aiCapAlertedAt: FieldValue.serverTimestamp(),
+          aiCapAlertedChannels: FieldValue.arrayUnion(input.channelId),
+        },
+        { merge: true },
+      );
+      return true;
+    });
+  } catch (err) {
+    console.warn("[ai/respond] cap-alert claim failed", err);
+    return;
+  }
+  if (!claimed) return;
+
+  const who =
+    (input.contact.name ?? "").trim() ||
+    input.contact.phone ||
+    input.contactPhone;
+  const ownerEmail = input.subAccount.accountContact?.email?.trim();
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() || "https://leadstack.dev";
+  const link = `${appUrl}/sa/${input.subAccountId}/conversations/${input.contact.id}`;
+
+  if (ownerEmail && emailIsConfigured()) {
+    try {
+      await sendEmail({
+        to: ownerEmail,
+        subject: `AI stopped replying to ${who}`,
+        text: [
+          `${who} has hit the ${input.cap}-message limit you set for the AI agent on ${input.channelLabel}.`,
+          "",
+          "The AI will not reply to them again on this channel. If they're a",
+          "real lead rather than a time-waster, pick the conversation up",
+          "yourself — or raise the limit in AI Agents → " +
+            `${input.channelLabel} → settings.`,
+          "",
+          link,
+        ].join("\n"),
+        from: tenantFrom(input.subAccount),
+      });
+    } catch (err) {
+      console.warn("[ai/respond] cap-alert email failed", err);
+    }
   }
 }
 
@@ -503,6 +608,43 @@ export async function maybeRespondWithAi(
     });
     return { kind: "skipped", reason: "bot_off" };
   }
+  // Per-contact outbound cap. Deliberately the LAST cheap guard and placed
+  // BEFORE the LLM call — the whole point is to stop spending model tokens
+  // and SMS segments on someone who is never going to convert (trolls,
+  // scammers, a loop with another bot). Checking it after generation, as an
+  // earlier pass did, still paid for every message it then threw away.
+  const cap = eff.outboundMessageLimitPerContact ?? null;
+  if (cap && cap > 0) {
+    const sent = await countAiRepliesSent(
+      contact.id,
+      transport.messagesCollection,
+    );
+    if (sent !== null && sent >= cap) {
+      await logActivity({
+        contactId: contact.id,
+        agencyId: subAccount.agencyId,
+        subAccountId,
+        type: "ai_skipped",
+        content: `AI reply skipped — hit the ${cap}-message ${transport.label} limit for this contact.`,
+        meta: { reason: "contact_cap_reached", channel: channelId, sent, cap },
+      });
+      // Tell the owner the bot went quiet on this person — once per channel,
+      // so a capped contact who keeps texting doesn't re-notify. Without this
+      // a genuine hot lead who simply asked a lot of questions would be
+      // ghosted with nobody noticing.
+      void notifyOwnerOfCapReached({
+        subAccountId,
+        subAccount,
+        contact,
+        contactPhone,
+        channelId,
+        channelLabel: transport.label,
+        cap,
+      });
+      return { kind: "skipped", reason: "contact_cap_reached" };
+    }
+  }
+
   const suggestOnly = controls.botMode === "suggest";
 
   // Build LLM context and call the model.

@@ -120,6 +120,7 @@ async function maybeMigrateLegacy(subAccountId: string): Promise<void> {
     escalationNotifyEmailOverride: null,
     totalTokensUsed: legacy.totalTokensUsed ?? 0,
     replyDelaySec: 0,
+    outboundMessageLimitPerContact: null,
     webChat: null,
     voice: null,
     whatsapp: null,
@@ -265,6 +266,7 @@ export async function resolveAgent(
       websiteKb: profile.websiteKb ?? null,
       // Legacy channel docs predate this field.
       replyDelaySec: channel.replyDelaySec ?? 0,
+      outboundMessageLimitPerContact: channel.outboundMessageLimitPerContact ?? null,
     },
   };
 }

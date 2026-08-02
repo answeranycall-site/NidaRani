@@ -31,6 +31,9 @@ export function SmsChannelSection() {
   const [enabled, setEnabled] = useState(false);
   const [contextCount, setContextCount] = useState(10);
   const [replyDelaySec, setReplyDelaySec] = useState(0);
+  // Held as a string so the field can be genuinely empty ("no limit"),
+  // which a number-typed state would collapse to 0.
+  const [messageCap, setMessageCap] = useState("");
   const [modelOverride, setModelOverride] = useState("");
   const [overrideKeywords, setOverrideKeywords] = useState(false);
   const [keywordsText, setKeywordsText] = useState("");
@@ -59,6 +62,11 @@ export function SmsChannelSection() {
         setEnabled(channelData.config.enabled);
         setContextCount(channelData.config.contextMessageCount);
         setReplyDelaySec(channelData.config.replyDelaySec ?? 0);
+        setMessageCap(
+          channelData.config.outboundMessageLimitPerContact
+            ? String(channelData.config.outboundMessageLimitPerContact)
+            : "",
+        );
         setModelOverride(channelData.config.modelOverride ?? "");
         setOverrideKeywords(channelData.config.escalationKeywordsOverride !== null);
         setKeywordsText(
@@ -114,6 +122,9 @@ export function SmsChannelSection() {
             enabled,
             contextMessageCount: contextCount,
             replyDelaySec,
+            outboundMessageLimitPerContact: messageCap.trim()
+              ? Number(messageCap)
+              : null,
             modelOverride: modelOverride.trim() || null,
             escalationKeywordsOverride: overrideKeywords ? keywords : null,
             escalationNotifyEmailOverride: overrideEmail ? email : null,
@@ -230,6 +241,20 @@ export function SmsChannelSection() {
                 }
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="sms-msg-cap">
+                Max AI replies per contact (blank = no limit)
+              </Label>
+              <Input
+                id="sms-msg-cap"
+                type="number"
+                min={1}
+                max={500}
+                value={messageCap}
+                placeholder="No limit"
+                onChange={(e) => setMessageCap(e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sms-model">Model (advanced — blank for default)</Label>
@@ -247,6 +272,17 @@ export function SmsChannelSection() {
             {" "}Reply delay waits this many seconds after generating a reply
             before actually texting it — purely cosmetic, so the bot doesn&apos;t
             feel instant. 0 = send immediately.
+          </p>
+          <p className="text-[11px] text-muted-foreground">
+            <strong className="font-medium text-foreground">
+              Max AI replies per contact
+            </strong>{" "}
+            caps how many messages the agent will ever send to one person on
+            SMS — the guard against trolls and scammers running up your model
+            and SMS bill. Once someone hits the limit the agent goes silent on
+            them and you get a one-time email so a real lead who just asked a
+            lot of questions doesn&apos;t get ghosted. Counted per channel;
+            leave blank for no limit.
           </p>
 
           <div className="space-y-2 rounded-lg border bg-muted/20 p-3">

@@ -6,6 +6,8 @@ import { reconcileContactFromCapture } from "@/lib/comms/ai/capture";
 import { createCaptureFollowUp } from "@/lib/comms/ai/follow-up";
 import { emitWebhookEvent } from "@/lib/api/webhooks/dispatch";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
+import { alertOwnerOfNewLeadOnce } from "@/lib/leads/new-lead-alert";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 import type { SubAccountDoc, VoiceCampaignOutcome } from "@/types";
 
@@ -187,6 +189,34 @@ export async function handleVapiEndOfCall(input: {
     taskId = followUp.taskId;
     emailSent = followUp.emailSent;
     errors.push(...followUp.errors);
+  }
+
+  // A brand-new caller who never explicitly asked for a callback still
+  // deserves to be flagged once — otherwise a first-time inbound lead is
+  // silently filed away and the owner only hears about the ones who happened
+  // to say "call me back". Shares the same one-shot slot as the follow-up
+  // email above, so a callback-requesting new caller gets exactly one alert,
+  // not two.
+  if (contactId && contactCreated) {
+    const displayName = await applyLeadLabelIfUnnamed({
+      subAccountId,
+      contactId,
+      created: true,
+      currentName: capturedName,
+      phone: capturedPhone,
+      kind: "call",
+    });
+    await alertOwnerOfNewLeadOnce({
+      subAccountId,
+      agencyId: subAccount.agencyId,
+      subAccount,
+      contactId,
+      channel: "voice",
+      contactName: displayName || capturedName,
+      contactPhone: capturedPhone,
+      contactEmail: capturedEmail,
+      preview: payload.summary,
+    });
   }
 
   // ----- Campaign call: write the disposition back to the recipient row.

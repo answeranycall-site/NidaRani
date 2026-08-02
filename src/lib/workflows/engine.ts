@@ -425,31 +425,70 @@ interface ReviewOutcome {
   positive: boolean;
 }
 
+const REVIEW_TOKEN_RE = /\{\{\s*review(?:Rating|Outcome)\s*\}\}/;
+
+/** True when the operator's body actually references a review token — used
+ *  to decide whether this notify step is a review-outcome notification (and
+ *  therefore needs real rating data) or a plain owner alert that happens to
+ *  live in the same workflow. */
+function bodyUsesReviewTokens(body: string): boolean {
+  return REVIEW_TOKEN_RE.test(body);
+}
+
 function resolveReviewTokens(body: string, ctx: NodeContext): string {
   const outcome = ctx.triggerContext?.reviewOutcome as
     | ReviewOutcome
     | undefined;
-  const reviewRating = outcome ? String(outcome.rating) : "";
-  const reviewOutcome = outcome
-    ? outcome.positive
-      ? "positive — sent the Google review link"
-      : "negative — flagged internally, not sent to Google"
-    : "no reply yet (or no rating request on this workflow)";
+  if (outcome) {
+    return body
+      .replace(/\{\{\s*reviewRating\s*\}\}/g, String(outcome.rating))
+      .replace(
+        /\{\{\s*reviewOutcome\s*\}\}/g,
+        outcome.positive
+          ? "positive — sent the Google review link"
+          : "negative — flagged internally, not sent to Google",
+      );
+  }
+  // No rating came back. Substituting an empty string here is what produced
+  // messages like "new review from X: /5" — operators naturally write
+  // "{{reviewRating}}/5", so the token has to swallow the trailing "/5"
+  // rather than blank out and leave the slash stranded.
   return body
-    .replace(/\{\{\s*reviewRating\s*\}\}/g, reviewRating)
-    .replace(/\{\{\s*reviewOutcome\s*\}\}/g, reviewOutcome);
+    .replace(/\{\{\s*reviewRating\s*\}\}\s*\/\s*5/g, "no rating")
+    .replace(/\{\{\s*reviewRating\s*\}\}/g, "no rating")
+    .replace(
+      /\{\{\s*reviewOutcome\s*\}\}/g,
+      "no reply yet (or no rating request on this workflow)",
+    );
 }
 
 const execNotifyOwnerSms: NodeExecutor = async (ctx) => {
   const cfg = ctx.node.config as unknown as NotifyOwnerSmsConfig;
   const to = ctx.subAccount?.accountContact?.phone?.trim();
   if (!to) return { result: { kind: "next" }, log: "skipped:no_owner_phone" };
+  const rawBody = (cfg.body ?? "").trim();
+  // Same guard `review_rating_reminder` already carries. A preceding
+  // review_rating_request only WAITS when it actually sent the ask — every
+  // skip path (90-day cooldown, opted out, no phone, review URL missing,
+  // no dedicated Twilio) returns "next" instead, so the run marches into
+  // this node seconds later with no rating data. Without this check the
+  // owner gets a review-outcome text about a review that was never
+  // requested. `awaitingReviewReplyAt` is stamped only once an ask really
+  // went out, so it distinguishes "asked, no reply yet" (worth telling the
+  // owner) from "never asked" (noise).
+  if (
+    bodyUsesReviewTokens(rawBody) &&
+    !ctx.triggerContext?.reviewOutcome &&
+    !ctx.contact.awaitingReviewReplyAt
+  ) {
+    return { result: { kind: "next" }, log: "skipped:no_review_context" };
+  }
   // Review tokens first (plain substitution, not the {{...}} merge-tag
   // regex), then the standard contact/owner/workspace merge tags — so an
   // operator can write "New lead: {{contact.firstName}} {{contact.phone}}"
   // just like they would in a send_sms step.
   const body = resolveMergeTags(
-    resolveReviewTokens((cfg.body ?? "").trim(), ctx),
+    resolveReviewTokens(rawBody, ctx),
     mergeSubject(ctx, ""),
   );
   if (!body) return { result: { kind: "next" }, log: "skipped:no_body" };

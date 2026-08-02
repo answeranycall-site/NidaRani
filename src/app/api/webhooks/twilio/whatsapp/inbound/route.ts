@@ -11,6 +11,8 @@ import { aiIsConfigured } from "@/lib/comms/ai/openrouter";
 import { stripWhatsappPrefix } from "@/lib/comms/twilio";
 import { createContactServerSide } from "@/lib/server/contacts-service";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
+import { alertOwnerOfNewLeadOnce } from "@/lib/leads/new-lead-alert";
 import { phoneMatchVariants } from "@/lib/phone";
 import type { SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
@@ -203,6 +205,28 @@ export async function POST(request: Request) {
         address: "",
         source: "whatsapp",
         tags: [],
+      });
+      // WhatsApp's ProfileName is often blank (users can hide it), so fall
+      // back to the same recognizable placeholder every other cold-lead
+      // channel uses instead of leaving the contact nameless.
+      const leadLabel = await applyLeadLabelIfUnnamed({
+        subAccountId: route.subAccountId,
+        contactId: created.id,
+        created: true,
+        currentName: profileName,
+        phone: from,
+        kind: "sms",
+      });
+      // Previously WhatsApp auto-created a contact but told the owner
+      // nothing — the one inbound channel with no alert at all.
+      void alertOwnerOfNewLeadOnce({
+        subAccountId: route.subAccountId,
+        agencyId: route.agencyId ?? "",
+        contactId: created.id,
+        channel: "whatsapp",
+        contactName: leadLabel || profileName,
+        contactPhone: from,
+        preview: bodyRaw,
       });
       contactDocs = [await db.collection("contacts").doc(created.id).get()];
     } catch (err) {

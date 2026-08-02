@@ -121,6 +121,12 @@ export interface AiChannelConfig {
    *  sub-account's `twilioConfig` (reused from SMS), so this block only
    *  holds WhatsApp-channel operational preferences. */
   whatsapp: WhatsappChannelConfig | null;
+  /** Optional per-contact outbound message cap for the AI on this channel.
+   *  When set, the agent will stop sending AI-generated outbound messages
+   *  to a single contact after this many replies have been sent (total).
+   *  Null = no per-contact cap.
+   */
+  outboundMessageLimitPerContact?: number | null;
   createdAt: Timestamp | FieldValue | null;
   updatedAt: Timestamp | FieldValue | null;
 }
@@ -263,6 +269,7 @@ export const DEFAULT_AI_CHANNEL_CONFIG: Omit<
   webChat: null,
   voice: null,
   whatsapp: null,
+  outboundMessageLimitPerContact: null,
 };
 
 export const DEFAULT_WHATSAPP_CONFIG: WhatsappChannelConfig = {
@@ -314,6 +321,7 @@ export interface ResolvedAiAgent {
     modelOverride: string | null;
     websiteKb: string | null;
     replyDelaySec: number;
+    outboundMessageLimitPerContact?: number | null;
   };
 }
 

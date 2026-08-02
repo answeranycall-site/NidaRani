@@ -6,6 +6,7 @@ import { reconcileContactFromCapture } from "@/lib/comms/ai/capture";
 import { sendSmsForSubAccount } from "@/lib/comms/twilio";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
 import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
+import { alertOwnerOfNewLeadOnce } from "@/lib/leads/new-lead-alert";
 import type { MissedCallConfig, SubAccountDoc } from "@/types";
 import type { Contact } from "@/types/contacts";
 
@@ -163,11 +164,12 @@ export async function logAnsweredCall(input: {
     });
     if (!reconciled) return;
 
-    await applyLeadLabelIfUnnamed({
+    const displayName = await applyLeadLabelIfUnnamed({
       subAccountId,
       contactId: reconciled.contactId,
       created: reconciled.created,
       currentName: null,
+      phone: from,
       kind: "call",
     });
 
@@ -180,6 +182,33 @@ export async function logAnsweredCall(input: {
         meta: { kind: "call_answered", callSid, from },
         createdAt: FieldValue.serverTimestamp(),
       });
+
+    // An answered call used to create the contact and stop there, so a
+    // caller you actually picked up for never appeared in Conversations —
+    // only the ones you missed did. Mirror it in as an inbound "call"
+    // entry so every inbound lead lands in one place.
+    await upsertConversationForMessage({
+      contactId: reconciled.contactId,
+      subAccountId,
+      agencyId,
+      contactName: displayName,
+      contactPhone: from,
+      channel: "voice",
+      direction: "inbound",
+      body: `Inbound call from ${from} — answered.`,
+    });
+
+    if (reconciled.created) {
+      await alertOwnerOfNewLeadOnce({
+        subAccountId,
+        agencyId,
+        contactId: reconciled.contactId,
+        channel: "voice",
+        contactName: displayName,
+        contactPhone: from,
+        preview: "Called in and you picked up.",
+      });
+    }
   } catch (err) {
     console.warn("[mctb] answered-call logging failed", err);
   }
@@ -246,6 +275,7 @@ export async function handleMissedCall(input: {
     contactId,
     created: reconciled.created,
     currentName: contact?.name,
+    phone: from,
     kind: "call",
   });
 
@@ -332,21 +362,38 @@ export async function handleMissedCall(input: {
     `Missed call from ${from}. Auto-text sent: "${bodyText}"`,
   );
 
-  // Best-effort heads-up to the business owner — same fixed-recipient
-  // pattern as the Workflow Builder's notify_owner_sms node (accountContact
-  // .phone, not the caller). A failure here can't undo the text-back the
-  // caller already received, so it never affects the return value.
-  const ownerPhone = subAccount.accountContact?.phone?.trim();
-  if (ownerPhone) {
-    try {
-      await sendSmsForSubAccount({
-        subAccountId,
-        subAccount,
-        to: ownerPhone,
-        body: `AnswerAnyCall just texted back a missed call from ${from} so you didn't lose that lead.`,
-      });
-    } catch (err) {
-      console.warn("[mctb] owner notification send failed", err);
+  // Heads-up to the business owner (accountContact, not the caller).
+  //
+  // Split by whether this is a brand-new person or someone already in the
+  // CRM. A new lead goes through the shared once-per-contact gate so a
+  // caller who misses three times in a row produces ONE alert, not three.
+  // A known contact keeps the original per-call text-back confirmation —
+  // that's an operational "we covered for you" receipt, not a lead alert,
+  // and suppressing it after the first miss would lose real information.
+  if (reconciled.created) {
+    await alertOwnerOfNewLeadOnce({
+      subAccountId,
+      agencyId,
+      subAccount,
+      contactId,
+      channel: "voice",
+      contactName: contactDisplayName,
+      contactPhone: from,
+      preview: "Missed call — auto-texted them back.",
+    });
+  } else {
+    const ownerPhone = subAccount.accountContact?.phone?.trim();
+    if (ownerPhone) {
+      try {
+        await sendSmsForSubAccount({
+          subAccountId,
+          subAccount,
+          to: ownerPhone,
+          body: `AnswerAnyCall just texted back a missed call from ${from} so you didn't lose that lead.`,
+        });
+      } catch (err) {
+        console.warn("[mctb] owner notification send failed", err);
+      }
     }
   }
 
