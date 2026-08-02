@@ -117,7 +117,9 @@ function OnboardingChecklist() {
 
   return (
     <section className="rounded-2xl border bg-card p-5">
-      <h2 className="mb-1 text-sm font-semibold">What We&apos;re Installing</h2>
+      <h2 className="mb-1 text-sm font-semibold">
+        Your Business, Installed and Maintained, $300/Month
+      </h2>
       <p className="mb-4 text-xs text-muted-foreground">
         A visual overview for the client — not a live status indicator yet.
         {!isAgencyOwner &&
