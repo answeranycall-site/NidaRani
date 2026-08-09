@@ -12,6 +12,7 @@ import { createContactServerSide } from "@/lib/server/contacts-service";
 import { applyLeadLabelIfUnnamed } from "@/lib/leads/lead-label";
 import { alertOwnerOfNewLeadOnce } from "@/lib/leads/new-lead-alert";
 import { maybeHandleRatingReply } from "@/lib/reviews/rating-reply";
+import { maybeHandleAiBookingReply } from "@/lib/booking/ai-booking-reply";
 import { fireWorkflowTrigger } from "@/lib/workflows/engine";
 import { phoneMatchVariants } from "@/lib/phone";
 import { cleanEnv } from "@/lib/env";
@@ -482,8 +483,32 @@ export async function POST(request: Request) {
         }
       }
 
-      let ratingHandled = false;
+      // AI Booking + Nurture reply gate — only acts when this contact has a
+      // live pendingBookingWorkflowRunId (an approved booking-proposal SMS
+      // actually sent and is awaiting a slot pick). Checked before the
+      // rating-gate + generic AI fallback for the same reason keyword checks
+      // are: it's a narrower, higher-priority interception.
+      let bookingHandled = false;
       if (!keywordHandled && subAccount) {
+        try {
+          const bookingResult = await maybeHandleAiBookingReply({
+            subAccountId: route.subAccountId,
+            agencyId: route.agencyId ?? "",
+            contact,
+            subAccount,
+            body: bodyRaw,
+          });
+          bookingHandled = bookingResult.handled;
+        } catch (err) {
+          console.error(
+            `[twilio/inbound] AI booking-reply check failed for sa=${route.subAccountId}`,
+            err,
+          );
+        }
+      }
+
+      let ratingHandled = false;
+      if (!keywordHandled && !bookingHandled && subAccount) {
         try {
           const ratingResult = await maybeHandleRatingReply({
             subAccountId: route.subAccountId,
@@ -501,7 +526,13 @@ export async function POST(request: Request) {
         }
       }
 
-      if (!keywordHandled && !ratingHandled && subAccount && aiIsConfigured()) {
+      if (
+        !keywordHandled &&
+        !bookingHandled &&
+        !ratingHandled &&
+        subAccount &&
+        aiIsConfigured()
+      ) {
         try {
           const agent = await resolveAgent(route.subAccountId, "sms");
           if (agent?.effective.enabled) {

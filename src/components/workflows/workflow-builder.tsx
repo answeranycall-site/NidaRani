@@ -8,6 +8,7 @@ import {
   AlarmClock,
   ArrowLeft,
   Bell,
+  CalendarClock,
   CheckSquare,
   Clock,
   Flag,
@@ -21,6 +22,7 @@ import {
   PencilLine,
   Plus,
   Smartphone,
+  Sparkles,
   Star,
   Tag,
   Trash2,
@@ -36,7 +38,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { PIPELINE_STAGES } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import {
   ADDABLE_TYPES,
   NODE_LABELS,
@@ -56,14 +58,16 @@ import {
 import { ConditionsEditor } from "./conditions-editor";
 import {
   NodeConfigDialog,
+  type BookingPageOption,
   type WhatsappTemplateOption,
 } from "./node-config-dialog";
 import { TestDialog } from "./test-dialog";
-import type {
-  WorkflowNodeType,
-  WorkflowStatus,
-  WorkflowTrigger,
-  WorkflowTriggerType,
+import {
+  BRANCHING_NODE_TYPES,
+  type WorkflowNodeType,
+  type WorkflowStatus,
+  type WorkflowTrigger,
+  type WorkflowTriggerType,
 } from "@/types/workflows";
 
 const TRIGGER_TYPES: WorkflowTriggerType[] = [
@@ -93,6 +97,10 @@ const ICONS: Record<WorkflowNodeType, typeof Mail> = {
   review_rating_request: Star,
   review_rating_reminder: AlarmClock,
   webhook: Webhook,
+  ai_propose_booking: Sparkles,
+  ai_await_booking_reply: Clock,
+  ai_booking_resolver: GitBranch,
+  move_deal_stage: CalendarClock,
 };
 
 export interface BuilderInitial {
@@ -159,12 +167,14 @@ export function WorkflowBuilder({
   forms,
   readiness,
   whatsappTemplates,
+  bookingPages,
 }: {
   saId: string;
   initial: BuilderInitial;
   forms: { id: string; name: string }[];
   readiness: BuilderReadiness;
   whatsappTemplates: WhatsappTemplateOption[];
+  bookingPages: BookingPageOption[];
 }) {
   const router = useRouter();
   const [name, setName] = useState(initial.name);
@@ -176,13 +186,14 @@ export function WorkflowBuilder({
   const [editing, setEditing] = useState<BuilderStep | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const pipelineStages = usePipelineStages();
 
   /** Recursively replace a step's config by id. */
   function saveConfig(id: string, config: Record<string, unknown>) {
     const walk = (list: BuilderStep[]): BuilderStep[] =>
       list.map((s) => {
         if (s.id === id) return { ...s, config };
-        if (s.type === "if_else") {
+        if (BRANCHING_NODE_TYPES.includes(s.type)) {
           return {
             ...s,
             whenTrue: walk(s.whenTrue ?? []),
@@ -325,7 +336,7 @@ export function WorkflowBuilder({
               className="border-input bg-background mt-2 h-9 w-full rounded-md border px-2 text-sm"
             >
               <option value="">Any stage</option>
-              {PIPELINE_STAGES.map((s) => (
+              {pipelineStages.map((s) => (
                 <option key={s.id} value={s.id}>
                   Moved to {s.label}
                 </option>
@@ -368,6 +379,7 @@ export function WorkflowBuilder({
         <NodeConfigDialog
           step={editing}
           whatsappTemplates={whatsappTemplates}
+          bookingPages={bookingPages}
           onClose={() => setEditing(null)}
           onSave={(config) => editing && saveConfig(editing.id, config)}
         />
@@ -394,7 +406,8 @@ function Chain({
   onEdit: (s: BuilderStep) => void;
 }) {
   const endsInBranch =
-    steps.length > 0 && steps[steps.length - 1].type === "if_else";
+    steps.length > 0 &&
+    BRANCHING_NODE_TYPES.includes(steps[steps.length - 1].type);
 
   function add(type: WorkflowNodeType) {
     const step: BuilderStep = {
@@ -402,7 +415,7 @@ function Chain({
       type,
       config: defaultConfig(type),
     };
-    if (type === "if_else") {
+    if (BRANCHING_NODE_TYPES.includes(type)) {
       step.whenTrue = [];
       step.whenFalse = [];
     }
@@ -420,7 +433,7 @@ function Chain({
             onEdit={() => onEdit(s)}
             onDelete={() => onChange(steps.filter((_, j) => j !== i))}
           />
-          {s.type === "if_else" && (
+          {BRANCHING_NODE_TYPES.includes(s.type) && (
             <div className="mt-1 ml-4 grid grid-cols-2 gap-3 border-l-2 border-dashed pl-3">
               <Branch
                 label="Yes"

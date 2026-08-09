@@ -57,6 +57,7 @@ export function AgentProfileSection() {
   );
   const [notifyEmail, setNotifyEmail] = useState("");
   const [websiteUrl, setWebsiteUrl] = useState("");
+  const [autoSendEnabled, setAutoSendEnabled] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [refreshingKb, setRefreshingKb] = useState(false);
@@ -93,6 +94,7 @@ export function AgentProfileSection() {
         setKeywordsText(data.profile.escalationKeywords.join(", "));
         setNotifyEmail(data.profile.escalationNotifyEmail ?? "");
         setWebsiteUrl(data.profile.websiteUrl ?? "");
+        setAutoSendEnabled(data.profile.autoSendEnabled === true);
       } else {
         // First-time setup — pre-fill the suggested persona as real
         // content (not just a placeholder) so the operator can save it
@@ -138,6 +140,7 @@ export function AgentProfileSection() {
             escalationKeywords: keywords,
             escalationNotifyEmail: notifyEmail.trim() || null,
             websiteUrl: websiteUrl.trim() || null,
+            autoSendEnabled,
           }),
         },
       );
@@ -285,6 +288,33 @@ export function AgentProfileSection() {
                 placeholder="you@example.com"
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border bg-muted/20 p-4">
+            <label className="flex cursor-pointer items-start gap-3">
+              <input
+                type="checkbox"
+                checked={autoSendEnabled}
+                onChange={(e) => setAutoSendEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4 cursor-pointer"
+              />
+              <span>
+                <span className="block text-sm font-medium">
+                  AI replies send automatically
+                </span>
+                <span className="mt-1 block text-[11px] text-muted-foreground">
+                  Off by default (the standard): every new conversation on
+                  SMS/WhatsApp starts in <strong>suggest mode</strong> — the
+                  AI drafts a reply, it shows up in Conversations with a
+                  &ldquo;Draft&rdquo; flag, and nothing sends until you (or a
+                  teammate) approve it. Turn this on to have new
+                  conversations auto-send instead. Either way, you can always
+                  override a single conversation&apos;s mode from the
+                  Conversations tab, and existing conversations keep whatever
+                  mode they&apos;re already in when you flip this.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">

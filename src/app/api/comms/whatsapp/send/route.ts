@@ -8,7 +8,9 @@ import {
 import { getChannelConfig } from "@/lib/comms/ai/agent";
 import { requireContactAccessible, requireUid } from "@/lib/comms/route-auth";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { resumeWorkflowRunAfterApproval } from "@/lib/workflows/engine";
 import type { SubAccountDoc } from "@/types";
+import type { ConversationDraft } from "@/types/conversations";
 
 type Body = { contactId?: string; body?: string };
 
@@ -119,6 +121,14 @@ export async function POST(request: Request) {
     );
   }
 
+  // If this send is approving an AI Booking + Nurture draft, capture the
+  // paused workflow run's id before sending so it can be resumed after.
+  const convoSnap = await db.doc(`conversations/${contactId}`).get();
+  const pendingDraft = convoSnap.data()?.pendingDraft as
+    | ConversationDraft
+    | undefined;
+  const draftWorkflowRunId = pendingDraft?.workflowRunId ?? null;
+
   let sid: string;
   let fromNumber: string;
   try {
@@ -194,6 +204,14 @@ export async function POST(request: Request) {
     body,
     pauseBot: true,
   });
+
+  if (draftWorkflowRunId) {
+    void resumeWorkflowRunAfterApproval(draftWorkflowRunId, {
+      approved: true,
+    }).catch((err) =>
+      console.warn("[whatsapp/send] workflow resume failed", err),
+    );
+  }
 
   return NextResponse.json({ ok: true, sid });
 }

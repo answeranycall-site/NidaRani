@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle,
+  CalendarClock,
   Globe,
   KeyRound,
   Loader2,
@@ -68,6 +69,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     subAccount?.missedCallTextBackEnabledByAgency === true;
   const initialGoogleReviews =
     subAccount?.googleReviewsSyncEnabledByAgency === true;
+  const initialAiBooking = subAccount?.aiBookingEnabledByAgency === true;
   // Inverse polarity — checked means "require own Twilio" (sharedSmsAllowed
   // === false), unchecked (default) means shared mode stays available.
   const initialRequireOwnTwilio = subAccount?.sharedSmsAllowed === false;
@@ -95,6 +97,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const [googleReviewsEnabled, setGoogleReviewsEnabled] = useState(
     initialGoogleReviews,
   );
+  const [aiBookingEnabled, setAiBookingEnabled] = useState(initialAiBooking);
   const [requireOwnTwilio, setRequireOwnTwilio] = useState(
     initialRequireOwnTwilio,
   );
@@ -156,6 +159,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       setCommunityEnabled(initialCommunity);
       setMissedCallEnabled(initialMissedCall);
       setGoogleReviewsEnabled(initialGoogleReviews);
+      setAiBookingEnabled(initialAiBooking);
       setRequireOwnTwilio(initialRequireOwnTwilio);
       setBroadcastsHidden(initialBroadcastsHidden);
       setWebsiteHidden(initialWebsiteHidden);
@@ -175,6 +179,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialCommunity,
     initialMissedCall,
     initialGoogleReviews,
+    initialAiBooking,
     initialRequireOwnTwilio,
     initialBroadcastsHidden,
     initialWebsiteHidden,
@@ -198,6 +203,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const communityDirty = communityEnabled !== initialCommunity;
   const missedCallDirty = missedCallEnabled !== initialMissedCall;
   const googleReviewsDirty = googleReviewsEnabled !== initialGoogleReviews;
+  const aiBookingDirty = aiBookingEnabled !== initialAiBooking;
   const requireOwnTwilioDirty =
     requireOwnTwilio !== initialRequireOwnTwilio;
   const broadcastsHiddenDirty = broadcastsHidden !== initialBroadcastsHidden;
@@ -216,6 +222,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     communityDirty ||
     missedCallDirty ||
     googleReviewsDirty ||
+    aiBookingDirty ||
     requireOwnTwilioDirty ||
     broadcastsHiddenDirty ||
     websiteHiddenDirty ||
@@ -247,6 +254,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         communityEnabled?: boolean;
         missedCallTextBackEnabled?: boolean;
         googleReviewsSyncEnabled?: boolean;
+        aiBookingEnabled?: boolean;
         sharedSmsAllowed?: boolean;
         broadcastsHiddenWhenDisabled?: boolean;
         websiteHiddenWhenDisabled?: boolean;
@@ -266,6 +274,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         payload.missedCallTextBackEnabled = missedCallEnabled;
       if (googleReviewsDirty)
         payload.googleReviewsSyncEnabled = googleReviewsEnabled;
+      if (aiBookingDirty) payload.aiBookingEnabled = aiBookingEnabled;
       if (requireOwnTwilioDirty)
         payload.sharedSmsAllowed = !requireOwnTwilio;
       if (broadcastsHiddenDirty)
@@ -373,6 +382,13 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
           googleReviewsEnabled
             ? "Google Reviews Sync enabled."
             : "Google Reviews Sync disabled. Connected account + synced reviews preserved.",
+        );
+      }
+      if (aiBookingDirty) {
+        parts.push(
+          aiBookingEnabled
+            ? "AI Booking + Nurture enabled."
+            : "AI Booking + Nurture disabled. New booking/nurture drafts blocked until re-enabled.",
         );
       }
       if (requireOwnTwilioDirty) {
@@ -624,6 +640,23 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
                 enable.
               </span>
             )}
+          </GateToggle>
+
+          <GateToggle
+            checked={aiBookingEnabled}
+            onChange={setAiBookingEnabled}
+            disabled={saving}
+            icon={<CalendarClock className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />}
+            title="AI Booking + Nurture"
+          >
+            When enabled, this sub-account can build a Workflow that has the AI
+            propose appointment times over SMS from real Booking Page
+            availability, book the slot once the contact picks one, and send a
+            multi-day follow-up sequence — every AI-drafted message queues in
+            Conversations for approval before it sends. Consumes AI (OpenRouter)
+            + SMS resources like the other AI channels. Disabling makes those
+            workflow steps skip instead of drafting; nothing is torn down, so
+            re-enabling resumes instantly.
           </GateToggle>
 
           <GateToggle

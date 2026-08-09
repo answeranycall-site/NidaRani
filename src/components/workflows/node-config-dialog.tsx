@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { PIPELINE_STAGES } from "@/types/deals";
+import { usePipelineStages } from "@/hooks/use-pipeline-stages";
 import { NODE_LABELS } from "@/lib/workflows/catalog";
 import { ConditionsEditor } from "./conditions-editor";
 import type { BuilderStep } from "@/lib/workflows/builder-tree";
@@ -29,6 +29,13 @@ export interface WhatsappTemplateOption {
   variables: WhatsappTemplateVariable[];
 }
 
+/** Published Booking Page, loaded once and passed down for the
+ *  `ai_propose_booking` picker. `id` is the page's slug. */
+export interface BookingPageOption {
+  id: string;
+  name: string;
+}
+
 function deriveWait(seconds: number): { value: number; unit: number } {
   if (seconds && seconds % 86_400 === 0)
     return { value: seconds / 86_400, unit: 86_400 };
@@ -40,11 +47,13 @@ function deriveWait(seconds: number): { value: number; unit: number } {
 export function NodeConfigDialog({
   step,
   whatsappTemplates,
+  bookingPages,
   onClose,
   onSave,
 }: {
   step: BuilderStep | null;
   whatsappTemplates: WhatsappTemplateOption[];
+  bookingPages: BookingPageOption[];
   onClose: () => void;
   onSave: (config: Cfg) => void;
 }) {
@@ -52,6 +61,10 @@ export function NodeConfigDialog({
   useEffect(() => {
     if (step) setCfg({ ...step.config });
   }, [step]);
+  // Sub-account label/order overrides — same source of truth the Pipeline
+  // board itself reads, so a stage renamed under Settings shows its new
+  // label here too (ids never change, only the display label).
+  const pipelineStages = usePipelineStages();
 
   if (!step) return null;
   const set = (patch: Cfg) => setCfg((c) => ({ ...c, ...patch }));
@@ -233,13 +246,162 @@ export function NodeConfigDialog({
                 onChange={(e) => set({ stage: e.target.value })}
                 className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
               >
-                {PIPELINE_STAGES.map((s) => (
+                {pipelineStages.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
                   </option>
                 ))}
               </select>
             </Field>
+          )}
+
+          {step.type === "move_deal_stage" && (
+            <>
+              <Field
+                label="Move (or create) the contact's deal to"
+                hint="Finds the contact's open deal and moves it here, or creates one if it has none yet."
+              >
+                <select
+                  value={str("stageId") || "new"}
+                  onChange={(e) => set({ stageId: e.target.value })}
+                  className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                >
+                  {pipelineStages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field
+                label="Deal title (only used if a new deal is created)"
+                hint="Leave blank for a sensible default."
+              >
+                <Input
+                  value={str("dealTitle")}
+                  placeholder="e.g. Appointment request"
+                  onChange={(e) => set({ dealTitle: e.target.value })}
+                />
+              </Field>
+              <Field label="Deal value (only used if a new deal is created)">
+                <Input
+                  type="number"
+                  min={0}
+                  className="w-32"
+                  value={Number(cfg.dealValue ?? 0)}
+                  onChange={(e) => set({ dealValue: Number(e.target.value) })}
+                />
+              </Field>
+            </>
+          )}
+
+          {step.type === "ai_propose_booking" && (
+            <>
+              <Field
+                label="Booking page"
+                hint={
+                  bookingPages.length === 0
+                    ? "No published booking pages yet — publish one under Calendar → Booking Pages first."
+                    : "The AI offers only real, open slots from this page's availability."
+                }
+              >
+                <select
+                  value={str("bookingPageId")}
+                  onChange={(e) => set({ bookingPageId: e.target.value })}
+                  className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                >
+                  <option value="">Choose a booking page…</option>
+                  {bookingPages.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <div className="flex items-center gap-3">
+                <Field label="Days ahead to search">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={30}
+                    className="w-24"
+                    value={Number(cfg.daysAhead ?? 7)}
+                    onChange={(e) => set({ daysAhead: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Slots to offer">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={5}
+                    className="w-24"
+                    value={Number(cfg.maxSlotOptions ?? 3)}
+                    onChange={(e) =>
+                      set({ maxSlotOptions: Number(e.target.value) })
+                    }
+                  />
+                </Field>
+              </div>
+              <Field
+                label="Tone (optional)"
+                hint="Extra style guidance for the AI-drafted text, e.g. “casual and upbeat”."
+              >
+                <Input
+                  value={str("toneInstructions")}
+                  onChange={(e) => set({ toneInstructions: e.target.value })}
+                />
+              </Field>
+              <p className="text-muted-foreground text-xs">
+                Every AI-drafted message from this step queues in Conversations
+                for you to approve, edit, or discard before it sends — nothing
+                goes out automatically. Place{" "}
+                <strong className="text-foreground">
+                  &ldquo;AI: Wait for booking reply&rdquo;
+                </strong>{" "}
+                right after this step, then{" "}
+                <strong className="text-foreground">
+                  &ldquo;AI: Booking outcome&rdquo;
+                </strong>{" "}
+                after that to branch on whether the contact actually booked.
+              </p>
+            </>
+          )}
+
+          {step.type === "ai_await_booking_reply" && (
+            <div className="text-muted-foreground space-y-2 text-sm">
+              <p>
+                Place this right after &ldquo;AI: Propose appointment
+                times&rdquo;. Once you approve that proposal and it sends,
+                this step starts waiting for the contact to reply picking a
+                slot. If the proposal is declined, or nobody approves it in
+                time, this step passes straight through.
+              </p>
+              <p>No config of its own.</p>
+            </div>
+          )}
+
+          {step.type === "ai_booking_resolver" && (
+            <div className="text-muted-foreground space-y-2 text-sm">
+              <p>
+                Place this right after &ldquo;AI: Wait for booking
+                reply&rdquo;. Branches{" "}
+                <strong className="text-foreground">Yes</strong> once the
+                contact&apos;s reply is matched to a slot and the appointment
+                is booked, or{" "}
+                <strong className="text-foreground">No</strong> if they
+                declined, replied with something unreadable, or the reply
+                window lapsed. Add{" "}
+                <strong className="text-foreground">
+                  &ldquo;Move pipeline stage&rdquo;
+                </strong>{" "}
+                or{" "}
+                <strong className="text-foreground">
+                  &ldquo;Move deal to stage&rdquo;
+                </strong>{" "}
+                on the Yes branch, and a human hand-off (e.g. &ldquo;Text the
+                owner&rdquo;) on the No branch.
+              </p>
+            </div>
           )}
 
           {step.type === "update_field" && (

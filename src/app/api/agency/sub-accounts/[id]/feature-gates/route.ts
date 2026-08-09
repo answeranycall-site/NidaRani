@@ -44,6 +44,7 @@ interface PatchBody {
   communityEnabled?: boolean;
   missedCallTextBackEnabled?: boolean;
   googleReviewsSyncEnabled?: boolean;
+  aiBookingEnabled?: boolean;
   // Inverse-polarity gate: true (default) = this sub-account may use the
   // agency's shared Twilio sender; false = it must bring its own dedicated
   // number. See SubAccountDoc.sharedSmsAllowed.
@@ -89,6 +90,7 @@ export async function PATCH(
   const wantsCommunity = typeof body.communityEnabled === "boolean";
   const wantsMissedCall = typeof body.missedCallTextBackEnabled === "boolean";
   const wantsGoogleReviews = typeof body.googleReviewsSyncEnabled === "boolean";
+  const wantsAiBooking = typeof body.aiBookingEnabled === "boolean";
   const wantsSharedSms = typeof body.sharedSmsAllowed === "boolean";
   const wantsBroadcastsHidden =
     typeof body.broadcastsHiddenWhenDisabled === "boolean";
@@ -110,6 +112,7 @@ export async function PATCH(
     !wantsCommunity &&
     !wantsMissedCall &&
     !wantsGoogleReviews &&
+    !wantsAiBooking &&
     !wantsSharedSms &&
     !wantsBroadcastsHidden &&
     !wantsWebsiteHidden &&
@@ -270,6 +273,14 @@ export async function PATCH(
     updates.googleReviewsSyncEnabledByAgency = body.googleReviewsSyncEnabled;
   }
 
+  if (wantsAiBooking) {
+    // No tear-down — consumes AI (OpenRouter) + SMS resources like the other
+    // AI channels. Disabling makes the two drafting node executors skip
+    // (not error) and locks the Calendar tab's entry point; re-enabling
+    // resumes instantly.
+    updates.aiBookingEnabledByAgency = body.aiBookingEnabled;
+  }
+
   if (wantsSharedSms) {
     // No tear-down — this only affects future sends. A sub-account that's
     // been cut off from shared mode simply gets a friendly error until it
@@ -319,6 +330,7 @@ export async function PATCH(
     ...(wantsGoogleReviews
       ? { googleReviewsSyncEnabled: body.googleReviewsSyncEnabled }
       : {}),
+    ...(wantsAiBooking ? { aiBookingEnabled: body.aiBookingEnabled } : {}),
     ...(wantsSharedSms ? { sharedSmsAllowed: body.sharedSmsAllowed } : {}),
     ...(wantsBroadcastsHidden
       ? { broadcastsHiddenWhenDisabled: body.broadcastsHiddenWhenDisabled }

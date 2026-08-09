@@ -228,6 +228,21 @@ export interface SubAccountDoc {
    */
   missedCallTextBackEnabledByAgency?: boolean;
   /**
+   * Agency-controlled gate for AI Booking + Nurture — the Workflow Builder
+   * `ai_propose_booking` / `ai_await_booking_reply` / `ai_booking_resolver`
+   * node types (the AI books an appointment over SMS from real Booking Page
+   * availability, approval-gated in Conversations) plus the Calendar tab's
+   * "Set up AI Booking + Nurture" entry point. Only the agency owner can flip
+   * it (PATCH /api/agency/sub-accounts/[id]/feature-gates). When `false` (or
+   * undefined on legacy docs): the two drafting node executors return early
+   * (skip, don't error the run) and the Calendar entry point renders a
+   * "Locked by your agency" state. No tear-down on disable — consumes AI
+   * (OpenRouter) + SMS resources like the other AI channels, same wiring
+   * pattern as `whatsappEnabledByAgency`. Defaults to `false` at creation
+   * (explicit allowlist). Read `=== true` so legacy docs stay locked.
+   */
+  aiBookingEnabledByAgency?: boolean;
+  /**
    * Agency-controlled gate for Google Reviews Sync — pulling the sub-account's
    * actual Google Business Profile reviews (business info + review feed) into
    * the CRM and texting the owner when a new review lands. Only the agency

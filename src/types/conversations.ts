@@ -50,6 +50,29 @@ export type ConversationStatus = "open" | "closed" | "snoozed";
 export type ConversationBotMode = "off" | "suggest" | "auto";
 
 /**
+ * What kind of draft this is. "reply" (default, absent on legacy docs) is an
+ * ordinary suggest-mode AI reply. The other three are written by Workflow
+ * Builder's AI Booking + Nurture chain (`lib/workflows/engine.ts::
+ * armApprovalWait`) instead of the SMS/WhatsApp orchestrator, and carry a
+ * `workflowRunId` so approving/discarding resumes the paused run.
+ */
+export type ConversationDraftIntent =
+  | "reply"
+  | "booking_proposal"
+  | "booking_confirmation"
+  | "nurture_step";
+
+/** One offered appointment slot, pre-formatted for display. */
+export interface ConversationDraftSlotOption {
+  /** ISO instant. */
+  startAt: string;
+  /** ISO instant. */
+  endAt: string;
+  /** Pre-formatted in the booking page's own timezone, e.g. "Tue Aug 4, 2pm". */
+  label: string;
+}
+
+/**
  * A bot-generated reply awaiting human approval (suggest mode). Cleared when
  * approved (a human send clears it server-side) or discarded.
  */
@@ -59,6 +82,20 @@ export interface ConversationDraft {
   model: string;
   tokens: number;
   createdAt: Timestamp | FieldValue | null;
+  /** Absent = ordinary "reply" draft. */
+  intent?: ConversationDraftIntent;
+  /**
+   * Set only for a draft written by a paused Workflow Builder run (the AI
+   * Booking + Nurture chain). Approving/discarding this draft resumes that
+   * run — see `lib/workflows/engine.ts::resumeWorkflowRunAfterApproval` and
+   * `POST /api/conversations/[contactId]/decline-draft`. Absent/null for
+   * ordinary suggest-mode replies, which never pause a run.
+   */
+  workflowRunId?: string | null;
+  /** Only set when `intent === "booking_proposal"` — read-only reference
+   *  chips the draft card renders so the operator can see which slots the
+   *  AI is offering before approving. */
+  bookingSlotOptions?: ConversationDraftSlotOption[] | null;
 }
 
 export interface ConversationDoc {

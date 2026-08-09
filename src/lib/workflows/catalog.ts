@@ -34,6 +34,10 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
   review_rating_request: "Ask for a rating (Google review gate)",
   review_rating_reminder: "Remind if no reply (7 days)",
   webhook: "Webhook",
+  ai_propose_booking: "AI: Propose appointment times (SMS)",
+  ai_await_booking_reply: "AI: Wait for booking reply",
+  ai_booking_resolver: "AI: Booking outcome",
+  move_deal_stage: "Move deal to stage",
 };
 
 /**
@@ -50,6 +54,7 @@ export const NODE_REQUIREMENT: Partial<Record<WorkflowNodeType, NodeRequirement>
     send_sms: "sms",
     notify_owner_sms: "sms",
     whatsapp_template: "whatsapp",
+    ai_propose_booking: "sms",
   };
 
 /** Step types offerable from the "add step" menu, in display order. */
@@ -61,6 +66,7 @@ export const ADDABLE_TYPES: WorkflowNodeType[] = [
   "add_tag",
   "remove_tag",
   "move_stage",
+  "move_deal_stage",
   "update_field",
   "create_task",
   "notify",
@@ -68,6 +74,9 @@ export const ADDABLE_TYPES: WorkflowNodeType[] = [
   "review_rating_request",
   "review_rating_reminder",
   "webhook",
+  "ai_propose_booking",
+  "ai_await_booking_reply",
+  "ai_booking_resolver",
   "if_else",
   "goal",
 ];
@@ -113,6 +122,20 @@ export function defaultConfig(type: WorkflowNodeType): Record<string, unknown> {
       return {};
     case "webhook":
       return { url: "" };
+    case "ai_propose_booking":
+      return {
+        bookingPageId: "",
+        daysAhead: 7,
+        maxSlotOptions: 3,
+        toneInstructions: "",
+        approvalTimeoutSeconds: 86_400,
+        replyTimeoutSeconds: 172_800,
+      };
+    case "ai_await_booking_reply":
+    case "ai_booking_resolver":
+      return {};
+    case "move_deal_stage":
+      return { stageId: "new", dealTitle: "", dealValue: 0 };
     default:
       return {};
   }
@@ -159,6 +182,16 @@ export function nodeSummary(step: BuilderStep): string {
       return (c.url as string) || "No URL yet";
     case "goal":
       return "Ends the workflow here";
+    case "ai_propose_booking":
+      return c.bookingPageId
+        ? `Propose ${(c.maxSlotOptions as number) || 3} slot(s) from "${c.bookingPageId}"`
+        : "Choose a booking page";
+    case "ai_await_booking_reply":
+      return "Waits for the contact to pick a slot (after approval)";
+    case "ai_booking_resolver":
+      return "Branches on whether the booking landed";
+    case "move_deal_stage":
+      return `Deal → ${(c.stageId as string) || "?"}`;
     default:
       return "";
   }

@@ -63,18 +63,48 @@ export function ConversationDraftCard({
   async function discard() {
     setBusy("discard");
     try {
-      await discardConversationDraft(contact.id);
+      if (draft.workflowRunId) {
+        // Workflow-sourced draft — resume the paused run via the server
+        // route (needs the Admin SDK), not the plain client-side discard.
+        await fetch(`/api/conversations/${contact.id}/decline-draft`, {
+          method: "POST",
+        });
+      } else {
+        await discardConversationDraft(contact.id);
+      }
     } finally {
       setBusy(null);
     }
   }
 
+  const headline =
+    draft.intent === "booking_proposal"
+      ? "AI booking proposal · edit before sending"
+      : draft.intent === "booking_confirmation"
+        ? "AI booking confirmation · edit before sending"
+        : draft.intent === "nurture_step"
+          ? "AI follow-up · edit before sending"
+          : `AI suggested reply · ${LABEL[draft.channel]} · edit before sending`;
+
   return (
     <div className="border-t border-amber-500/30 bg-amber-500/5 px-4 py-3">
       <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400">
         <Sparkles className="h-3.5 w-3.5" />
-        AI suggested reply · {LABEL[draft.channel]} · edit before sending
+        {headline}
       </div>
+      {draft.intent === "booking_proposal" &&
+        !!draft.bookingSlotOptions?.length && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {draft.bookingSlotOptions.map((slot) => (
+              <span
+                key={slot.startAt}
+                className="rounded-full border border-amber-500/40 bg-background px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-400"
+              >
+                {slot.label}
+              </span>
+            ))}
+          </div>
+        )}
       <Textarea
         value={body}
         onChange={(e) => setBody(e.target.value)}

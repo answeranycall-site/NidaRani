@@ -1,4 +1,5 @@
 import type { Timestamp, FieldValue } from "firebase/firestore";
+import type { PipelineStageId } from "./deals";
 
 /**
  * Workflow Builder — the general automation engine that replaces the legacy
@@ -76,7 +77,23 @@ export type WorkflowNodeType =
   | "notify_owner_sms"
   | "review_rating_request"
   | "review_rating_reminder"
-  | "webhook";
+  | "webhook"
+  | "ai_propose_booking"
+  | "ai_await_booking_reply"
+  | "ai_booking_resolver"
+  | "move_deal_stage";
+
+/**
+ * Node types whose `next` graph continuation lives in `branches` rather than
+ * `next` — the builder tree flattener/parser and the UI's chain renderer
+ * both need to know this set to route branch-vs-linear steps correctly.
+ * `if_else` evaluates a condition; `ai_booking_resolver` branches on whether
+ * an AI-initiated SMS booking (see `ai_propose_booking`) actually landed.
+ */
+export const BRANCHING_NODE_TYPES: readonly WorkflowNodeType[] = [
+  "if_else",
+  "ai_booking_resolver",
+];
 
 export interface WorkflowNode {
   id: string;
@@ -85,7 +102,7 @@ export interface WorkflowNode {
   config: Record<string, unknown>;
   /** Next node for a linear step. Null/absent ends the run. */
   next?: string | null;
-  /** Branch targets for an `if_else` node. */
+  /** Branch targets for a branching node type (see `BRANCHING_NODE_TYPES`). */
   branches?: { whenTrue: string | null; whenFalse: string | null };
 }
 
@@ -244,3 +261,64 @@ export type ReviewRatingRequestConfig = Record<string, never>;
  * lib/workflows/engine.ts::execReviewRatingReminder for the full picture.
  */
 export type ReviewRatingReminderConfig = Record<string, never>;
+
+/**
+ * AI Booking + Nurture — SMS booking chain (Phase 1). Every AI-drafted
+ * message this chain sends queues in Conversations for human approval
+ * before it goes out (no auto-send); see `lib/workflows/engine.ts::
+ * armApprovalWait`. Reads the sub-account's real Booking Page availability
+ * (`lib/booking/availability.ts::computeAvailability`), so proposed slots
+ * are always real, never invented by the model.
+ *
+ * The chain is 3 node types because a paused node can only be woken by an
+ * external event (an approval, or the contact's reply) by handing off to a
+ * DIFFERENT node id — `runStep`'s per-nodeId idempotency guard means a given
+ * node's executor body runs exactly once, ever, in a run:
+ *
+ *   ai_propose_booking → ai_await_booking_reply → ai_booking_resolver
+ *        (drafts,             (drafts nothing —        (branch node —
+ *         arms approval-       arms the reply-wait       whenTrue once
+ *         wait)                once approved)            run.context.booking
+ *                                                         is populated)
+ *
+ * Place `move_deal_stage` (or any other node) on the resolver's `whenTrue`
+ * branch; wire `whenFalse` to a human-handoff step (e.g. `notify_owner_sms`).
+ */
+export interface AiProposeBookingConfig {
+  /** subAccounts/{id}/bookingPages/{slug} — the slug to offer slots from. */
+  bookingPageId: string;
+  /** How many days out to look for open slots. */
+  daysAhead: number;
+  /** Max slot options to offer in the proposal SMS. */
+  maxSlotOptions: number;
+  /** Optional extra tone/style guidance for the AI-drafted proposal text. */
+  toneInstructions?: string;
+  /** How long the drafted proposal waits for operator approval before the
+   *  run falls through to `ai_booking_resolver`'s `whenFalse`. Default 24h. */
+  approvalTimeoutSeconds?: number;
+  /** Once approved + sent, how long to wait for the contact to pick a slot
+   *  before falling through to `whenFalse`. Default 48h. */
+  replyTimeoutSeconds?: number;
+}
+
+/** No config of its own — see `AiProposeBookingConfig`'s doc comment. */
+export type AiAwaitBookingReplyConfig = Record<string, never>;
+
+/** No config of its own (branch node, like `if_else`) — see
+ *  `AiProposeBookingConfig`'s doc comment. */
+export type AiBookingResolverConfig = Record<string, never>;
+
+/**
+ * Finds the contact's open (non-terminal) deal and moves it to `stageId`, or
+ * creates one if none exists. General-purpose (not booking-specific) —
+ * reuses `lib/server/deals-service.ts::createDealServerSide` /
+ * `updateDealServerSide` so webhooks + activity logging stay consistent with
+ * every other deal write path.
+ */
+export interface MoveDealStageConfig {
+  stageId: PipelineStageId;
+  /** Only used when creating a new deal (no open deal found). */
+  dealTitle?: string;
+  /** Only used when creating a new deal. Defaults to 0. */
+  dealValue?: number;
+}

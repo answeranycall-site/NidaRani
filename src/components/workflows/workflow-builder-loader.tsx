@@ -9,7 +9,10 @@ import {
   type BuilderInitial,
   type BuilderReadiness,
 } from "./workflow-builder";
-import type { WhatsappTemplateOption } from "./node-config-dialog";
+import type {
+  BookingPageOption,
+  WhatsappTemplateOption,
+} from "./node-config-dialog";
 import type { WhatsappTemplateVariable } from "@/types/whatsapp-templates";
 
 /**
@@ -36,6 +39,7 @@ export function WorkflowBuilderLoader({
   const [whatsappTemplates, setWhatsappTemplates] = useState<
     WhatsappTemplateOption[]
   >([]);
+  const [bookingPages, setBookingPages] = useState<BookingPageOption[]>([]);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -97,6 +101,24 @@ export function WorkflowBuilderLoader({
       } catch {
         /* templates optional — picker just shows "no approved templates" */
       }
+      try {
+        const snap = await getDocs(
+          query(
+            collection(getFirebaseDb(), "subAccounts", saId, "bookingPages"),
+            where("status", "==", "published"),
+          ),
+        );
+        if (alive) {
+          setBookingPages(
+            snap.docs.map((doc) => ({
+              id: doc.id,
+              name: (doc.data().name as string) || doc.id,
+            })),
+          );
+        }
+      } catch {
+        /* booking pages optional — picker just shows "no published pages" */
+      }
     })();
     return () => {
       alive = false;
@@ -120,6 +142,7 @@ export function WorkflowBuilderLoader({
       forms={forms}
       readiness={readiness}
       whatsappTemplates={whatsappTemplates}
+      bookingPages={bookingPages}
     />
   );
 }

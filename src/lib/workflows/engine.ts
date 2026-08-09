@@ -23,13 +23,24 @@ import { reserveTags } from "@/lib/contacts/tag-registry";
 import { maybeSendReviewRequest } from "@/lib/reviews/request";
 import { RATING_REPLY_WINDOW_MS } from "@/lib/reviews/constants";
 import { renderOwnerNotify } from "@/lib/reviews/owner-notify";
+import { aiIsConfigured, callAi } from "@/lib/comms/ai/openrouter";
+import { setConversationDraft } from "@/lib/server/conversations-service";
+import {
+  computeAvailability,
+  computeUnionAvailability,
+  type BusyEvent,
+} from "@/lib/booking/availability";
 import { evalConditionGroup } from "./conditions";
 import type { Contact } from "@/types/contacts";
 import type { AgencyDoc, SubAccountDoc } from "@/types";
 import type { WhatsappTemplateDoc } from "@/types/whatsapp-templates";
+import type { BookingPage } from "@/types/booking";
+import type { ConversationDraftSlotOption } from "@/types/conversations";
 import type {
+  AiProposeBookingConfig,
   CreateTaskConfig,
   IfElseConfig,
+  MoveDealStageConfig,
   MoveStageConfig,
   NotifyConfig,
   NotifyOwnerSmsConfig,
@@ -705,6 +716,374 @@ const execWebhook: NodeExecutor = async (ctx) => {
   }
 };
 
+/* ------------------- AI Booking + Nurture (Phase 1) --------------------- */
+
+/**
+ * Shared "draft an AI message + queue it for human approval" primitive used
+ * by `ai_propose_booking` (and, in a later phase, the nurture-step nodes).
+ * Writes the draft into the SAME Conversations approval queue ordinary
+ * suggest-mode AI replies use (`conversations/{contactId}.pendingDraft`),
+ * tagged with `workflowRunId` so the approve/discard actions know to resume
+ * this paused run — see `resumeWorkflowRunAfterApproval` below and
+ * `POST /api/conversations/[contactId]/decline-draft`.
+ *
+ * Always returns `{kind:"wait"}` on success — per `runStep`'s dispatch,
+ * that makes `run.currentNodeId` become `node.next` (a "relay" node like
+ * `ai_await_booking_reply`), which is what actually gets woken up early by
+ * the approval, or by its own timeout otherwise. See the doc comment on
+ * `AiProposeBookingConfig` in types/workflows.ts for the full picture.
+ */
+async function armApprovalWait(
+  ctx: NodeContext,
+  params: {
+    intent: "booking_proposal" | "nurture_step";
+    body: string;
+    model: string;
+    tokens: number;
+    bookingSlotOptions?: ConversationDraftSlotOption[] | null;
+    timeoutSeconds: number;
+  },
+): Promise<{ result: StepResult; log: string }> {
+  const contact = ctx.contact;
+  if (contact.smsOptedOut) {
+    return { result: { kind: "next" }, log: "skipped:opt_out" };
+  }
+  if (!contact.phone) {
+    return { result: { kind: "next" }, log: "skipped:no_phone" };
+  }
+  const hasSms =
+    subAccountTwilioIsConfigured(ctx.subAccount?.twilioConfig) ||
+    (smsIsConfigured() &&
+      (await agencyAllowsSharedSms(ctx.subAccount?.agencyId)));
+  if (!hasSms) {
+    return { result: { kind: "next" }, log: "error:sms_not_configured" };
+  }
+
+  await setConversationDraft({
+    contactId: contact.id,
+    subAccountId: ctx.subAccountId,
+    agencyId: ctx.agencyId,
+    contactName: contact.name ?? "",
+    contactPhone: contact.phone,
+    channel: "sms",
+    body: params.body,
+    model: params.model,
+    tokens: params.tokens,
+    workflowRunId: ctx.runId,
+    intent: params.intent,
+    bookingSlotOptions: params.bookingSlotOptions ?? null,
+  });
+
+  await getAdminDb()
+    .doc(`contacts/${contact.id}`)
+    .set(
+      {
+        pendingWorkflowApprovalRunId: ctx.runId,
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+  return {
+    result: { kind: "wait", seconds: Math.max(60, Math.floor(params.timeoutSeconds)) },
+    log: `ok:awaiting_approval:${params.intent}`,
+  };
+}
+
+/** Stash payload carried on `run.context.bookingProposal` from
+ *  `ai_propose_booking` to `ai_await_booking_reply` — the exact slots that
+ *  were offered, so the reply-classifier (`lib/booking/ai-booking-reply.ts`)
+ *  can match a contact's reply against them once the proposal is approved. */
+interface BookingProposalContext {
+  bookingPageId: string;
+  slotOptions: ConversationDraftSlotOption[];
+  replyTimeoutSeconds: number;
+}
+
+/**
+ * Proposes appointment slots over SMS from the sub-account's real Booking
+ * Page availability (`computeAvailability` — never invents a time), drafts
+ * the message via the LLM (falling back to a plain templated list if the
+ * LLM call fails or isn't configured), and queues it for approval. See the
+ * `AiProposeBookingConfig` doc comment in types/workflows.ts for the full
+ * 3-node chain this participates in.
+ */
+const execAiProposeBooking: NodeExecutor = async (ctx) => {
+  const cfg = ctx.node.config as unknown as AiProposeBookingConfig;
+  const contact = ctx.contact;
+  if (contact.smsOptedOut) {
+    return { result: { kind: "next" }, log: "skipped:opt_out" };
+  }
+  if (!contact.phone) {
+    return { result: { kind: "next" }, log: "skipped:no_phone" };
+  }
+  if (ctx.subAccount?.aiBookingEnabledByAgency !== true) {
+    return { result: { kind: "next" }, log: "error:ai_booking_not_enabled" };
+  }
+  if (!cfg.bookingPageId) {
+    return { result: { kind: "next" }, log: "skipped:no_booking_page" };
+  }
+
+  const pageSnap = await getAdminDb()
+    .doc(`subAccounts/${ctx.subAccountId}/bookingPages/${cfg.bookingPageId}`)
+    .get();
+  if (!pageSnap.exists) {
+    return { result: { kind: "next" }, log: "error:booking_page_not_found" };
+  }
+  const page = pageSnap.data() as BookingPage;
+  if (page.status !== "published") {
+    return { result: { kind: "next" }, log: "error:booking_page_not_published" };
+  }
+
+  const now = new Date();
+  const toInstant = new Date(
+    now.getTime() + Math.max(1, cfg.daysAhead || 7) * 24 * 60 * 60_000,
+  );
+  const busySnap = await getAdminDb()
+    .collection("events")
+    .where("subAccountId", "==", ctx.subAccountId)
+    .where("startAt", ">=", now)
+    .where("startAt", "<=", toInstant)
+    .get();
+  const busy: BusyEvent[] = [];
+  for (const d of busySnap.docs) {
+    const e = d.data();
+    const s = (e.status as string | undefined) ?? "scheduled";
+    if (s !== "scheduled" && s !== "awaiting_payment") continue;
+    const startVal = (e.startAt as { toDate?: () => Date } | null)?.toDate?.();
+    const endVal = (e.endAt as { toDate?: () => Date } | null)?.toDate?.();
+    if (!(startVal instanceof Date) || !(endVal instanceof Date)) continue;
+    busy.push({ startAt: startVal, endAt: endVal });
+  }
+
+  const hosts = page.hosts ?? [];
+  const slots =
+    hosts.length > 0
+      ? computeUnionAvailability({
+          page,
+          now,
+          toInstant,
+          busy: busy.map((b) => ({ ...b, assignedToUid: null })),
+          hostUids: hosts.map((h) => h.uid),
+        })
+      : computeAvailability({ page, now, toInstant, busy });
+
+  const maxSlots = Math.max(1, Math.min(5, cfg.maxSlotOptions || 3));
+  const offered = slots.slice(0, maxSlots);
+  if (offered.length === 0) {
+    return { result: { kind: "next" }, log: "skipped:no_availability" };
+  }
+
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: page.timezone,
+    timeZoneName: "short",
+  });
+  const slotOptions: ConversationDraftSlotOption[] = offered.map((s) => ({
+    startAt: s.startAt.toISOString(),
+    endAt: s.endAt.toISOString(),
+    label: fmt.format(s.startAt),
+  }));
+  const listText = slotOptions.map((s, i) => `${i + 1}) ${s.label}`).join("\n");
+
+  let draftText = `Want to grab some time? Reply with a number:\n${listText}`;
+  let model = "template";
+  let tokens = 0;
+  if (aiIsConfigured()) {
+    const businessName = ctx.subAccount?.name || ctx.owner.displayName || "our team";
+    const systemPrompt = [
+      `You are drafting a short SMS on behalf of ${businessName}, offering a lead a few appointment times.`,
+      `Offer ONLY these real, available slots — never invent a time or suggest anything not on this list:`,
+      listText,
+      `Ask them to reply with the number of the time that works for them.`,
+      cfg.toneInstructions ? `Tone: ${cfg.toneInstructions}` : "",
+      `Keep it under 320 characters. No emoji, no markdown, no links.`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+    try {
+      const completion = await callAi({
+        maxTokens: 200,
+        temperature: 0.4,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: "Draft the SMS now." },
+        ],
+      });
+      if (completion.text.trim()) {
+        draftText = completion.text.trim();
+        model = completion.model;
+        tokens = completion.totalTokens;
+      }
+    } catch (err) {
+      console.warn(
+        "[workflows] ai_propose_booking draft failed, using template fallback",
+        err,
+      );
+    }
+  }
+
+  const { result, log } = await armApprovalWait(ctx, {
+    intent: "booking_proposal",
+    body: draftText,
+    model,
+    tokens,
+    bookingSlotOptions: slotOptions,
+    timeoutSeconds: Math.max(300, cfg.approvalTimeoutSeconds ?? 86_400),
+  });
+
+  if (result.kind === "wait") {
+    // Stash the offered slots for ai_await_booking_reply to pick up once
+    // (and only if) the proposal is actually approved + sent.
+    const proposal: BookingProposalContext = {
+      bookingPageId: cfg.bookingPageId,
+      slotOptions,
+      replyTimeoutSeconds: Math.max(300, cfg.replyTimeoutSeconds ?? 172_800),
+    };
+    await getAdminDb()
+      .collection("workflowRuns")
+      .doc(ctx.runId)
+      .set(
+        {
+          context: { ...ctx.triggerContext, bookingProposal: proposal },
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  }
+  return { result, log };
+};
+
+/**
+ * Sits at `ai_propose_booking.next` — reached early once the operator
+ * approves the proposal (SMS actually sends) or late via the approval
+ * timeout. Only the approved path arms the reply-wait; a decline/timeout
+ * falls straight through so `ai_booking_resolver` sees no `booking` context
+ * and branches `whenFalse` in the same tick.
+ */
+const execAiAwaitBookingReply: NodeExecutor = async (ctx) => {
+  const approvalOutcome = ctx.triggerContext?.approvalOutcome as
+    | { approved: boolean }
+    | undefined;
+  const proposal = ctx.triggerContext?.bookingProposal as
+    | BookingProposalContext
+    | undefined;
+
+  if (!approvalOutcome?.approved || !proposal) {
+    return {
+      result: { kind: "next" },
+      log: approvalOutcome ? "skipped:declined" : "skipped:approval_timeout",
+    };
+  }
+
+  await getAdminDb()
+    .doc(`contacts/${ctx.contact.id}`)
+    .set(
+      {
+        pendingBookingWorkflowRunId: ctx.runId,
+        pendingBookingPageId: proposal.bookingPageId,
+        pendingBookingSlotOptions: proposal.slotOptions.map((s) => ({
+          startAt: Timestamp.fromDate(new Date(s.startAt)),
+          endAt: Timestamp.fromDate(new Date(s.endAt)),
+          label: s.label,
+        })),
+        pendingBookingRepliesArmedAt: FieldValue.serverTimestamp(),
+        pendingWorkflowApprovalRunId: FieldValue.delete(),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+
+  return {
+    result: { kind: "wait", seconds: proposal.replyTimeoutSeconds },
+    log: "ok:awaiting_reply",
+  };
+};
+
+/**
+ * Branch node (like `if_else`) sitting at `ai_await_booking_reply.next`.
+ * `whenTrue` once `run.context.booking` is populated — stamped by
+ * `lib/booking/ai-booking-reply.ts` the moment an inbound reply resolves to
+ * a booked Event — else `whenFalse` (declined, no match, or the reply
+ * window lapsed with nothing back).
+ */
+const execAiBookingResolver: NodeExecutor = async (ctx) => {
+  const booking = ctx.triggerContext?.booking as { eventId: string } | undefined;
+  const pass = !!booking?.eventId;
+  return { result: { kind: "branch", value: pass }, log: `branch:${pass}` };
+};
+
+/**
+ * Finds the contact's open (non-terminal) deal and moves it to `stageId`, or
+ * creates one if none exists. General-purpose — not booking-specific — so
+ * it's addable anywhere in the builder. Reuses the same create/update
+ * service functions every other deal write path uses (webhooks + activity
+ * logging stay consistent). Dynamic import avoids a static import cycle
+ * with `deals-service.ts`, which itself imports `fireWorkflowTrigger` from
+ * this module.
+ */
+const execMoveDealStage: NodeExecutor = async (ctx) => {
+  const cfg = ctx.node.config as unknown as MoveDealStageConfig;
+  if (!cfg.stageId) return { result: { kind: "next" }, log: "skipped:no_stage" };
+
+  try {
+    const { createDealServerSide, updateDealServerSide } = await import(
+      "@/lib/server/deals-service"
+    );
+    const existing = await getAdminDb()
+      .collection("deals")
+      .where("subAccountId", "==", ctx.subAccountId)
+      .where("contactId", "==", ctx.contact.id)
+      .get();
+    const open = existing.docs
+      .map((d) => {
+        const data = d.data() as {
+          stageId?: string;
+          updatedAt?: { toMillis?: () => number };
+        };
+        return { id: d.id, stageId: data.stageId, updatedAtMs: data.updatedAt?.toMillis?.() ?? 0 };
+      })
+      .filter((d) => d.stageId !== "won" && d.stageId !== "lost")
+      .sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+
+    if (open[0]) {
+      await updateDealServerSide({
+        dealId: open[0].id,
+        patch: { stageId: cfg.stageId },
+        userId: ctx.createdByUid,
+        mode: "live",
+      });
+      return { result: { kind: "next" }, log: `moved:${open[0].id}->${cfg.stageId}` };
+    }
+
+    const title =
+      (cfg.dealTitle ?? "").trim() ||
+      `${ctx.contact.name || ctx.contact.phone || "New lead"} — appointment`;
+    const created = await createDealServerSide({
+      subAccountId: ctx.subAccountId,
+      agencyId: ctx.agencyId,
+      createdByUid: ctx.createdByUid,
+      mode: "live",
+      title,
+      value: cfg.dealValue ?? 0,
+      currency: "USD",
+      contactId: ctx.contact.id,
+      stageId: cfg.stageId,
+      priority: "medium",
+    });
+    return { result: { kind: "next" }, log: `created:${created.id}->${cfg.stageId}` };
+  } catch (err) {
+    return {
+      result: { kind: "next" },
+      log: `error:${err instanceof Error ? err.message : "deal_write_failed"}`,
+    };
+  }
+};
+
 /** Unimplemented node types pass through (no stall) until their slice lands. */
 const execPassThrough: NodeExecutor = async () => ({
   result: { kind: "next" },
@@ -728,6 +1107,10 @@ const REGISTRY: Partial<Record<WorkflowNodeType, NodeExecutor>> = {
   review_rating_request: execReviewRatingRequest,
   review_rating_reminder: execReviewRatingReminder,
   webhook: execWebhook,
+  ai_propose_booking: execAiProposeBooking,
+  ai_await_booking_reply: execAiAwaitBookingReply,
+  ai_booking_resolver: execAiBookingResolver,
+  move_deal_stage: execMoveDealStage,
 };
 
 /* ----------------------------- Dispatch -------------------------------- */
@@ -1021,6 +1404,80 @@ export async function resumeReviewRatingRun(
     await runStep(runId, run.currentNodeId);
   } catch (err) {
     console.error("[workflows] resumeReviewRatingRun failed", err);
+  }
+}
+
+/**
+ * Resume a run paused by `armApprovalWait` (the AI Booking + Nurture chain)
+ * as soon as the operator approves or discards the drafted message — called
+ * from the comms send routes (approve) or the decline-draft route (discard)
+ * right after they act on `conversations/{contactId}.pendingDraft`, instead
+ * of leaving the run to its own approval-timeout fallback.
+ *
+ * Stashes `{approved}` on `run.context.approvalOutcome`, then advances the
+ * run one step immediately — the woken node (e.g. `ai_await_booking_reply`)
+ * reads that flag to decide whether to arm the next wait or fall through.
+ *
+ * Same race-safety as `resumeReviewRatingRun`: whichever of {this early
+ * resume, the QStash approval-timeout} calls `runStep` first on the target
+ * node wins; the other is a harmless no-op via the history guard. Never
+ * throws — a workflow problem can't break the send/discard action that
+ * triggered this.
+ */
+export async function resumeWorkflowRunAfterApproval(
+  runId: string,
+  outcome: { approved: boolean },
+): Promise<void> {
+  try {
+    const db = getAdminDb();
+    const runRef = db.collection("workflowRuns").doc(runId);
+    const runSnap = await runRef.get();
+    if (!runSnap.exists) return;
+    const run = runSnap.data() as WorkflowRunDoc;
+    if (run.status !== "waiting" || !run.currentNodeId) return;
+
+    await runRef.update({
+      context: { ...(run.context ?? {}), approvalOutcome: outcome },
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await runStep(runId, run.currentNodeId);
+  } catch (err) {
+    console.error("[workflows] resumeWorkflowRunAfterApproval failed", err);
+  }
+}
+
+/**
+ * Resume a run paused by `ai_await_booking_reply` once an inbound SMS reply
+ * resolves — called from `lib/booking/ai-booking-reply.ts` right after it
+ * either books the Event or definitively gives up (decline / unreadable /
+ * slot conflict). Stashes the outcome on `run.context.booking` (read by
+ * `ai_booking_resolver` to decide whenTrue/whenFalse), then advances the run
+ * one step immediately instead of leaving it to the reply-timeout fallback.
+ * Passing `booking: null` resolves the run down the `whenFalse` path.
+ *
+ * Same race-safety + never-throws contract as `resumeReviewRatingRun` /
+ * `resumeWorkflowRunAfterApproval`.
+ */
+export async function resumeAiBookingRun(
+  runId: string,
+  booking: { eventId: string; startAtIso: string; endAtIso: string } | null,
+): Promise<void> {
+  try {
+    const db = getAdminDb();
+    const runRef = db.collection("workflowRuns").doc(runId);
+    const runSnap = await runRef.get();
+    if (!runSnap.exists) return;
+    const run = runSnap.data() as WorkflowRunDoc;
+    if (run.status !== "waiting" || !run.currentNodeId) return;
+
+    const context: Record<string, unknown> = { ...(run.context ?? {}) };
+    if (booking) context.booking = booking;
+    else delete context.booking;
+
+    await runRef.update({ context, updatedAt: FieldValue.serverTimestamp() });
+    await runStep(runId, run.currentNodeId);
+  } catch (err) {
+    console.error("[workflows] resumeAiBookingRun failed", err);
   }
 }
 

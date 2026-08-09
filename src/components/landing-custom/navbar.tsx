@@ -99,12 +99,14 @@ export function Navbar({ brand }: { brand: ResolvedBrand }) {
             <nav className="flex flex-col gap-4 p-4">
               <SheetClose
                 render={<a href="#features" />}
+                nativeButton={false}
                 className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 Features
               </SheetClose>
               <SheetClose
                 render={<a href="#faq" />}
+                nativeButton={false}
                 className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
                 FAQ
@@ -112,7 +114,7 @@ export function Navbar({ brand }: { brand: ResolvedBrand }) {
               {!loading && (
                 <>
                   {user ? (
-                    <SheetClose render={<span />}>
+                    <SheetClose render={<span />} nativeButton={false}>
                       <Button
                         render={<Link href="/dashboard" />}
                         className="w-full"
@@ -123,7 +125,7 @@ export function Navbar({ brand }: { brand: ResolvedBrand }) {
                     </SheetClose>
                   ) : (
                     <>
-                      <SheetClose render={<span />}>
+                      <SheetClose render={<span />} nativeButton={false}>
                         <Button
                           render={<Link href="/login" />}
                           variant="ghost"
@@ -133,7 +135,7 @@ export function Navbar({ brand }: { brand: ResolvedBrand }) {
                           Login
                         </Button>
                       </SheetClose>
-                      <SheetClose render={<span />}>
+                      <SheetClose render={<span />} nativeButton={false}>
                         <Button
                           render={<Link href="/signup" />}
                           className="w-full"

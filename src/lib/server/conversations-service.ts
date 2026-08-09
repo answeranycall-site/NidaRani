@@ -5,6 +5,8 @@ import { getAdminDb } from "@/lib/firebase/admin";
 import type {
   ConversationBotMode,
   ConversationChannel,
+  ConversationDraftIntent,
+  ConversationDraftSlotOption,
 } from "@/types/conversations";
 
 /**
@@ -87,11 +89,21 @@ export async function upsertConversationForMessage(
       }
 
       if (!snap.exists) {
-        // Stamp immutable defaults once.
+        // Stamp immutable defaults once. botMode reads the sub-account's
+        // aiAgent/profile.autoSendEnabled — undefined/false (the standard,
+        // see AiAgentProfile's doc comment) means brand-new conversations
+        // start in "suggest" mode; an explicit opt-in starts them in "auto".
+        // Only read for a first-ever message — every subsequent upsert on
+        // this conversation skips straight to the merge patch below.
+        const profileSnap = await tx.get(
+          db.doc(`subAccounts/${input.subAccountId}/aiAgent/profile`),
+        );
+        const autoSendEnabled = profileSnap.data()?.autoSendEnabled === true;
+
         patch.createdAt = FieldValue.serverTimestamp();
         patch.status = "open";
         patch.assigneeUid = null;
-        patch.botMode = "auto"; // reserved for Phase 2
+        patch.botMode = autoSendEnabled ? "auto" : "suggest";
         patch.botPausedUntil = null;
         // First-ever message is outbound → no unread yet.
         if (input.direction !== "inbound") patch.unreadCount = 0;
@@ -145,6 +157,14 @@ export async function setConversationDraft(input: {
   body: string;
   model: string;
   tokens: number;
+  /** Set only for a draft written by a paused Workflow Builder run (the AI
+   *  Booking + Nurture chain) — see `lib/workflows/engine.ts::
+   *  armApprovalWait`. Absent for ordinary suggest-mode replies. */
+  workflowRunId?: string | null;
+  /** Absent = ordinary "reply" draft. */
+  intent?: ConversationDraftIntent;
+  /** Only meaningful when `intent === "booking_proposal"`. */
+  bookingSlotOptions?: ConversationDraftSlotOption[] | null;
 }): Promise<void> {
   try {
     await getAdminDb()
@@ -163,6 +183,9 @@ export async function setConversationDraft(input: {
             model: input.model,
             tokens: input.tokens,
             createdAt: FieldValue.serverTimestamp(),
+            workflowRunId: input.workflowRunId ?? null,
+            intent: input.intent ?? "reply",
+            bookingSlotOptions: input.bookingSlotOptions ?? null,
           },
           updatedAt: FieldValue.serverTimestamp(),
         },

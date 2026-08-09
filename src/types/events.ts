@@ -21,10 +21,17 @@ export type EventStatus =
 
 /**
  * Origin of an event. Defaults to `"manual"` for legacy events — read
- * via `eventSource()`. Booking-page-created events also fire the
- * `event_booked` automation trigger; manual events do not.
+ * via `eventSource()`. Booking-page-created AND ai_workflow-created events
+ * both fire the `event_booked` automation trigger; manual events do not.
+ * `"ai_workflow"` — booked via the AI Booking + Nurture SMS flow
+ * (`lib/booking/ai-booking-reply.ts` calling
+ * `lib/booking/create-booking.ts::createBookingTransactionally`). Shares the
+ * same reminder/reschedule/cancel plumbing as `"booking_page"` but never
+ * carries a payment gate (no in-SMS payment flow) and doesn't render the
+ * booking-page-specific payment panel (`event-dialog.tsx` gates that
+ * strictly on `=== "booking_page"`).
  */
-export type EventSource = "manual" | "booking_page";
+export type EventSource = "manual" | "booking_page" | "ai_workflow";
 
 export interface CalendarEvent {
   id: string;

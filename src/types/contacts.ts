@@ -252,6 +252,38 @@ export interface Contact {
    */
   metaUserId?: string | null;
   /**
+   * Set by the Workflow Builder `ai_propose_booking` / booking-reply
+   * classifier right after arming an approval-wait, naming the paused
+   * workflowRun. UI hint only (e.g. a "workflow pending" badge) — the
+   * functional resume correlation lives on
+   * `conversations/{id}.pendingDraft.workflowRunId`, not this field. Cleared
+   * once the draft is approved or discarded. See
+   * `lib/workflows/engine.ts::armApprovalWait`.
+   */
+  pendingWorkflowApprovalRunId?: string | null;
+  /**
+   * Set by `ai_await_booking_reply` once an AI-drafted booking-proposal SMS
+   * actually sends — names the paused workflowRun waiting on THIS contact's
+   * next inbound reply to be classified as a slot pick. Checked (dedicated-
+   * mode SMS webhook only) by `lib/booking/ai-booking-reply.ts`, mirroring
+   * `pendingReviewWorkflowRunId`'s role for the review-rating gate.
+   */
+  pendingBookingWorkflowRunId?: string | null;
+  /** Slug of the `BookingPage` the offered slots came from — needed to mint
+   *  the Event via `lib/booking/create-booking.ts::createBookingTransactionally`
+   *  once a reply resolves. Cleared alongside the other pending-booking fields. */
+  pendingBookingPageId?: string | null;
+  /** The exact slots offered — needed to classify a reply like "2" or "the
+   *  Tuesday one" against the right candidates. Cleared once resolved or the
+   *  reply window lapses. */
+  pendingBookingSlotOptions?:
+    | { startAt: Timestamp; endAt: Timestamp; label: string }[]
+    | null;
+  /** Stamped alongside `pendingBookingWorkflowRunId`; the reply window
+   *  closes this many ms after send — mirrors `awaitingReviewReplyAt`'s role
+   *  for the review-rating gate. */
+  pendingBookingRepliesArmedAt?: Timestamp | FieldValue | null;
+  /**
    * Best-effort location, captured at contact creation. Populated by
    * /api/forms/[id]/submit via ipapi.co (city + lat/lng) with a phone
    * country-code fallback (country only, lat/lng resolved to country

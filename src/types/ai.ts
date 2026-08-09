@@ -55,6 +55,20 @@ export interface AiAgentProfile {
   /** When the KB snapshot above was last refreshed. UI shows "Last
    *  refreshed 2h ago" so the operator knows whether to re-crawl. */
   websiteKbFetchedAt: Timestamp | FieldValue | null;
+  /**
+   * Cross-channel default for brand-new conversations: should the AI's
+   * SMS/WhatsApp replies send automatically, or queue in Conversations for
+   * human approval first? Read `=== true` so undefined (every existing
+   * profile, and every new one via `DEFAULT_AI_AGENT_PROFILE`) reads as
+   * `false` — **approval-required ("suggest" mode) is the product-wide
+   * standard**; auto-send is an explicit opt-in. Only affects conversations
+   * that don't exist yet (see `upsertConversationForMessage`'s creation
+   * branch) — flipping this never changes the mode of a conversation
+   * already in progress. The operator can still override any single
+   * conversation's mode from the Conversations tab regardless of this
+   * default.
+   */
+  autoSendEnabled?: boolean;
   createdAt: Timestamp | FieldValue | null;
   updatedAt: Timestamp | FieldValue | null;
 }
@@ -68,6 +82,7 @@ export const DEFAULT_AI_AGENT_PROFILE: Omit<
   hoursStart: 9,
   hoursEnd: 17,
   timezone: "Australia/Sydney",
+  autoSendEnabled: false,
   // NB: keep these tight. The matcher is substring-based (case-insensitive),
   // so anything too generic ("human", "help") will swallow legitimate
   // conversion intents like "I want to talk to a human" — the bot would

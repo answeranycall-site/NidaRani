@@ -76,6 +76,9 @@ function sanitisePatch(input: Record<string, unknown>): Partial<AiAgentProfile> 
       }
     }
   }
+  if ("autoSendEnabled" in input && typeof input.autoSendEnabled === "boolean") {
+    patch.autoSendEnabled = input.autoSendEnabled;
+  }
   if ("websiteUrl" in input) {
     const raw = input.websiteUrl;
     if (raw === null || raw === "") {

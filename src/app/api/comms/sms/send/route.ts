@@ -9,7 +9,9 @@ import {
 import { requireContactAccessible, requireUid } from "@/lib/comms/route-auth";
 import { recordSend } from "@/lib/comms/usage";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
+import { resumeWorkflowRunAfterApproval } from "@/lib/workflows/engine";
 import type { SubAccountDoc } from "@/types";
+import type { ConversationDraft } from "@/types/conversations";
 
 type Body = { contactId?: string; body?: string };
 
@@ -70,6 +72,15 @@ export async function POST(request: Request) {
   const subAccount = subAccountSnap.exists
     ? (subAccountSnap.data() as SubAccountDoc)
     : null;
+
+  // If this send is approving an AI Booking + Nurture draft, capture the
+  // paused workflow run's id BEFORE sending so it can be resumed once the
+  // send + the conversation-index write (which clears pendingDraft) land.
+  const convoSnap = await db.doc(`conversations/${contactId}`).get();
+  const pendingDraft = convoSnap.data()?.pendingDraft as
+    | ConversationDraft
+    | undefined;
+  const draftWorkflowRunId = pendingDraft?.workflowRunId ?? null;
 
   const dedicated = subAccountTwilioIsConfigured(subAccount?.twilioConfig);
 
@@ -162,6 +173,17 @@ export async function POST(request: Request) {
     body,
     pauseBot: true,
   });
+
+  // Resume the paused Workflow Builder run this draft belonged to, if any.
+  // Best-effort — a workflow-resume failure must never fail the send the
+  // operator is waiting on.
+  if (draftWorkflowRunId) {
+    void resumeWorkflowRunAfterApproval(draftWorkflowRunId, {
+      approved: true,
+    }).catch((err) =>
+      console.warn("[sms/send] workflow resume failed", err),
+    );
+  }
 
   await recordSend(auth.uid, "sms");
 
