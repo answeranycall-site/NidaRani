@@ -128,6 +128,9 @@ export async function POST(request: Request) {
     | ConversationDraft
     | undefined;
   const draftWorkflowRunId = pendingDraft?.workflowRunId ?? null;
+  // See sms/send/route.ts's identical comment — approving an existing AI
+  // draft shouldn't pause the bot, only a genuinely fresh composer message.
+  const isDraftApproval = !!pendingDraft;
 
   let sid: string;
   let fromNumber: string;
@@ -202,7 +205,8 @@ export async function POST(request: Request) {
     channel: "whatsapp",
     direction: "outbound",
     body,
-    pauseBot: true,
+    pauseBot: !isDraftApproval,
+    clearDraft: isDraftApproval,
   });
 
   if (draftWorkflowRunId) {

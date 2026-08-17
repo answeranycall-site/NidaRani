@@ -143,6 +143,11 @@ export interface SmsOutboxMeta {
   source: "manual" | "ai_draft" | "workflow" | "system";
   sentByUid?: string | null;
   workflowRunId?: string | null;
+  /** True when a "manual" send is actually approving an existing AI draft
+   *  (Suggest mode) rather than a genuinely fresh composer message — see
+   *  the pauseBot/clearDraft split in conversations-service.ts. Only
+   *  meaningful when source === "manual". */
+  isDraftApproval?: boolean;
 }
 
 interface SmsOutboxDoc {
@@ -258,7 +263,8 @@ export async function deliverPooledSms(
       channel: "sms",
       direction: "outbound",
       body: outbox.body,
-      pauseBot: outbox.meta?.source === "manual",
+      pauseBot: outbox.meta?.source === "manual" && !outbox.meta?.isDraftApproval,
+      clearDraft: outbox.meta?.source === "manual" && !!outbox.meta?.isDraftApproval,
     });
 
     return { ok: true, sid: msg.sid, from: outbox.fromNumber };

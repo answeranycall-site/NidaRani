@@ -41,11 +41,23 @@ export interface UpsertConversationInput {
   direction: "inbound" | "outbound";
   body: string;
   /**
-   * True when this is a HUMAN operator's outbound reply (the comms send
-   * routes). Pauses the bot for PAUSE_WINDOW_MS, marks the thread read, and
-   * clears any pending AI draft. The bot's own replies pass this false.
+   * True when this is a genuinely human-authored outbound reply — typed
+   * fresh into the contact profile or Conversations composer, NOT an
+   * approved AI draft. Pauses the bot for PAUSE_WINDOW_MS so the AI doesn't
+   * talk over a human who just took over the thread. The bot's own replies,
+   * and a human approving an AI draft as-is, both pass this false — see
+   * `clearDraft` for the latter case.
    */
   pauseBot?: boolean;
+  /**
+   * True when this outbound send resolves an existing `pendingDraft` on the
+   * conversation (approved from the Conversations tab), whether or not the
+   * operator edited the text first. Clears the draft + resets unread WITHOUT
+   * pausing the bot — approving a suggestion is the product working as
+   * designed, not a human overriding the AI. `pauseBot: true` implies this
+   * too, so routes only need to set one or the other, never both.
+   */
+  clearDraft?: boolean;
 }
 
 export async function upsertConversationForMessage(
@@ -84,6 +96,12 @@ export async function upsertConversationForMessage(
       if (input.pauseBot) {
         // A human took over: pause the bot, mark read, drop any stale draft.
         patch.botPausedUntil = new Date(Date.now() + PAUSE_WINDOW_MS);
+        patch.unreadCount = 0;
+        patch.pendingDraft = null;
+      } else if (input.clearDraft) {
+        // An AI draft was approved and sent — mark read, drop the now-stale
+        // draft field, but do NOT pause. The bot should keep replying to
+        // this contact's next message exactly as before the approval.
         patch.unreadCount = 0;
         patch.pendingDraft = null;
       }

@@ -74,6 +74,11 @@ export async function POST(request: Request) {
     | ConversationDraft
     | undefined;
   const draftWorkflowRunId = pendingDraft?.workflowRunId ?? null;
+  // Approving an existing AI draft (Suggest mode) is the product working as
+  // designed, not a human overriding the bot — don't pause on it. Only a
+  // genuinely fresh, draft-less send (the composer / contact profile) should
+  // pause. See conversations-service.ts's pauseBot/clearDraft doc comments.
+  const isDraftApproval = !!pendingDraft;
 
   const dedicated = subAccountTwilioIsConfigured(subAccount?.twilioConfig);
   const pooled = subAccount?.twilioConfig?.numberPoolEnabled === true;
@@ -91,7 +96,7 @@ export async function POST(request: Request) {
     contact: { id: contactId, assignedFromNumber: contact.assignedFromNumber },
     to: contact.phone,
     body,
-    meta: { source: "manual", sentByUid: auth.uid },
+    meta: { source: "manual", sentByUid: auth.uid, isDraftApproval },
   });
 
   const resumeWorkflowIfNeeded = () => {
@@ -183,7 +188,8 @@ export async function POST(request: Request) {
     channel: "sms",
     direction: "outbound",
     body,
-    pauseBot: true,
+    pauseBot: !isDraftApproval,
+    clearDraft: isDraftApproval,
   });
 
   resumeWorkflowIfNeeded();
