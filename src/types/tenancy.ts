@@ -542,6 +542,71 @@ export interface TwilioConfig {
    * route refuses to enable MCTB while that channel is on.
    */
   missedCall?: MissedCallConfig | null;
+  /**
+   * True once this sub-account has adopted a multi-number pool (see
+   * {@link TwilioPoolNumber}, `subAccounts/{id}/twilioNumbers/*`) instead of
+   * the single `fromNumber` above. Denormalized here so the hot send/inbound-
+   * routing paths never need to probe the subcollection just to know which
+   * mode to use. `fromNumber`/`accountSid`/`authToken` stay populated even in
+   * pool mode — the whole pool shares one Twilio account, only the specific
+   * sending number varies per contact. Undefined/false = legacy single-number
+   * behavior, byte-identical to before the pool feature existed.
+   */
+  numberPoolEnabled?: boolean;
+  /**
+   * Default outbound pace applied to every pool number that doesn't set its
+   * own {@link TwilioPoolNumber.ratePerMinuteOverride} — messages/minute,
+   * enforced durably per-number by `lib/comms/sms-pool.ts::reserveSendSlot`.
+   * Operator-configurable; seeded to 2 when the pool is first set up. Only
+   * meaningful when `numberPoolEnabled` is true.
+   */
+  defaultRatePerMinutePerNumber?: number;
+}
+
+/**
+ * One number in a sub-account's outbound-sending pool. Lives at
+ * `subAccounts/{id}/twilioNumbers/{numberId}` — a subcollection, not an
+ * array field on `SubAccountDoc`, specifically so the rate-limit cursor
+ * below (`nextAvailableAt`) can be updated via a Firestore transaction
+ * scoped to ONE number without contending with the other 9-11 numbers in
+ * the pool (Firestore transactions lock at whole-document granularity, so
+ * an array-on-one-doc design would force every number's sends to serialize
+ * against each other, not just against themselves). All pool numbers share
+ * the parent `SubAccountDoc.twilioConfig.accountSid`/`authToken` — only the
+ * sending number differs per doc. See lib/comms/sms-pool.ts.
+ */
+export interface TwilioPoolNumber {
+  /** == doc id. Slugified E.164 (e.g. "+15551234567" -> "_15551234567") so
+   *  it's usable as a QStash deduplication-id segment and a Firestore doc
+   *  id without escaping. */
+  id: string;
+  /** E.164, e.g. "+15551234567". */
+  e164: string;
+  /** Operator-facing label, e.g. "Line 3". */
+  label: string;
+  /** Soft-disable without losing history/assignment records. A disabled
+   *  number is skipped by inbound pool routing and BLOCKS (does not
+   *  silently reroute) outbound to any contact still assigned to it. */
+  enabled: boolean;
+  /** Exactly one number in the pool should be true — the fallback target
+   *  for a contact with no `assignedFromNumber` yet (e.g. a manually
+   *  created contact, before any inbound/CSV assignment). */
+  isPrimary: boolean;
+  /** Messages/minute for THIS number. Null = use the sub-account's
+   *  `defaultRatePerMinutePerNumber`. */
+  ratePerMinuteOverride: number | null;
+  /** Rate-limit cursor — the earliest instant this number may next send.
+   *  Reserved transactionally by `reserveSendSlot()`; every send source
+   *  (manual, AI, workflow) shares this same cursor, so concurrent sends
+   *  from different sources correctly serialize. Null = never sent yet. */
+  nextAvailableAt: Timestamp | FieldValue | null;
+  cursorUpdatedAt: Timestamp | FieldValue | null;
+  /** True once we've set this number's inbound SMS webhook via Twilio's
+   *  API — mirrors `TwilioConfig.inboundWebhookConfigured`'s role for the
+   *  legacy single number. */
+  inboundWebhookConfigured: boolean;
+  createdAt: Timestamp | FieldValue;
+  updatedAt: Timestamp | FieldValue;
 }
 
 export interface MissedCallConfig {

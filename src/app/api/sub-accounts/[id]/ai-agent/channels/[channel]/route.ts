@@ -210,6 +210,13 @@ function sanitiseWebChatBlock(raw: unknown): Partial<WebChatChannelConfig> {
   ) {
     out.forceCaptureOnFirstMessage = r.forceCaptureOnFirstMessage;
   }
+  if ("postCaptureMessage" in r) {
+    const v = r.postCaptureMessage;
+    if (v === null) out.postCaptureMessage = null;
+    else if (typeof v === "string") {
+      out.postCaptureMessage = v.trim().slice(0, 400) || null;
+    }
+  }
 
   return out;
 }

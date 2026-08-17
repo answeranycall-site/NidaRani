@@ -111,6 +111,7 @@ export function ConversationThread({
     const unsubWa = onSnapshot(
       query(
         collection(db, `contacts/${contactId}/whatsappMessages`),
+        where("subAccountId", "==", subAccountId),
         orderBy("createdAt", "asc"),
       ),
       (snap) => {
@@ -126,6 +127,7 @@ export function ConversationThread({
     const unsubMeta = onSnapshot(
       query(
         collection(db, `contacts/${contactId}/metaMessages`),
+        where("subAccountId", "==", subAccountId),
         orderBy("createdAt", "asc"),
       ),
       (snap) => {
@@ -143,6 +145,7 @@ export function ConversationThread({
     const unsubWebChat = onSnapshot(
       query(
         collection(db, `contacts/${contactId}/webChatMessages`),
+        where("subAccountId", "==", subAccountId),
         orderBy("createdAt", "asc"),
       ),
       (snap) => {
@@ -290,7 +293,7 @@ function VoiceCallCard({
             {durationLabel ? ` · ${durationLabel}` : " · no answer"}
           </span>
           {call.summary && (
-            <span className="mt-0.5 block truncate text-muted-foreground">
+            <span className="mt-0.5 block whitespace-pre-wrap text-muted-foreground">
               {call.summary}
             </span>
           )}

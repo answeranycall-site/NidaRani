@@ -14,6 +14,12 @@
  *      /embed/chat/<sa> — only loaded once the visitor opens the chat.
  *   6. postMessage protocol with the iframe: handle "close" to
  *      collapse back to the bubble.
+ *   7. Exposes window.leadstackChat = { open, close, toggle } so any
+ *      other element on the host page (e.g. a "Book a call" button) can
+ *      trigger the widget instead of only the floating bubble. Safe to
+ *      call before the config fetch resolves — the open request queues
+ *      and replays once the widget finishes loading (or is a silent
+ *      no-op if the widget ends up disabled for this domain).
  *
  * Vanilla ES2015+. ~4KB minified. No deps.
  */
@@ -56,6 +62,32 @@
   var iframe = null;
   var isOpen = false;
   var config = null;
+  var configSettled = false; // true once the fetch resolves either way
+  var pendingOpen = false; // open() was called before configSettled
+
+  // ---- Step 7: external open/close API -----------------------------
+  // Exists immediately (before the config fetch resolves) so a host-page
+  // button's onclick can reference window.leadstackChat.open without a
+  // race against widget.js's own async boot sequence.
+  window.leadstackChat = {
+    open: function () {
+      if (configSettled) {
+        if (bubble) openIframe();
+        // else: fetch resolved but widget is disabled for this domain —
+        // silent no-op, matching the bubble's own degrade behavior.
+      } else {
+        pendingOpen = true;
+      }
+    },
+    close: function () {
+      pendingOpen = false;
+      if (bubble) collapseIframe();
+    },
+    toggle: function () {
+      if (isOpen) window.leadstackChat.close();
+      else window.leadstackChat.open();
+    },
+  };
 
   fetch(BASE + "/api/web-chat/config?sa=" + encodeURIComponent(saId), {
     method: "GET",
@@ -69,10 +101,14 @@
       config = data;
       mountBubble();
       listenForIframeMessages();
+      if (pendingOpen) openIframe();
     })
     .catch(function () {
       // Network failure: silently degrade. The buyer's site shouldn't
       // show a broken-looking widget on intermittent connection issues.
+    })
+    .finally(function () {
+      configSettled = true;
     });
 
   // ---- Step 4: bubble ---------------------------------------------

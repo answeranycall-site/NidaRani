@@ -100,6 +100,15 @@ interface ResolvedRoute {
   /** Dedicated mode only — the sub-account doc resolveRoute already read, so
    *  downstream (owner alert, sends) doesn't re-fetch it. */
   subAccount: SubAccountDoc | null;
+  /**
+   * The specific number this inbound actually hit — the legacy single
+   * `twilioConfig.fromNumber`, or (for a number-pool sub-account) the pool
+   * number matched below. Null only in shared mode. Lets downstream code
+   * stamp `Contact.assignedFromNumber` from the number that actually
+   * reached this contact — see the "whichever number reaches them first,
+   * sticks" rule in the number-pool plan.
+   */
+  toNumber: string | null;
 }
 
 /**
@@ -113,7 +122,38 @@ async function resolveRoute(
   if (!toNumber) return null;
   const normalisedTo = normalisePhone(toNumber);
 
-  // Dedicated lookup first.
+  // Number-pool lookup first — a collectionGroup point-query against the
+  // `twilioNumbers` subcollection. Runs before the legacy single-number
+  // lookup so a pool sub-account's numbers are found even though they never
+  // populate `twilioConfig.fromNumber`. Non-pool sub-accounts never have a
+  // `twilioNumbers` doc, so this is a no-op miss for them — the legacy path
+  // below is completely unaffected.
+  const poolMatch = await getAdminDb()
+    .collectionGroup("twilioNumbers")
+    .where("e164", "==", normalisedTo)
+    .where("enabled", "==", true)
+    .limit(1)
+    .get();
+  if (!poolMatch.empty) {
+    const numberDoc = poolMatch.docs[0];
+    const subAccountId = numberDoc.ref.parent.parent?.id;
+    if (subAccountId) {
+      const saSnap = await getAdminDb().doc(`subAccounts/${subAccountId}`).get();
+      const sa = saSnap.data() as SubAccountDoc | undefined;
+      if (sa?.twilioConfig?.authToken) {
+        return {
+          mode: "dedicated",
+          authToken: sa.twilioConfig.authToken,
+          subAccountId,
+          agencyId: sa.agencyId,
+          subAccount: sa,
+          toNumber: normalisedTo,
+        };
+      }
+    }
+  }
+
+  // Legacy single-number lookup — unchanged.
   const dedicated = await getAdminDb()
     .collection("subAccounts")
     .where("twilioConfig.fromNumber", "==", normalisedTo)
@@ -129,6 +169,7 @@ async function resolveRoute(
         subAccountId: dedicated.docs[0].id,
         agencyId: sa.agencyId,
         subAccount: sa,
+        toNumber: normalisedTo,
       };
     }
   }
@@ -148,6 +189,7 @@ async function resolveRoute(
       subAccountId: null,
       agencyId: null,
       subAccount: null,
+      toNumber: null,
     };
   }
 
@@ -282,6 +324,10 @@ export async function POST(request: Request) {
         address: "",
         source: "sms",
         tags: [],
+        // "Whichever pool number reaches them first, sticks." Null on a
+        // legacy (non-pool) sub-account, since route.toNumber only ever
+        // differs from the account's single fromNumber when a pool exists.
+        assignedFromNumber: route.toNumber,
       });
       const leadLabel = await applyLeadLabelIfUnnamed({
         subAccountId: route.subAccountId,
@@ -311,6 +357,33 @@ export async function POST(request: Request) {
         err,
       );
     }
+  }
+
+  // "Whichever pool number reaches them first, sticks" — applies uniformly
+  // to brand-new contacts (stamped at creation above) AND pre-existing
+  // contacts who happen to text in on a pool number for the first time with
+  // no assignment yet (e.g. a manually-created contact, or one imported
+  // before the pool existed). route.toNumber is only non-null when this
+  // inbound actually hit a pool number or the legacy single number, so this
+  // is a no-op on shared mode.
+  if (route.mode === "dedicated" && route.toNumber) {
+    await Promise.all(
+      contactDocs
+        .filter((d) => !d.data()?.assignedFromNumber)
+        .map((d) =>
+          d.ref
+            .update({
+              assignedFromNumber: route.toNumber,
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+            .catch((err) =>
+              console.warn(
+                `[twilio/inbound] failed to stamp assignedFromNumber for ${d.id}`,
+                err,
+              ),
+            ),
+        ),
+    );
   }
 
   // "YES"/"START"/"UNSTOP" is a reserved re-opt-in keyword, but a contact

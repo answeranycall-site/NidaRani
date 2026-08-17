@@ -10,6 +10,7 @@ import {
   subAccountTwilioIsConfigured,
   subAccountWhatsappIsConfigured,
 } from "@/lib/comms/twilio";
+import { enqueuePooledSms } from "@/lib/comms/sms-pool";
 import { agencyAllowsSharedSms } from "@/lib/agency/policy";
 import { resolveTemplateVariables } from "@/lib/comms/whatsapp/resolve-template-variables";
 import { createTaskServerSide } from "@/lib/server/tasks-service";
@@ -188,20 +189,22 @@ const execSendSms: NodeExecutor = async (ctx) => {
     return { result: { kind: "next" }, log: "error:sms_not_configured" };
   }
   const body = resolveMergeTags(cfg.body ?? "", mergeSubject(ctx, ""));
-  try {
-    await sendSmsForSubAccount({
-      subAccountId: ctx.subAccountId,
-      subAccount: ctx.subAccount,
-      to,
-      body,
-    });
-    return { result: { kind: "next" }, log: "ok" };
-  } catch (err) {
-    return {
-      result: { kind: "next" },
-      log: `error:${err instanceof Error ? err.message : "send_failed"}`,
-    };
+  const result = await enqueuePooledSms({
+    subAccountId: ctx.subAccountId,
+    agencyId: ctx.agencyId,
+    subAccount: ctx.subAccount ?? ({ twilioConfig: null } as SubAccountDoc),
+    contact: { id: ctx.contact.id, assignedFromNumber: ctx.contact.assignedFromNumber },
+    to,
+    body,
+    meta: { source: "workflow" },
+  });
+  if (!result.ok) {
+    return { result: { kind: "next" }, log: `error:${result.reason}` };
   }
+  return {
+    result: { kind: "next" },
+    log: result.pooled && !result.sentInline ? "ok:queued" : "ok",
+  };
 };
 
 const execWhatsappTemplate: NodeExecutor = async (ctx) => {

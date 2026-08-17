@@ -122,6 +122,14 @@
         { "fieldPath": "assignedToUid", "order": "ASCENDING" },
         { "fieldPath": "startAt", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "twilioNumbers",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "e164", "order": "ASCENDING" },
+        { "fieldPath": "enabled", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

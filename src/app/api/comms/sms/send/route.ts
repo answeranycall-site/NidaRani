@@ -1,11 +1,8 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
-import {
-  sendSmsForSubAccount,
-  smsIsConfigured,
-  subAccountTwilioIsConfigured,
-} from "@/lib/comms/twilio";
+import { smsIsConfigured, subAccountTwilioIsConfigured } from "@/lib/comms/twilio";
+import { enqueuePooledSms } from "@/lib/comms/sms-pool";
 import { requireContactAccessible, requireUid } from "@/lib/comms/route-auth";
 import { recordSend } from "@/lib/comms/usage";
 import { upsertConversationForMessage } from "@/lib/server/conversations-service";
@@ -18,19 +15,17 @@ type Body = { contactId?: string; body?: string };
 /**
  * Send an SMS from a contact profile.
  *
- * Mode selection:
- *   - If the contact's sub-account has `twilioConfig.enabled === true`, the
- *     send uses the sub-account's dedicated Twilio creds.
- *   - Otherwise falls back to the env-var Twilio (shared-sender mode).
- *
- * Either way, a message row is written to contacts/{id}/messages and the
- * Conversations unified-inbox index is updated — shared-mode sends show up
- * in the Conversations tab + per-contact Messages tab just like dedicated
- * ones.
- *
- * The 503 fast-path here used to gate the whole route on env-var presence;
- * we now also accept dedicated-mode sub-accounts even when env vars are
- * absent, so a deployment can run dedicated-only.
+ * Mode selection now happens inside `enqueuePooledSms` (`lib/comms/sms-
+ * pool.ts`):
+ *   - A number-pool sub-account resolves which of its numbers this
+ *     CONTACT is assigned to (or blocks with a clear error if that number
+ *     was disabled — see `resolvePoolFromNumber`), reserves a rate-limited
+ *     send slot, and either delivers inline (the common case) or defers to
+ *     a QStash callback — in which case message-row/activity/conversation
+ *     bookkeeping happens later, not in this request.
+ *   - Every other sub-account (dedicated single-number or shared-env) sends
+ *     exactly as before — this route still owns the bookkeeping for that
+ *     case, unchanged from before the number-pool feature existed.
  */
 export async function POST(request: Request) {
   const auth = requireUid(request);
@@ -63,8 +58,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Pre-fetch the sub-account doc once so we can pass it through to
-  // sendSmsForSubAccount + the message-row write below without a second read.
   const db = getAdminDb();
   const subAccountSnap = await db
     .doc(`subAccounts/${contact.subAccountId}`)
@@ -75,7 +68,7 @@ export async function POST(request: Request) {
 
   // If this send is approving an AI Booking + Nurture draft, capture the
   // paused workflow run's id BEFORE sending so it can be resumed once the
-  // send + the conversation-index write (which clears pendingDraft) land.
+  // send lands.
   const convoSnap = await db.doc(`conversations/${contactId}`).get();
   const pendingDraft = convoSnap.data()?.pendingDraft as
     | ConversationDraft
@@ -83,38 +76,63 @@ export async function POST(request: Request) {
   const draftWorkflowRunId = pendingDraft?.workflowRunId ?? null;
 
   const dedicated = subAccountTwilioIsConfigured(subAccount?.twilioConfig);
-
-  // Gate: if neither dedicated nor shared mode is available, return 503.
-  // (Used to be just smsIsConfigured(); now we also accept dedicated-only.)
-  if (!dedicated && !smsIsConfigured()) {
+  const pooled = subAccount?.twilioConfig?.numberPoolEnabled === true;
+  if (!dedicated && !pooled && !smsIsConfigured()) {
     return NextResponse.json(
       { error: "SMS is not configured on this deployment." },
       { status: 503 },
     );
   }
 
-  let sid: string;
-  let mode: "shared" | "dedicated";
-  let fromNumber: string;
-  try {
-    const result = await sendSmsForSubAccount({
-      subAccountId: contact.subAccountId,
-      subAccount,
-      to: contact.phone,
-      body,
-    });
-    sid = result.sid;
-    mode = result.mode;
-    fromNumber = result.from;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to send SMS";
-    return NextResponse.json({ error: message }, { status: 502 });
+  const result = await enqueuePooledSms({
+    subAccountId: contact.subAccountId,
+    agencyId: contact.agencyId,
+    subAccount: subAccount ?? ({ twilioConfig: null } as SubAccountDoc),
+    contact: { id: contactId, assignedFromNumber: contact.assignedFromNumber },
+    to: contact.phone,
+    body,
+    meta: { source: "manual", sentByUid: auth.uid },
+  });
+
+  const resumeWorkflowIfNeeded = () => {
+    if (draftWorkflowRunId) {
+      void resumeWorkflowRunAfterApproval(draftWorkflowRunId, {
+        approved: true,
+      }).catch((err) => console.warn("[sms/send] workflow resume failed", err));
+    }
+  };
+
+  if (!result.ok) {
+    return NextResponse.json({ error: result.reason }, { status: 502 });
   }
 
+  // Pooled + deferred: nothing to persist here — the QStash callback does
+  // the message-row/activity/conversation bookkeeping once it actually
+  // sends. Tell the operator it's queued rather than pretending it's done.
+  // The operator's approval is confirmed the moment it's durably queued, so
+  // the workflow resume still fires now, independent of delivery timing.
+  if (result.pooled && !result.sentInline) {
+    resumeWorkflowIfNeeded();
+    await recordSend(auth.uid, "sms");
+    return NextResponse.json({
+      ok: true,
+      queued: true,
+      delaySeconds: result.delaySeconds,
+      from: result.from,
+    });
+  }
+
+  // Pooled + delivered inline: bookkeeping already done by deliverPooledSms.
+  if (result.pooled && result.sentInline) {
+    resumeWorkflowIfNeeded();
+    await recordSend(auth.uid, "sms");
+    return NextResponse.json({ ok: true, sid: result.sid, mode: "dedicated" });
+  }
+
+  // Legacy (non-pool) path — this route still owns bookkeeping, unchanged.
+  const { sid, from: fromNumber, mode } = result;
   const preview = body.length > 80 ? `${body.slice(0, 80)}…` : body;
 
-  // Activity row — written for both modes so existing UIs that surface
-  // sms_sent events keep working.
   try {
     await db
       .collection("contacts")
@@ -131,10 +149,6 @@ export async function POST(request: Request) {
     console.warn("[sms/send] activity write failed", err);
   }
 
-  // Chat-thread row — written in both modes so the Messages tab + the
-  // Conversations index cover shared-sender sub-accounts too, not just
-  // dedicated ones. Doc id = MessageSid so any accidental retry from the
-  // same SID dedupes naturally.
   try {
     await db
       .collection("contacts")
@@ -160,8 +174,6 @@ export async function POST(request: Request) {
     console.warn("[sms/send] message-row write failed", err);
   }
 
-  // Unified-inbox index — mirror this outbound into the conversation doc,
-  // regardless of shared vs dedicated Twilio mode.
   await upsertConversationForMessage({
     contactId,
     subAccountId: contact.subAccountId,
@@ -174,16 +186,7 @@ export async function POST(request: Request) {
     pauseBot: true,
   });
 
-  // Resume the paused Workflow Builder run this draft belonged to, if any.
-  // Best-effort — a workflow-resume failure must never fail the send the
-  // operator is waiting on.
-  if (draftWorkflowRunId) {
-    void resumeWorkflowRunAfterApproval(draftWorkflowRunId, {
-      approved: true,
-    }).catch((err) =>
-      console.warn("[sms/send] workflow resume failed", err),
-    );
-  }
+  resumeWorkflowIfNeeded();
 
   await recordSend(auth.uid, "sms");
 

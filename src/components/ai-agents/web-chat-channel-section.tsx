@@ -50,6 +50,7 @@ export function WebChatChannelSection() {
   const [allowedDomainsText, setAllowedDomainsText] = useState("");
   const [forceCaptureOnFirstMessage, setForceCaptureOnFirstMessage] =
     useState(false);
+  const [postCaptureMessage, setPostCaptureMessage] = useState("");
 
   const [contextCount, setContextCount] = useState(10);
   // String, not number, so the field can be genuinely empty ("no limit").
@@ -106,6 +107,7 @@ export function WebChatChannelSection() {
           setPosition(wc.position);
           setAllowedDomainsText(wc.allowedDomains.join("\n"));
           setForceCaptureOnFirstMessage(!!wc.forceCaptureOnFirstMessage);
+          setPostCaptureMessage(wc.postCaptureMessage ?? "");
         }
       }
     } catch (err) {
@@ -176,6 +178,7 @@ export function WebChatChannelSection() {
           position,
           allowedDomains,
           forceCaptureOnFirstMessage,
+          postCaptureMessage: postCaptureMessage.trim() || null,
         },
       };
 
@@ -374,6 +377,39 @@ export function WebChatChannelSection() {
                 Enforced directly (not just prompted), so it always fires.
               </p>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="wc-post-capture">
+              Message after capturing name + phone (optional)
+            </Label>
+            <Textarea
+              id="wc-post-capture"
+              value={postCaptureMessage}
+              onChange={(e) => setPostCaptureMessage(e.target.value)}
+              rows={2}
+              maxLength={400}
+              placeholder="Thanks {{name}}! What day/time works best for a quick call? We'll reach out at {{phone}} to confirm."
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Sent the instant the visitor submits the capture form — no AI
+              call, so it&rsquo;s a good place to pivot straight into a
+              specific ask (like booking a time) instead of the generic
+              &ldquo;someone will reach out&rdquo; line. Use{" "}
+              <code className="text-foreground">{"{{name}}"}</code> and{" "}
+              <code className="text-foreground">{"{{phone}}"}</code> as
+              placeholders. Leave blank to use the default. Whatever the
+              visitor types next goes through the normal AI reply — so the
+              persona on the{" "}
+              <Link
+                href={`/sa/${subAccountId}/ai-agents`}
+                className="underline-offset-2 hover:underline"
+              >
+                Overview
+              </Link>{" "}
+              page should know to continue the booking-times conversation
+              from there.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

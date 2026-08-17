@@ -323,9 +323,17 @@ export async function POST(request: Request) {
   }
 
   // Templated thank-you so the next reply doesn't need an LLM round-trip.
+  // Operator-configurable per sub-account (AI Agents → Web Chat) so a
+  // channel can pivot straight into a specific ask (e.g. booking times)
+  // instead of the generic default — see WebChatChannelConfig.postCaptureMessage.
   const who = name ? name : "you";
   const reach = email ?? phone ?? "the details you provided";
-  const reply = `Thanks ${who}! Someone from the team will reach out via ${reach} shortly.`;
+  const template = config.webChat?.postCaptureMessage?.trim();
+  const reply = template
+    ? template
+        .replaceAll("{{name}}", who)
+        .replaceAll("{{phone}}", reach)
+    : `Thanks ${who}! Someone from the team will reach out via ${reach} shortly.`;
   await appendMessage({
     subAccountId,
     agencyId: session.agencyId,

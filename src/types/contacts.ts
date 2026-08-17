@@ -118,6 +118,28 @@ export interface Contact {
    */
   whatsappOptedOut?: boolean;
   /**
+   * E.164 pool number (see `TwilioPoolNumber` in types/tenancy.ts)
+   * permanently tied to this contact — the number that first reached them,
+   * either a CSV-import assignment or the `To` number of their first
+   * inbound touch on a pool-enabled sub-account. Every future outbound to
+   * them (manual, AI-drafted, or workflow) prefers this number over the
+   * sub-account's default/primary. Null/undefined = unassigned — falls
+   * back to the pool's primary number on outbound. If this number is later
+   * disabled or removed from the pool, sends BLOCK with an error rather
+   * than silently rerouting — see `lib/comms/sms-pool.ts::
+   * resolvePoolFromNumber`. Meaningless on sub-accounts that haven't
+   * adopted a number pool (`SubAccountDoc.twilioConfig.numberPoolEnabled`).
+   */
+  assignedFromNumber?: string | null;
+  /**
+   * Stamped the first (and only) time an inbound reply from this contact
+   * auto-drafts a sales-pitch email (see `lib/comms/email/sales-pitch-
+   * draft.ts`) — an email address was detected in their reply and there was
+   * no `email` on file yet. Prevents re-drafting on every subsequent
+   * email-containing reply from the same person. Undefined = never drafted.
+   */
+  salesEmailDraftedAt?: Timestamp | FieldValue | null;
+  /**
    * Denormalised stamp of the last outbound AI call placed to this contact
    * (campaign or click-to-call). Powers the "don't re-call recently
    * contacted" suppression on bulk campaigns without scanning every
@@ -312,6 +334,7 @@ export type ContactFormData = Pick<
 > & {
   territoryId?: string | null;
   customFields?: Record<string, import("./custom-fields").CustomFieldValue> | null;
+  assignedFromNumber?: string | null;
 };
 
 export type ActivityType =

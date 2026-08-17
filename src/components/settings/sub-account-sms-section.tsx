@@ -12,11 +12,15 @@ import {
   MessageCircle,
   MessageSquare,
   PhoneMissed,
+  Star,
+  Trash2,
+  Users,
 } from "lucide-react";
 import { useSubAccount } from "@/context/sub-account-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { TwilioPoolNumber } from "@/types";
 
 /**
  * Sub-account SMS settings panel.
@@ -79,6 +83,125 @@ export function SubAccountSmsSection() {
     voiceWebhookConfigured: boolean;
     voiceWebhookError: string | null;
   } | null>(null);
+
+  // Number pool — a cold-outreach setup where 10-12 numbers (all sharing the
+  // account creds above) each get permanently tied to whichever contacts
+  // they reach first. Managed via /api/sub-accounts/[id]/twilio/numbers.
+  const [poolNumbers, setPoolNumbers] = useState<TwilioPoolNumber[]>([]);
+  const [poolEnabled, setPoolEnabled] = useState(false);
+  const [poolDefaultRate, setPoolDefaultRate] = useState(2);
+  const [poolLoaded, setPoolLoaded] = useState(false);
+  const [poolAddE164, setPoolAddE164] = useState("");
+  const [poolAddLabel, setPoolAddLabel] = useState("");
+  const [poolAdding, setPoolAdding] = useState(false);
+  const [poolBusyId, setPoolBusyId] = useState<string | null>(null);
+
+  const isExistingConfigForPool = !!cfg && !!cfg.accountSid && !!cfg.enabled;
+
+  async function loadPool() {
+    try {
+      const res = await fetch(`/api/sub-accounts/${subAccountId}/twilio/numbers`);
+      const data = (await res.json().catch(() => ({}))) as {
+        numberPoolEnabled?: boolean;
+        defaultRatePerMinutePerNumber?: number;
+        numbers?: TwilioPoolNumber[];
+      };
+      if (res.ok) {
+        setPoolEnabled(!!data.numberPoolEnabled);
+        setPoolDefaultRate(data.defaultRatePerMinutePerNumber ?? 2);
+        setPoolNumbers(data.numbers ?? []);
+      }
+    } catch {
+      // Best-effort — the section just shows empty until a retry/refresh.
+    } finally {
+      setPoolLoaded(true);
+    }
+  }
+
+  useEffect(() => {
+    if (isExistingConfigForPool && !poolLoaded) void loadPool();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExistingConfigForPool, subAccountId]);
+
+  async function handleAddPoolNumber() {
+    setPoolAdding(true);
+    try {
+      const res = await fetch(`/api/sub-accounts/${subAccountId}/twilio/numbers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ e164: poolAddE164.trim(), label: poolAddLabel.trim() }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed to add number.");
+      toast.success("Number added to the pool.");
+      setPoolAddE164("");
+      setPoolAddLabel("");
+      await loadPool();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add number.");
+    } finally {
+      setPoolAdding(false);
+    }
+  }
+
+  async function patchPoolNumber(numberId: string, patch: Record<string, unknown>) {
+    setPoolBusyId(numberId);
+    try {
+      const res = await fetch(
+        `/api/sub-accounts/${subAccountId}/twilio/numbers/${numberId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        },
+      );
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Update failed.");
+      await loadPool();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed.");
+    } finally {
+      setPoolBusyId(null);
+    }
+  }
+
+  async function handleDeletePoolNumber(numberId: string) {
+    if (!confirm("Remove this number from the pool? Contacts still assigned to it will block on their next send until reassigned.")) {
+      return;
+    }
+    setPoolBusyId(numberId);
+    try {
+      const res = await fetch(
+        `/api/sub-accounts/${subAccountId}/twilio/numbers/${numberId}`,
+        { method: "DELETE" },
+      );
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed to remove.");
+      await loadPool();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove.");
+    } finally {
+      setPoolBusyId(null);
+    }
+  }
+
+  async function handleSavePoolDefaultRate() {
+    setPoolAdding(true);
+    try {
+      const res = await fetch(`/api/sub-accounts/${subAccountId}/twilio/numbers`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ defaultRatePerMinutePerNumber: poolDefaultRate }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+      if (!res.ok || !data.ok) throw new Error(data.error ?? "Failed to save.");
+      toast.success("Default pace saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setPoolAdding(false);
+    }
+  }
 
   // Re-sync local state when the snapshot lands or the user navigates between
   // sub-accounts.
@@ -653,6 +776,176 @@ export function SubAccountSmsSection() {
               )}
             </Button>
           </div>
+        </div>
+      )}
+
+      {isExistingConfigForPool && (
+        <div className="bg-background mt-6 rounded-lg border p-4">
+          <div className="flex items-start gap-3">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              <Users className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-sm font-semibold">Number pool (cold-outreach)</h3>
+              <p className="text-muted-foreground mt-0.5 text-xs">
+                Add extra numbers under the same Twilio account above for a
+                multi-number campaign. Whichever pool number first texts (or
+                is CSV-assigned to) a contact becomes permanent for them —
+                every future reply to that person sends from the same
+                number. Each number paces its own sends independently.
+              </p>
+            </div>
+          </div>
+
+          {poolNumbers.length > 0 && (
+            <div className="mt-3 overflow-x-auto rounded-lg border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40 text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-medium">Label</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Number</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Rate/min</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Status</th>
+                    <th className="px-2 py-1.5"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {poolNumbers.map((n) => (
+                    <tr key={n.id} className="border-t">
+                      <td className="px-2 py-1.5">{n.label}</td>
+                      <td className="px-2 py-1.5 font-mono">{n.e164}</td>
+                      <td className="px-2 py-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={60}
+                          className="h-7 w-16 text-xs"
+                          defaultValue={n.ratePerMinuteOverride ?? ""}
+                          placeholder={String(poolDefaultRate)}
+                          disabled={poolBusyId === n.id}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            void patchPoolNumber(n.id, {
+                              ratePerMinuteOverride: v ? Number(v) : null,
+                            });
+                          }}
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            title={n.isPrimary ? "Primary number" : "Set as primary"}
+                            disabled={poolBusyId === n.id || n.isPrimary}
+                            onClick={() => void patchPoolNumber(n.id, { isPrimary: true })}
+                            className="disabled:opacity-40"
+                          >
+                            <Star
+                              className={`h-3.5 w-3.5 ${n.isPrimary ? "fill-amber-400 text-amber-500" : "text-muted-foreground"}`}
+                            />
+                          </button>
+                          <label className="flex items-center gap-1">
+                            <input
+                              type="checkbox"
+                              checked={n.enabled}
+                              disabled={poolBusyId === n.id}
+                              onChange={(e) =>
+                                void patchPoolNumber(n.id, { enabled: e.target.checked })
+                              }
+                              className="h-3 w-3"
+                            />
+                            {n.enabled ? "Enabled" : "Disabled"}
+                          </label>
+                        </div>
+                      </td>
+                      <td className="px-2 py-1.5 text-right">
+                        <button
+                          type="button"
+                          title="Remove from pool"
+                          disabled={poolBusyId === n.id || n.isPrimary}
+                          onClick={() => void handleDeletePoolNumber(n.id)}
+                          className="text-muted-foreground hover:text-destructive disabled:opacity-30"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="pool-add-e164" className="text-[11px]">
+                Add number
+              </Label>
+              <Input
+                id="pool-add-e164"
+                value={poolAddE164}
+                onChange={(e) => setPoolAddE164(e.target.value)}
+                placeholder="+15551234567"
+                className="h-8 w-40 text-xs"
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="pool-add-label" className="text-[11px]">
+                Label (optional)
+              </Label>
+              <Input
+                id="pool-add-label"
+                value={poolAddLabel}
+                onChange={(e) => setPoolAddLabel(e.target.value)}
+                placeholder="Line 3"
+                className="h-8 w-32 text-xs"
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={poolAdding || !poolAddE164.trim()}
+              onClick={handleAddPoolNumber}
+            >
+              {poolAdding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+            </Button>
+            <div className="ml-auto flex items-end gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="pool-default-rate" className="text-[11px]">
+                  Default pace (msgs/min/number)
+                </Label>
+                <Input
+                  id="pool-default-rate"
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={poolDefaultRate}
+                  onChange={(e) => setPoolDefaultRate(Number(e.target.value) || 2)}
+                  className="h-8 w-20 text-xs"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={poolAdding}
+                onClick={handleSavePoolDefaultRate}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+
+          {poolEnabled && (
+            <p className="text-muted-foreground mt-3 text-[11px]">
+              Pool mode is <strong className="text-foreground">active</strong> —
+              outbound to any contact assigned to one of these numbers uses
+              it, and blocks with a clear error instead of silently
+              rerouting if that number gets disabled.
+            </p>
+          )}
         </div>
       )}
 

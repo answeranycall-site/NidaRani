@@ -45,6 +45,9 @@ const PUBLIC_PATHS = [
   // the landing experience.
   "/api/landing/heartbeat",
   "/api/webhooks/twilio",
+  // Number-pool SMS delivery worker — QStash callback, signature-verified
+  // inside the route (same model as /api/workflows/step above).
+  "/api/webhooks/sms",
   "/api/webhooks/stripe",
   // Meta (Facebook Messenger + Instagram DM) webhook — BETA. Public from the
   // Meta cloud: GET is the verify-token handshake, POST carries message events.

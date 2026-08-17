@@ -50,6 +50,9 @@ export interface CreateContactInput {
   pipelineStage?: string | null;
   territoryId?: string | null;
   attribution?: ContactAttribution | null;
+  /** E.164 pool number to permanently tie this contact to — see
+   *  `Contact.assignedFromNumber` in types/contacts.ts. Null/absent = unassigned. */
+  assignedFromNumber?: string | null;
   /** Optional resolved location (form submit supplies this; UI doesn't). */
   location?: {
     countryCode: string | null;
@@ -91,6 +94,7 @@ export async function createContactServerSide(
     tags: input.tags,
     pipelineStage: input.pipelineStage ?? null,
     attribution: input.attribution ?? null,
+    assignedFromNumber: input.assignedFromNumber ?? null,
     emailOptedOut: false,
     smsOptedOut: false,
     countryCode: loc?.countryCode ?? null,

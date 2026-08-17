@@ -6,6 +6,7 @@ import {
   sendSmsForSubAccount,
   sendWhatsappForSubAccount,
 } from "@/lib/comms/twilio";
+import { enqueuePooledSms } from "@/lib/comms/sms-pool";
 import { callAi, type AiChatMessage } from "@/lib/comms/ai/openrouter";
 import {
   incrementChannelTokens,
@@ -285,6 +286,10 @@ export interface SendAndPersistReplyInput {
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
+  /** SMS only — the contact's pool-assigned number, if any. Threaded through
+   *  so a pooled sub-account routes this reply through the right number and
+   *  the shared per-number rate limiter. Ignored for WhatsApp (not pooled). */
+  assignedFromNumber?: string | null;
 }
 
 /**
@@ -298,8 +303,85 @@ export interface SendAndPersistReplyInput {
  */
 export async function sendAndPersistReply(
   input: SendAndPersistReplyInput,
-): Promise<{ ok: true; sid: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; sid: string; queued?: boolean } | { ok: false; error: string }> {
   const transport = getChannelTransport(input.channelId);
+
+  // SMS routes through the number-pool orchestrator so a pooled sub-account
+  // sends from this contact's assigned number under the shared per-number
+  // rate limit. WhatsApp isn't pooled — unchanged, still uses transport.send.
+  if (input.channelId === "sms") {
+    const result = await enqueuePooledSms({
+      subAccountId: input.subAccountId,
+      agencyId: input.agencyId,
+      subAccount: input.subAccount,
+      contact: { id: input.contactId, assignedFromNumber: input.assignedFromNumber },
+      to: input.contactPhone,
+      body: input.replyText,
+      meta: { source: "ai_draft" },
+    });
+
+    if (!result.ok) {
+      console.error(
+        `[ai/respond] pooled SMS send failed for sa=${input.subAccountId}: ${result.reason}`,
+      );
+      await logActivity({
+        contactId: input.contactId,
+        agencyId: input.agencyId,
+        subAccountId: input.subAccountId,
+        type: "ai_skipped",
+        content: `AI reply generated but SMS send failed: ${result.reason.slice(0, 200)}`,
+        meta: { reason: "llm_failed", twilioError: result.reason.slice(0, 500), channel: "sms" },
+      });
+      return { ok: false, error: result.reason };
+    }
+
+    // Deferred: deliverPooledSms will do the message-row/conversation/
+    // activity bookkeeping once the QStash callback actually sends it —
+    // doing it here too would persist a message that hasn't gone out yet.
+    if (result.pooled && !result.sentInline) {
+      return { ok: true, sid: "", queued: true };
+    }
+
+    const sid = result.sid;
+    const from = result.from;
+
+    await storeOutboundReply({
+      contactId: input.contactId,
+      agencyId: input.agencyId,
+      subAccountId: input.subAccountId,
+      body: input.replyText,
+      from,
+      to: input.contactPhone,
+      twilioSid: sid,
+      messagesCollection: transport.messagesCollection,
+    });
+    await upsertConversationForMessage({
+      contactId: input.contactId,
+      subAccountId: input.subAccountId,
+      agencyId: input.agencyId,
+      contactName: input.contactName,
+      contactPhone: input.contactPhone,
+      channel: "sms",
+      direction: "outbound",
+      body: input.replyText,
+    });
+    await logActivity({
+      contactId: input.contactId,
+      agencyId: input.agencyId,
+      subAccountId: input.subAccountId,
+      type: "ai_reply_sent",
+      content: `AI replied via SMS (${input.totalTokens} tokens, ${input.model}).`,
+      meta: {
+        channel: "sms",
+        model: input.model,
+        tokens: input.totalTokens,
+        promptTokens: input.promptTokens,
+        completionTokens: input.completionTokens,
+        twilioSid: sid,
+      },
+    });
+    return { ok: true, sid };
+  }
 
   let send;
   try {
@@ -634,6 +716,7 @@ export async function maybeRespondWithAi(
     totalTokens: completion.totalTokens,
     promptTokens: completion.promptTokens,
     completionTokens: completion.completionTokens,
+    assignedFromNumber: contact.assignedFromNumber,
   };
 
   // Cosmetic "typing delay" — schedule the actual send via QStash instead

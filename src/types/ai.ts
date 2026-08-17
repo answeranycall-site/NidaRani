@@ -255,6 +255,18 @@ export interface WebChatChannelConfig {
    * suppresses it like every other capture path.
    */
   forceCaptureOnFirstMessage: boolean;
+  /**
+   * Overrides the templated "Thanks {name}! Someone from the team will
+   * reach out…" line sent immediately after the visitor submits the
+   * name+phone capture form (see `/api/web-chat/capture`). That reply is
+   * template-only (no LLM round-trip), so this is the hook for pivoting
+   * straight into a specific ask — e.g. "what day/time works for a call?"
+   * — instead of the generic default. Supports `{{name}}` and `{{phone}}`
+   * tokens, substituted at send time; `{{phone}}` falls back to the
+   * captured email, then to "the details you provided" if neither was
+   * captured. Null/empty = use the generic default line.
+   */
+  postCaptureMessage: string | null;
 }
 
 /** WhatsApp-channel-only settings. Lives at
@@ -297,6 +309,7 @@ export const DEFAULT_WEB_CHAT_CONFIG: WebChatChannelConfig = {
   accentColor: "#7c3aed",
   position: "right",
   forceCaptureOnFirstMessage: false,
+  postCaptureMessage: null,
 };
 
 export const DEFAULT_VOICE_CONFIG: VoiceChannelConfig = {
