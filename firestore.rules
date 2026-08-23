@@ -1031,6 +1031,23 @@ service cloud.firestore {
       }
     }
 
+    // Cold SMS bulk campaigns — same shape as voiceCampaigns above.
+    match /smsCampaigns/{campaignId} {
+      allow read: if canAccessSub(
+        resource.data.subAccountId,
+        resource.data.agencyId
+      );
+      allow write: if false;
+
+      match /recipients/{contactId} {
+        allow read: if canAccessSub(
+          get(/databases/$(database)/documents/smsCampaigns/$(campaignId)).data.subAccountId,
+          get(/databases/$(database)/documents/smsCampaigns/$(campaignId)).data.agencyId
+        );
+        allow write: if false;
+      }
+    }
+
     // Usage counters — keyed by sub-account, then user.
     // Reads: the user reads their own; agency owners can audit any user in
     // any sub-account they own.

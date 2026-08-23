@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CalendarClock,
   Globe,
+  Headset,
   KeyRound,
   Loader2,
   Mail,
@@ -70,6 +71,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const initialGoogleReviews =
     subAccount?.googleReviewsSyncEnabledByAgency === true;
   const initialAiBooking = subAccount?.aiBookingEnabledByAgency === true;
+  const initialRaniMastermind =
+    subAccount?.raniMastermindEnabledByAgency === true;
   // Inverse polarity — checked means "require own Twilio" (sharedSmsAllowed
   // === false), unchecked (default) means shared mode stays available.
   const initialRequireOwnTwilio = subAccount?.sharedSmsAllowed === false;
@@ -98,6 +101,9 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialGoogleReviews,
   );
   const [aiBookingEnabled, setAiBookingEnabled] = useState(initialAiBooking);
+  const [raniMastermindEnabled, setRaniMastermindEnabled] = useState(
+    initialRaniMastermind,
+  );
   const [requireOwnTwilio, setRequireOwnTwilio] = useState(
     initialRequireOwnTwilio,
   );
@@ -160,6 +166,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       setMissedCallEnabled(initialMissedCall);
       setGoogleReviewsEnabled(initialGoogleReviews);
       setAiBookingEnabled(initialAiBooking);
+      setRaniMastermindEnabled(initialRaniMastermind);
       setRequireOwnTwilio(initialRequireOwnTwilio);
       setBroadcastsHidden(initialBroadcastsHidden);
       setWebsiteHidden(initialWebsiteHidden);
@@ -180,6 +187,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     initialMissedCall,
     initialGoogleReviews,
     initialAiBooking,
+    initialRaniMastermind,
     initialRequireOwnTwilio,
     initialBroadcastsHidden,
     initialWebsiteHidden,
@@ -204,6 +212,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
   const missedCallDirty = missedCallEnabled !== initialMissedCall;
   const googleReviewsDirty = googleReviewsEnabled !== initialGoogleReviews;
   const aiBookingDirty = aiBookingEnabled !== initialAiBooking;
+  const raniMastermindDirty =
+    raniMastermindEnabled !== initialRaniMastermind;
   const requireOwnTwilioDirty =
     requireOwnTwilio !== initialRequireOwnTwilio;
   const broadcastsHiddenDirty = broadcastsHidden !== initialBroadcastsHidden;
@@ -223,6 +233,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
     missedCallDirty ||
     googleReviewsDirty ||
     aiBookingDirty ||
+    raniMastermindDirty ||
     requireOwnTwilioDirty ||
     broadcastsHiddenDirty ||
     websiteHiddenDirty ||
@@ -255,6 +266,7 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
         missedCallTextBackEnabled?: boolean;
         googleReviewsSyncEnabled?: boolean;
         aiBookingEnabled?: boolean;
+        raniMastermindEnabled?: boolean;
         sharedSmsAllowed?: boolean;
         broadcastsHiddenWhenDisabled?: boolean;
         websiteHiddenWhenDisabled?: boolean;
@@ -275,6 +287,8 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
       if (googleReviewsDirty)
         payload.googleReviewsSyncEnabled = googleReviewsEnabled;
       if (aiBookingDirty) payload.aiBookingEnabled = aiBookingEnabled;
+      if (raniMastermindDirty)
+        payload.raniMastermindEnabled = raniMastermindEnabled;
       if (requireOwnTwilioDirty)
         payload.sharedSmsAllowed = !requireOwnTwilio;
       if (broadcastsHiddenDirty)
@@ -657,6 +671,24 @@ export function SubAccountManageDialog({ subAccount, open, onOpenChange }: Props
             + SMS resources like the other AI channels. Disabling makes those
             workflow steps skip instead of drafting; nothing is torn down, so
             re-enabling resumes instantly.
+          </GateToggle>
+
+          <GateToggle
+            checked={raniMastermindEnabled}
+            onChange={setRaniMastermindEnabled}
+            disabled={saving}
+            icon={<Headset className="h-3.5 w-3.5 text-fuchsia-600 dark:text-fuchsia-400" />}
+            title="RANI MASTERMIND"
+          >
+            When enabled, this sub-account gets the Cold SMS number pool
+            (multi-number CSV import, bulk campaigns, per-number pacing +
+            auto-flagging) and the Retell Voice Agent integration (attach an
+            inbound-calling agent to any pool number). One bundle, one
+            toggle — these only make sense together for a sub-account
+            actually running cold outreach. Disabling locks both sidebar
+            entries and 403s the underlying routes; the number pool,
+            imported contacts, campaign history, and any Retell bindings are
+            all preserved, so re-enabling resumes instantly.
           </GateToggle>
 
           <GateToggle

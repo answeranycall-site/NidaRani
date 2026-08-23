@@ -10,6 +10,7 @@ import {
   type ContactApiObject,
 } from "@/lib/api/serializers/contacts";
 import type { ContactAttribution } from "@/types/contacts";
+import type { CustomFieldValue } from "@/types/custom-fields";
 import { GLOBAL_TERRITORY_ID } from "@/types";
 
 /**
@@ -53,6 +54,11 @@ export interface CreateContactInput {
   /** E.164 pool number to permanently tie this contact to — see
    *  `Contact.assignedFromNumber` in types/contacts.ts. Null/absent = unassigned. */
   assignedFromNumber?: string | null;
+  /** Operator-defined field values, keyed by the field def's stable `key`
+   *  (see `types/custom-fields.ts`). Caller is responsible for having
+   *  already validated these against the sub-account's defs (or minted new
+   *  defs) — this layer just persists whatever's handed to it. */
+  customFields?: Record<string, CustomFieldValue> | null;
   /** Optional resolved location (form submit supplies this; UI doesn't). */
   location?: {
     countryCode: string | null;
@@ -95,6 +101,7 @@ export async function createContactServerSide(
     pipelineStage: input.pipelineStage ?? null,
     attribution: input.attribution ?? null,
     assignedFromNumber: input.assignedFromNumber ?? null,
+    customFields: input.customFields ?? null,
     emailOptedOut: false,
     smsOptedOut: false,
     countryCode: loc?.countryCode ?? null,

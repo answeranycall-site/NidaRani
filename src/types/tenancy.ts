@@ -258,6 +258,24 @@ export interface SubAccountDoc {
    */
   googleReviewsSyncEnabledByAgency?: boolean;
   /**
+   * Agency-controlled gate — "RANI MASTERMIND" (the operator's own name for
+   * this bundle) covers the Cold SMS number pool + CSV import + bulk
+   * campaigns + the Retell Voice Agent integration. Deliberately ONE gate
+   * for the whole bundle rather than one per sub-feature — these features
+   * only make sense together for a sub-account actually running cold
+   * outreach, unlike e.g. Website/Social which are independently useful.
+   * When `false` (or undefined on legacy docs): the Cold SMS and Retell
+   * Voice Agent sidebar entries render a "Locked by your agency" state, and
+   * every route under `/api/sub-accounts/[id]/twilio/numbers*`,
+   * `/api/sub-accounts/[id]/cold-sms/*`, `/api/sub-accounts/[id]/retell/*`,
+   * and `/api/comms/sms/campaign/*` 403s. No tear-down on disable — the
+   * number pool, imported contacts, campaign history, and Retell bindings
+   * are all preserved, so re-enabling resumes instantly. Defaults to
+   * `false` at creation (explicit allowlist, matches every other gate in
+   * this cluster except the inverse-polarity one below). Read `=== true`.
+   */
+  raniMastermindEnabledByAgency?: boolean;
+  /**
    * Agency-controlled gate — the INVERSE polarity of the other gates above.
    * Defaults to `true` (undefined reads as allowed) so every sub-account can
    * ride the agency's shared/env-var Twilio sender out of the box. Setting
@@ -605,8 +623,71 @@ export interface TwilioPoolNumber {
    *  API — mirrors `TwilioConfig.inboundWebhookConfigured`'s role for the
    *  legacy single number. */
   inboundWebhookConfigured: boolean;
+  /**
+   * Lifetime delivery stats, kept current by the Twilio status-callback
+   * webhook (`/api/webhooks/twilio/sms-status`) attached to every pooled
+   * send — see `lib/comms/sms-pool.ts::deliverPooledSms`. Incremented
+   * exactly once per message via a `statusEvents/{messageSid}` idempotency
+   * doc (`subAccounts/{id}/twilioNumbers/{numberId}/statusEvents`), so a
+   * message that settles through multiple status callbacks (sent →
+   * delivered) is never double-counted. Last-24h stats are NOT stored here
+   * — computed on read from `statusEvents` via a count() aggregation query
+   * (see the numbers GET route), so there's no separate rolling-window
+   * field to keep in sync.
+   */
+  lifetimeSent: number;
+  /** Count of error_code 30007 (carrier-filtered as spam) ever seen on
+   *  this number — the same error the operator's prior tooling flagged
+   *  numbers on. */
+  lifetimeErrors: number;
+  lastErrorAt: Timestamp | FieldValue | null;
+  /** True when this number was auto-disabled by the 30007-rate guard
+   *  (as opposed to the operator manually toggling `enabled` off) — lets
+   *  the UI show "auto-flagged" instead of a plain disabled state, and
+   *  distinguishes an operator's deliberate off from a system safety trip. */
+  autoDisabledAt: Timestamp | FieldValue | null;
+  /** When Twilio actually provisioned this number (their `dateCreated`) —
+   *  distinct from `createdAt` below, which is when WE started tracking it
+   *  (may be much later, e.g. a number bought years ago and only just
+   *  synced in). Drives the "renews in N days" display so the operator can
+   *  request deletion before the ~30-day billing cycle recharges. Null for
+   *  numbers added before this field existed, or if Twilio didn't return
+   *  a date for some reason — the UI just omits the renewal line then. */
+  purchasedAt: Timestamp | FieldValue | null;
+  /** Set once the operator requests deletion AND Twilio confirms the
+   *  number was actually released — never set speculatively. An archived
+   *  number is read-only history: stats + which contacts were assigned to
+   *  it stay queryable, but it can never be re-enabled (the underlying
+   *  Twilio number is gone). Distinct from `enabled: false`, which is
+   *  reversible. */
+  archivedAt: Timestamp | FieldValue | null;
+  /** Retell agent id currently bound to this number for INBOUND voice, if
+   *  any — set by the Retell Voice Agent page's assign flow (import number
+   *  into Retell -> bind agent -> publish -> record here). Null = no
+   *  Retell agent handling calls to this number (its Voice URL, if set at
+   *  all, is either our own handler or untouched). Entirely separate from
+   *  the Vapi-based Voice/Outbound-Voice product feature this codebase
+   *  sells to Answer Any Call's own SaaS clients — different provider,
+   *  different purpose. See `lib/comms/retell.ts`. */
+  retellAgentId: string | null;
   createdAt: Timestamp | FieldValue;
   updatedAt: Timestamp | FieldValue;
+}
+
+/**
+ * One settled-message idempotency record, `subAccounts/{id}/twilioNumbers/
+ * {numberId}/statusEvents/{messageSid}` — doc id IS the Twilio MessageSid,
+ * so the status-callback webhook can transactionally check "have I already
+ * counted this message" before incrementing the parent number's lifetime
+ * stats. Also the source for the last-24h count() aggregation query the
+ * Cold SMS page reads. Not pruned in v1 — bounded by actual send volume,
+ * revisit if a sub-account's history grows large enough to matter.
+ */
+export interface TwilioNumberStatusEvent {
+  messageSid: string;
+  status: string; // Twilio MessageStatus at time of the first settled callback
+  errorCode: string | null;
+  createdAt: Timestamp | FieldValue;
 }
 
 export interface MissedCallConfig {

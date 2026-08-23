@@ -4,7 +4,8 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountAdmin } from "@/lib/auth/require-tenancy";
-import type { TwilioPoolNumber } from "@/types";
+import { requireRaniMastermindGate } from "@/lib/auth/require-rani-mastermind";
+import type { SubAccountDoc, TwilioPoolNumber } from "@/types";
 
 /**
  * Update or remove one number in a sub-account's outbound pool. See the
@@ -43,6 +44,10 @@ export async function PATCH(
   }
 
   const db = getAdminDb();
+  const subSnap = await db.doc(`subAccounts/${subAccountId}`).get();
+  const gateBlock = requireRaniMastermindGate(subSnap.data() as SubAccountDoc | undefined);
+  if (gateBlock) return gateBlock;
+
   const ref = db.doc(`subAccounts/${subAccountId}/twilioNumbers/${numberId}`);
   const snap = await ref.get();
   if (!snap.exists) {
@@ -94,6 +99,10 @@ export async function DELETE(
   if (access instanceof NextResponse) return access;
 
   const db = getAdminDb();
+  const subSnap = await db.doc(`subAccounts/${subAccountId}`).get();
+  const gateBlock = requireRaniMastermindGate(subSnap.data() as SubAccountDoc | undefined);
+  if (gateBlock) return gateBlock;
+
   const ref = db.doc(`subAccounts/${subAccountId}/twilioNumbers/${numberId}`);
   const snap = await ref.get();
   if (!snap.exists) {

@@ -5,6 +5,7 @@ export * from "./custom-fields";
 export * from "./automations";
 export * from "./broadcasts";
 export * from "./voice-campaigns";
+export * from "./sms-campaigns";
 export * from "./messages";
 export * from "./whatsapp-templates";
 export * from "./website";

@@ -4,9 +4,24 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { getAdminDb } from "@/lib/firebase/admin";
 import { requireSubAccountAdmin } from "@/lib/auth/require-tenancy";
-import { autoConfigureInboundWebhook } from "@/lib/comms/twilio-config";
+import { requireRaniMastermindGate } from "@/lib/auth/require-rani-mastermind";
+import {
+  autoConfigureInboundWebhook,
+  type AutoConfigureWebhookResult,
+} from "@/lib/comms/twilio-config";
 import { slugifyE164 } from "@/lib/comms/sms-pool";
-import type { TwilioConfig, TwilioPoolNumber } from "@/types";
+import { buildTwilioClient } from "@/lib/comms/twilio";
+import type { SubAccountDoc, TwilioConfig, TwilioPoolNumber } from "@/types";
+
+/** A number's Voice URL is "fine" (not flagged) if it's blank, points at
+ *  our own webhook, or points at Missed Call Text Back's handler — only a
+ *  foreign/stale URL gets flagged. A Retell-bound number is checked
+ *  separately (against the configured SIP termination, not this URL). */
+function voiceUrlLooksOk(voiceUrl: string, ourBase: string): boolean {
+  if (!voiceUrl) return true;
+  if (ourBase && voiceUrl.startsWith(ourBase)) return true;
+  return false;
+}
 
 /**
  * Manage a sub-account's outbound-sending number pool (10-12 numbers for a
@@ -48,15 +63,82 @@ export async function GET(
     db.doc(`subAccounts/${subAccountId}`).get(),
     db.collection(`subAccounts/${subAccountId}/twilioNumbers`).get(),
   ]);
+  const gateBlock = requireRaniMastermindGate(subSnap.data() as SubAccountDoc | undefined);
+  if (gateBlock) return gateBlock;
   const cfg = (subSnap.data()?.twilioConfig as TwilioConfig | undefined) ?? null;
   const numbers = numbersSnap.docs
     .map((d) => d.data() as TwilioPoolNumber)
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  // Last-24h stats aren't stored on the number doc (see TwilioPoolNumber's
+  // doc comment) — computed here via count() aggregation queries against
+  // each number's statusEvents subcollection so there's no rolling-window
+  // field to keep in sync elsewhere.
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const last24h = await Promise.all(
+    numbers.map(async (n) => {
+      const base = db.collection(
+        `subAccounts/${subAccountId}/twilioNumbers/${n.id}/statusEvents`,
+      );
+      const [sentSnap, errSnap] = await Promise.all([
+        base.where("createdAt", ">=", cutoff).count().get(),
+        base
+          .where("createdAt", ">=", cutoff)
+          .where("errorCode", "==", "30007")
+          .count()
+          .get(),
+      ]);
+      return {
+        id: n.id,
+        last24hSent: sentSnap.data().count,
+        last24hErrors: errSnap.data().count,
+      };
+    }),
+  );
+  const last24hById = new Map(last24h.map((s) => [s.id, s]));
+
+  // Live hook-status — ONE bulk Twilio list call (not N per-number lookups)
+  // so this stays cheap even at ~50 numbers. Compared against what SHOULD
+  // be configured; drift (someone changed it in the Twilio console, or a
+  // number was imported before this app existed) gets flagged with a Fix
+  // action rather than silently trusted from the stamped-at-add-time flag.
+  const hookStatusByE164 = new Map<
+    string,
+    { smsUrl: string; voiceUrl: string }
+  >();
+  let hookCheckError: string | null = null;
+  if (cfg?.accountSid && cfg.authToken && numbers.length > 0) {
+    try {
+      const client = buildTwilioClient(cfg.accountSid, cfg.authToken);
+      const list = await client.incomingPhoneNumbers.list({ limit: 1000 });
+      for (const n of list) {
+        hookStatusByE164.set(n.phoneNumber, {
+          smsUrl: n.smsUrl || "",
+          voiceUrl: n.voiceUrl || "",
+        });
+      }
+    } catch (err) {
+      hookCheckError = err instanceof Error ? err.message : "Twilio lookup failed.";
+    }
+  }
+  const ourSmsWebhook = inboundWebhookUrl();
+  const ourBase = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ?? "";
+
   return NextResponse.json({
     numberPoolEnabled: cfg?.numberPoolEnabled === true,
     defaultRatePerMinutePerNumber: cfg?.defaultRatePerMinutePerNumber ?? 2,
-    numbers,
+    hookCheckError,
+    numbers: numbers.map((n) => {
+      const live = hookStatusByE164.get(n.e164);
+      return {
+        ...n,
+        last24hSent: last24hById.get(n.id)?.last24hSent ?? 0,
+        last24hErrors: last24hById.get(n.id)?.last24hErrors ?? 0,
+        smsHookOk: live ? live.smsUrl === ourSmsWebhook : null,
+        voiceHookOk: live ? voiceUrlLooksOk(live.voiceUrl, ourBase) : null,
+        currentVoiceUrl: live?.voiceUrl || null,
+      };
+    }),
   });
 }
 
@@ -93,6 +175,8 @@ export async function POST(
   const db = getAdminDb();
   const subRef = db.doc(`subAccounts/${subAccountId}`);
   const subSnap = await subRef.get();
+  const gateBlock = requireRaniMastermindGate(subSnap.data() as SubAccountDoc | undefined);
+  if (gateBlock) return gateBlock;
   const cfg = (subSnap.data()?.twilioConfig as TwilioConfig | undefined) ?? null;
   if (!cfg?.enabled || !cfg.accountSid || !cfg.authToken) {
     return NextResponse.json(
@@ -114,7 +198,7 @@ export async function POST(
   }
 
   const webhookUrl = inboundWebhookUrl();
-  let webhookResult = { ok: false, error: null as string | null };
+  let webhookResult: AutoConfigureWebhookResult = { ok: false, error: null };
   if (webhookUrl) {
     webhookResult = await autoConfigureInboundWebhook({
       accountSid: cfg.accountSid,
@@ -142,6 +226,15 @@ export async function POST(
     nextAvailableAt: null,
     cursorUpdatedAt: null,
     inboundWebhookConfigured: webhookResult.ok,
+    lifetimeSent: 0,
+    lifetimeErrors: 0,
+    lastErrorAt: null,
+    autoDisabledAt: null,
+    retellAgentId: null,
+    purchasedAt: webhookResult.dateCreated
+      ? (webhookResult.dateCreated as unknown as TwilioPoolNumber["purchasedAt"])
+      : null,
+    archivedAt: null,
     createdAt: FieldValue.serverTimestamp() as unknown as TwilioPoolNumber["createdAt"],
     updatedAt: FieldValue.serverTimestamp() as unknown as TwilioPoolNumber["updatedAt"],
   };
@@ -188,6 +281,10 @@ export async function PATCH(
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
+
+  const subSnap = await getAdminDb().doc(`subAccounts/${subAccountId}`).get();
+  const gateBlock = requireRaniMastermindGate(subSnap.data() as SubAccountDoc | undefined);
+  if (gateBlock) return gateBlock;
 
   const updates: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof body.numberPoolEnabled === "boolean") {

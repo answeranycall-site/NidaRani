@@ -129,8 +129,23 @@ export interface Contact {
    * than silently rerouting — see `lib/comms/sms-pool.ts::
    * resolvePoolFromNumber`. Meaningless on sub-accounts that haven't
    * adopted a number pool (`SubAccountDoc.twilioConfig.numberPoolEnabled`).
+   *
+   * NOT final until `assignedFromNumberLockedAt` is set (see below) — a
+   * CSV import's best-guess assignment, or a Cold SMS campaign's rotation-
+   * balance assignment, can freely change this value right up until the
+   * first real send actually happens.
    */
   assignedFromNumber?: string | null;
+  /**
+   * Set the first time `assignedFromNumber` is backed by a REAL touch —
+   * either an actual inbound message from this contact, or an actual
+   * outbound send to them (manual, AI, workflow, or a campaign step). Null
+   * = the current `assignedFromNumber` is still just a proposal (an import
+   * guess, or a campaign's not-yet-executed rotation plan) and remains
+   * freely reassignable. Once set, `assignedFromNumber` is permanent —
+   * nothing in this codebase should change it again after this is set.
+   */
+  assignedFromNumberLockedAt?: Timestamp | FieldValue | null;
   /**
    * Stamped the first (and only) time an inbound reply from this contact
    * auto-drafts a sales-pitch email (see `lib/comms/email/sales-pitch-

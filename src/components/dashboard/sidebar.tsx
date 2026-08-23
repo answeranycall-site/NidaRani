@@ -29,6 +29,8 @@ import {
   Share2,
   GraduationCap,
   Star,
+  PhoneOutgoing,
+  Headset,
 } from "lucide-react";
 import { getFirebaseDb } from "@/lib/firebase/client";
 import { signOutUser } from "@/lib/firebase/auth";
@@ -89,6 +91,18 @@ const SUB_ACCOUNT_NAV: NavItem[] = [
   { href: "/workflows", label: "Workflows", icon: Workflow, enabled: true },
   { href: "/ai-agents", label: "AI Agents", icon: Bot, enabled: true },
   { href: "/broadcasts", label: "Broadcasts", icon: Send, enabled: true },
+  {
+    href: "/cold-sms",
+    label: "Cold SMS",
+    icon: PhoneOutgoing,
+    enabled: true,
+  },
+  {
+    href: "/retell-voice",
+    label: "Retell Voice Agent",
+    icon: Headset,
+    enabled: true,
+  },
   { href: "/templates", label: "Templates", icon: FileText, enabled: true },
   { href: "/social", label: "Social Planner", icon: Share2, enabled: true },
   {
@@ -138,6 +152,9 @@ function SidebarContent() {
   const [socialGate, setSocialGate] = useState<boolean | null>(null);
   const [communityGate, setCommunityGate] = useState<boolean | null>(null);
   const [reviewsGate, setReviewsGate] = useState<boolean | null>(null);
+  // RANI MASTERMIND bundle (Cold SMS + Retell Voice Agent) — one gate locks
+  // both sidebar entries, no "hide" variant (matches the Reviews gate).
+  const [raniMastermindGate, setRaniMastermindGate] = useState<boolean | null>(null);
   // Per-feature "hide instead of lock" overrides. Only consulted when the
   // matching gate is off — when true the entry is omitted entirely instead of
   // rendering a greyed "Locked" row, so the tenant never knows it exists.
@@ -153,6 +170,7 @@ function SidebarContent() {
       setSocialGate(null);
       setCommunityGate(null);
       setReviewsGate(null);
+      setRaniMastermindGate(null);
       return;
     }
     return onSnapshot(
@@ -164,6 +182,7 @@ function SidebarContent() {
         setSocialGate(data?.socialPlannerEnabledByAgency === true);
         setCommunityGate(data?.communityEnabledByAgency === true);
         setReviewsGate(data?.googleReviewsSyncEnabledByAgency === true);
+        setRaniMastermindGate(data?.raniMastermindEnabledByAgency === true);
         setBroadcastsHidden(data?.broadcastsHiddenWhenDisabled === true);
         setWebsiteHidden(data?.websiteHiddenWhenDisabled === true);
         setSocialHidden(data?.socialPlannerHiddenWhenDisabled === true);
@@ -175,6 +194,7 @@ function SidebarContent() {
         setSocialGate(null);
         setCommunityGate(null);
         setReviewsGate(null);
+        setRaniMastermindGate(null);
       },
     );
   }, [activeSubId, memberships]);
@@ -306,7 +326,9 @@ function SidebarContent() {
                 (item.href === "/website" && websiteGate === false) ||
                 (item.href === "/social" && socialGate === false) ||
                 (item.href === "/community" && communityGate === false) ||
-                (item.href === "/reviews" && reviewsGate === false);
+                (item.href === "/reviews" && reviewsGate === false) ||
+                ((item.href === "/cold-sms" || item.href === "/retell-voice") &&
+                  raniMastermindGate === false);
               // When the agency owner opted to hide (not just lock) a disabled
               // feature, omit the entry entirely so the tenant never sees it.
               const gateHidden =

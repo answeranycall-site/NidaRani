@@ -177,6 +177,7 @@ export async function POST(request: Request) {
       missedCallTextBackEnabledByAgency: false,
       googleReviewsSyncEnabledByAgency: false,
       aiBookingEnabledByAgency: false,
+      raniMastermindEnabledByAgency: false,
       metaConfig: null,
       bookingConfig: null,
       sendWindow: null,

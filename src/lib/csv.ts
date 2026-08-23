@@ -137,3 +137,15 @@ export function guessContactField(header: string):
   if (h.includes("tag")) return "tags";
   return null;
 }
+
+/**
+ * Heuristic match for a "from number" column — separate from
+ * `guessContactField` (which the general contacts importer's `MappableField`
+ * union doesn't include this in) so the Cold SMS importer can auto-map it
+ * without touching that shared function's return type.
+ */
+export function looksLikeFromNumberHeader(header: string): boolean {
+  return /from ?number|sender|assigned ?number|pool ?number|twilio ?number/i.test(
+    header,
+  );
+}

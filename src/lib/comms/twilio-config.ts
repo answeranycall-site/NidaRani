@@ -52,6 +52,12 @@ export async function validateCredentials(
 export interface AutoConfigureWebhookResult {
   ok: boolean;
   error: string | null;
+  /** Twilio's own provisioning date for the number, when the lookup
+   *  succeeded far enough to find it — null on any failure or if Twilio
+   *  didn't return one. Used to display "renews in N days" on the Cold
+   *  SMS pool page; unrelated to whether the webhook config itself
+   *  succeeded. */
+  dateCreated?: Date | null;
 }
 
 /**
@@ -90,7 +96,7 @@ export async function autoConfigureInboundWebhook({
       smsUrl: webhookUrl,
       smsMethod: "POST",
     });
-    return { ok: true, error: null };
+    return { ok: true, error: null, dateCreated: phone.dateCreated ?? null };
   } catch (err) {
     const message =
       err instanceof Error

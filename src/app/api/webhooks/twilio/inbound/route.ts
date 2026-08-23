@@ -329,6 +329,24 @@ export async function POST(request: Request) {
         // differs from the account's single fromNumber when a pool exists.
         assignedFromNumber: route.toNumber,
       });
+      // A real inbound touch just happened — this assignment is locked,
+      // never reassignable by a campaign's rotation-balance pass. See
+      // Contact.assignedFromNumberLockedAt's doc comment.
+      if (route.toNumber) {
+        void db
+          .collection("contacts")
+          .doc(created.id)
+          .set(
+            { assignedFromNumberLockedAt: FieldValue.serverTimestamp() },
+            { merge: true },
+          )
+          .catch((err) =>
+            console.warn(
+              `[twilio/inbound] failed to lock assignedFromNumber for ${created.id}`,
+              err,
+            ),
+          );
+      }
       const leadLabel = await applyLeadLabelIfUnnamed({
         subAccountId: route.subAccountId,
         contactId: created.id,
@@ -374,6 +392,7 @@ export async function POST(request: Request) {
           d.ref
             .update({
               assignedFromNumber: route.toNumber,
+              assignedFromNumberLockedAt: FieldValue.serverTimestamp(),
               updatedAt: FieldValue.serverTimestamp(),
             })
             .catch((err) =>

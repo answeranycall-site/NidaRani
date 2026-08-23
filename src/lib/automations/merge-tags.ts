@@ -69,6 +69,12 @@ export interface MergeTagSubject {
   ltv: number | null;
   /** Pre-built fully-qualified unsubscribe URL. Empty string for SMS templates. */
   unsubscribeLink: string;
+  /** Operator-defined field values on the contact (see types/custom-fields
+   *  .ts), surfaced via {{customFields.<key>}} — e.g. a Cold SMS campaign
+   *  templating in a CSV-imported "address" or "review_count" column.
+   *  Non-string values (numbers, booleans, arrays) are stringified. Absent
+   *  key or absent map both resolve to empty string. */
+  customFields?: Record<string, unknown> | null;
 }
 
 const TAG_RE = /\{\{\s*([a-zA-Z0-9_.:-]+)\s*\}\}/g;
@@ -142,6 +148,13 @@ export function resolveMergeTags(
       case "unsubscribeLink":
         return subject.unsubscribeLink ?? "";
       default:
+        if (tag.startsWith("customFields.")) {
+          const key = tag.slice("customFields.".length);
+          const value = subject.customFields?.[key];
+          if (value == null) return "";
+          if (Array.isArray(value)) return value.join(", ");
+          return String(value);
+        }
         // Unknown / deferred tags (e.g. per-type slugged booking links like
         // bookingLink:30min). Surface as empty rather than leak the raw
         // token into outbound copy.

@@ -45,6 +45,11 @@ interface PatchBody {
   missedCallTextBackEnabled?: boolean;
   googleReviewsSyncEnabled?: boolean;
   aiBookingEnabled?: boolean;
+  // "RANI MASTERMIND" bundle — Cold SMS number pool + CSV import + bulk
+  // campaigns + the Retell Voice Agent integration. One gate for the whole
+  // bundle (see SubAccountDoc.raniMastermindEnabledByAgency's doc comment
+  // for why it's bundled rather than split per sub-feature).
+  raniMastermindEnabled?: boolean;
   // Inverse-polarity gate: true (default) = this sub-account may use the
   // agency's shared Twilio sender; false = it must bring its own dedicated
   // number. See SubAccountDoc.sharedSmsAllowed.
@@ -91,6 +96,7 @@ export async function PATCH(
   const wantsMissedCall = typeof body.missedCallTextBackEnabled === "boolean";
   const wantsGoogleReviews = typeof body.googleReviewsSyncEnabled === "boolean";
   const wantsAiBooking = typeof body.aiBookingEnabled === "boolean";
+  const wantsRaniMastermind = typeof body.raniMastermindEnabled === "boolean";
   const wantsSharedSms = typeof body.sharedSmsAllowed === "boolean";
   const wantsBroadcastsHidden =
     typeof body.broadcastsHiddenWhenDisabled === "boolean";
@@ -113,6 +119,7 @@ export async function PATCH(
     !wantsMissedCall &&
     !wantsGoogleReviews &&
     !wantsAiBooking &&
+    !wantsRaniMastermind &&
     !wantsSharedSms &&
     !wantsBroadcastsHidden &&
     !wantsWebsiteHidden &&
@@ -281,6 +288,14 @@ export async function PATCH(
     updates.aiBookingEnabledByAgency = body.aiBookingEnabled;
   }
 
+  if (wantsRaniMastermind) {
+    // No tear-down — the number pool, imported contacts, campaign history,
+    // and any Retell number bindings are all preserved. Disabling just
+    // locks the two sidebar entries and 403s the routes underneath;
+    // re-enabling resumes instantly.
+    updates.raniMastermindEnabledByAgency = body.raniMastermindEnabled;
+  }
+
   if (wantsSharedSms) {
     // No tear-down — this only affects future sends. A sub-account that's
     // been cut off from shared mode simply gets a friendly error until it
@@ -331,6 +346,9 @@ export async function PATCH(
       ? { googleReviewsSyncEnabled: body.googleReviewsSyncEnabled }
       : {}),
     ...(wantsAiBooking ? { aiBookingEnabled: body.aiBookingEnabled } : {}),
+    ...(wantsRaniMastermind
+      ? { raniMastermindEnabled: body.raniMastermindEnabled }
+      : {}),
     ...(wantsSharedSms ? { sharedSmsAllowed: body.sharedSmsAllowed } : {}),
     ...(wantsBroadcastsHidden
       ? { broadcastsHiddenWhenDisabled: body.broadcastsHiddenWhenDisabled }

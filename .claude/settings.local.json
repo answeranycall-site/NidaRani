@@ -12,7 +12,11 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(git --version)",
       "Bash(stripe --version)",
-      "Bash(npx skills:*)"
+      "Bash(npx skills:*)",
+      "Bash(npx tsc *)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(npx eslint *)",
+      "Bash(curl -s -o /dev/null -w \"HTTP_STATUS=%{http_code}\\\\n\" http://localhost:3000/ --max-time 5)"
     ]
   }
 }

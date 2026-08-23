@@ -32,6 +32,20 @@ export function slugifyE164(e164: string): string {
   return e164.startsWith("+") ? `_${e164.slice(1)}` : e164;
 }
 
+/**
+ * Twilio status-callback URL for one pooled send, so `/api/webhooks/twilio/
+ * sms-status` can attribute the delivery result back to the specific pool
+ * number for the lifetime-stats + 30007 auto-flag logic. Null when the
+ * deployment URL isn't set (dev without a tunnel) — the send still
+ * succeeds, it just won't track stats for that message.
+ */
+function smsStatusCallbackUrl(subAccountId: string, fromNumber: string): string | null {
+  const base = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (!base) return null;
+  const numberId = slugifyE164(fromNumber);
+  return `${base}/api/webhooks/twilio/sms-status?sa=${encodeURIComponent(subAccountId)}&numberId=${encodeURIComponent(numberId)}`;
+}
+
 /* ------------------------------ Resolution ------------------------------ */
 
 export type PoolResolution =
@@ -148,6 +162,14 @@ export interface SmsOutboxMeta {
    *  the pauseBot/clearDraft split in conversations-service.ts. Only
    *  meaningful when source === "manual". */
   isDraftApproval?: boolean;
+  /** Present when this send is one recipient of a Cold SMS campaign (see
+   *  `types/sms-campaigns.ts`). `deliverPooledSms` uses these to update
+   *  the campaign recipient row + parent totals on final settle — the one
+   *  place that knows the true outcome whether reached inline or via the
+   *  `pool-send-step` QStash callback, keeping the campaign step route
+   *  itself a thin adapter with no bookkeeping of its own. */
+  campaignId?: string;
+  campaignRecipientId?: string;
 }
 
 interface SmsOutboxDoc {
@@ -207,16 +229,37 @@ export async function deliverPooledSms(
 
   try {
     const resolved = await getTwilioForSubAccount(subAccountId, subAccount);
+    const statusCallbackUrl = smsStatusCallbackUrl(subAccountId, outbox.fromNumber);
     const msg = await resolved.client.messages.create({
       from: outbox.fromNumber,
       to: outbox.to,
       body: outbox.body,
+      ...(statusCallbackUrl ? { statusCallback: statusCallbackUrl } : {}),
     });
 
     await ref.set(
       { status: "sent", sid: msg.sid, updatedAt: FieldValue.serverTimestamp() },
       { merge: true },
     );
+
+    // A real send just went out on this number — lock it in if it wasn't
+    // already (an inbound touch may have locked it first; this is a no-op
+    // merge either way). See Contact.assignedFromNumberLockedAt's doc
+    // comment — this is what makes a campaign's rotation-balance pass stop
+    // touching a contact the moment they've actually been texted.
+    await db
+      .collection("contacts")
+      .doc(outbox.contactId)
+      .set(
+        {
+          assignedFromNumber: outbox.fromNumber,
+          assignedFromNumberLockedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      )
+      .catch((err) =>
+        console.warn(`[sms-pool] failed to lock assignedFromNumber for ${outbox.contactId}`, err),
+      );
 
     await db
       .collection("contacts")
@@ -267,13 +310,80 @@ export async function deliverPooledSms(
       clearDraft: outbox.meta?.source === "manual" && !!outbox.meta?.isDraftApproval,
     });
 
+    await settleCampaignRecipient(outbox.meta, { status: "sent", sid: msg.sid });
+
     return { ok: true, sid: msg.sid, from: outbox.fromNumber };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Send failed";
     await ref
       .set({ status: "failed", error: message, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
       .catch(() => {});
+    await settleCampaignRecipient(outbox.meta, { status: "failed", error: message });
     return { ok: false, error: message };
+  }
+}
+
+/**
+ * If this send was one recipient of a Cold SMS campaign, update its
+ * recipient row + the parent campaign's totals. The one place that knows
+ * the true final outcome regardless of whether delivery happened inline or
+ * via the durability-net QStash callback — see `SmsOutboxMeta`'s doc
+ * comment. No-op (and never throws) when this wasn't a campaign send.
+ */
+async function settleCampaignRecipient(
+  meta: SmsOutboxMeta,
+  outcome: { status: "sent"; sid: string } | { status: "failed"; error: string },
+): Promise<void> {
+  if (!meta.campaignId || !meta.campaignRecipientId) return;
+  try {
+    const db = getAdminDb();
+    const recipientRef = db
+      .collection("smsCampaigns")
+      .doc(meta.campaignId)
+      .collection("recipients")
+      .doc(meta.campaignRecipientId);
+    const campaignRef = db.collection("smsCampaigns").doc(meta.campaignId);
+
+    await db.runTransaction(async (tx) => {
+      const recSnap = await tx.get(recipientRef);
+      if (!recSnap.exists || recSnap.data()?.status !== "queued") return; // already settled
+      tx.set(
+        recipientRef,
+        outcome.status === "sent"
+          ? { status: "sent", sid: outcome.sid, settledAt: FieldValue.serverTimestamp() }
+          : { status: "failed", error: outcome.error, settledAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+      tx.set(
+        campaignRef,
+        {
+          [`totals.${outcome.status}`]: FieldValue.increment(1),
+          "totals.queued": FieldValue.increment(-1),
+        },
+        { merge: true },
+      );
+    });
+
+    // Flip the parent to "completed" once nothing's left queued — best-
+    // effort read outside the transaction above (a slightly stale read
+    // here just means the flip happens on the next settle instead).
+    const campaignSnap = await campaignRef.get();
+    const campaignData = campaignSnap.data() as
+      | { status?: string; totals?: { queued?: number } }
+      | undefined;
+    const stillActive =
+      campaignData?.status === "queued" || campaignData?.status === "sending";
+    if (stillActive && (campaignData?.totals?.queued ?? 0) <= 0) {
+      await campaignRef.set(
+        { status: "completed", completedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[sms-pool] campaign recipient settle failed campaign=${meta.campaignId} recipient=${meta.campaignRecipientId}`,
+      err,
+    );
   }
 }
 
