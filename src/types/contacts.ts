@@ -65,6 +65,18 @@ export interface Contact {
    *  later changes). Multi-line; operator types whatever format suits
    *  their region. Empty string when not provided. */
   address: string;
+  /** Contact's own website, if known — separate from Cold SMS's Retell/
+   *  Twilio numbers or anything agency-facing. Empty string when unset. */
+  website?: string;
+  /**
+   * Canonical phone-line type — Mobile/VoIP numbers can receive SMS,
+   * landlines can't. Cold-list CSVs carry this under wildly varying header
+   * labels ("Line Type", "Type", "Cell?") and wildly varying VALUES per
+   * row ("Wireless", "Cell", "Fixed VOIP" …) — the importer canonicalizes
+   * both down to this fixed set. Null/undefined = unknown (most manually-
+   * created or non-cold-list contacts).
+   */
+  phoneType?: "mobile" | "voip" | "landline" | null;
   source: ContactSource;
   tags: string[];
   pipelineStage: string | null;
@@ -350,6 +362,8 @@ export type ContactFormData = Pick<
   territoryId?: string | null;
   customFields?: Record<string, import("./custom-fields").CustomFieldValue> | null;
   assignedFromNumber?: string | null;
+  website?: string | null;
+  phoneType?: "mobile" | "voip" | "landline" | null;
 };
 
 export type ActivityType =

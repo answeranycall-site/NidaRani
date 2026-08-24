@@ -46,6 +46,8 @@ interface StandardMapping {
   email?: string;
   company?: string;
   address?: string;
+  website?: string;
+  phoneType?: string;
   source?: string;
   tags?: string;
   assignedFromNumber?: string;
@@ -68,6 +70,11 @@ interface CommitBody {
   standardMapping: StandardMapping;
   customFieldMapping: CustomFieldMappingEntry[];
   buyForStates?: Record<string, number>;
+  /** Raw phone-type column value → canonical bucket, confirmed by the
+   *  operator per distinct value seen in the mapped column (see
+   *  `guessPhoneType` in lib/csv.ts for the client-side default guess).
+   *  Absent/empty when no column was mapped to Phone type. */
+  phoneTypeValueMap?: Record<string, "mobile" | "voip" | "landline">;
 }
 
 async function loadEnabledPool(subAccountId: string): Promise<TwilioPoolNumber[]> {
@@ -246,6 +253,10 @@ export async function POST(
       const value = (row[entry.header] ?? "").trim();
       if (key && value) customFields[key] = value;
     }
+    const phoneTypeRaw = mapping.phoneType ? (row[mapping.phoneType] ?? "").trim() : "";
+    const phoneType = phoneTypeRaw
+      ? commit.phoneTypeValueMap?.[phoneTypeRaw] ?? null
+      : null;
 
     inputs.push({
       subAccountId,
@@ -257,6 +268,8 @@ export async function POST(
       phone,
       company: mapping.company ? (row[mapping.company] ?? "").trim() : "",
       address,
+      website: mapping.website ? (row[mapping.website] ?? "").trim() : "",
+      phoneType,
       source: mapping.source ? (row[mapping.source] ?? "").trim() || "cold-sms" : "cold-sms",
       tags: mapping.tags
         ? (row[mapping.tags] ?? "")

@@ -149,3 +149,60 @@ export function looksLikeFromNumberHeader(header: string): boolean {
     header,
   );
 }
+
+/**
+ * Cold-SMS-only field guesser — deliberately narrower than
+ * `guessContactField` above. Cold lists carry many columns (county, list
+ * source, DNC flag, absentee status, …) that `guessContactField` would
+ * happily misfire on into "company"/"source"/"tags", forcing the operator
+ * to manually un-map before the column is even eligible for the custom-
+ * field checklist. This only ever auto-guesses the handful of fields
+ * unambiguous enough to be safe: phone, name, address, website. Everything
+ * else starts unmapped so it lands directly in the operator's opt-in
+ * custom-field list — never silently classified as something it isn't.
+ */
+export function guessColdSmsField(
+  header: string,
+): "name" | "phone" | "address" | "website" | null {
+  const h = header.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (/(^|_)name($|_)/.test(h) || h === "fullname" || h === "name") return "name";
+  if (h.includes("firstname") || h.includes("lastname")) return "name";
+  if (h.includes("phone") || h === "tel" || h === "mobile") return "phone";
+  if (h === "address" || h.includes("mailingaddress") || h === "streetaddress")
+    return "address";
+  if (h === "website" || h === "url" || h.includes("website") || h === "site")
+    return "website";
+  return null;
+}
+
+/** Heuristic match for a "phone type" column — cold lists label this
+ *  wildly differently across providers ("Phone Type", "Line Type",
+ *  "Number Type", "Type"). */
+export function looksLikePhoneTypeHeader(header: string): boolean {
+  return /phone ?type|line ?type|number ?type|dialer ?type/i.test(header);
+}
+
+/**
+ * Canonicalize one raw phone-type VALUE (not the header — see
+ * `looksLikePhoneTypeHeader` for that) down to the fixed three-way bucket
+ * `Contact.phoneType` uses. Cold lists use wildly different labels per
+ * provider for the same underlying category, so this is a best-effort
+ * guess the operator confirms/overrides per distinct value in the import
+ * UI — never silently trusted for an unrecognized value (returns null,
+ * which the UI surfaces as "unmapped" rather than defaulting to a guess).
+ */
+export function guessPhoneType(
+  raw: string,
+): "mobile" | "voip" | "landline" | null {
+  const v = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!v) return null;
+  if (/^(mobile|cell|cellular|wireless|smartphone)$/.test(v)) return "mobile";
+  if (/^(voip|fixedvoip|nonfixedvoip|voipnonfixed|internet)$/.test(v)) return "voip";
+  if (/^(landline|fixed|fixedline|residential|wireline|business)$/.test(v))
+    return "landline";
+  if (v.includes("voip")) return "voip";
+  if (v.includes("mobile") || v.includes("cell") || v.includes("wireless"))
+    return "mobile";
+  if (v.includes("land") || v.includes("fixed")) return "landline";
+  return null;
+}

@@ -57,6 +57,8 @@ export async function bulkCreateContacts(
       phone: input.phone,
       company: input.company,
       address: input.address,
+      website: input.website ?? "",
+      phoneType: input.phoneType ?? null,
       source: input.source,
       tags: input.tags,
       pipelineStage: input.pipelineStage ?? null,

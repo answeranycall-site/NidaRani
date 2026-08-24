@@ -14,7 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSubAccount } from "@/context/sub-account-context";
-import { parseCsv, guessContactField, looksLikeFromNumberHeader } from "@/lib/csv";
+import {
+  parseCsv,
+  guessColdSmsField,
+  looksLikeFromNumberHeader,
+  looksLikePhoneTypeHeader,
+  guessPhoneType,
+} from "@/lib/csv";
 
 /**
  * Cold-SMS-specific CSV import — phone required (not email, unlike the
@@ -24,6 +30,12 @@ import { parseCsv, guessContactField, looksLikeFromNumberHeader } from "@/lib/cs
  * round-robin) for rows that don't have one. A dry-run preview surfaces
  * any pool shortfall before committing so the operator can buy numbers
  * first, with an explicit quantity confirmation.
+ *
+ * Auto-mapping is deliberately conservative — only phone/name/address/
+ * website/from-number/phone-type ever auto-guess (see `guessColdSmsField`
+ * in lib/csv.ts). Everything else starts unmapped so the operator picks,
+ * per column, which ones become custom fields (up to 10) — never silently
+ * forced into company/source/tags.
  */
 
 type StandardField =
@@ -32,6 +44,8 @@ type StandardField =
   | "email"
   | "company"
   | "address"
+  | "website"
+  | "phoneType"
   | "source"
   | "tags"
   | "assignedFromNumber";
@@ -43,12 +57,20 @@ const STANDARD_FIELDS: { value: StandardField | ""; label: string }[] = [
   { value: "email", label: "Email" },
   { value: "company", label: "Company" },
   { value: "address", label: "Address (used for state-matching)" },
+  { value: "website", label: "Website" },
+  { value: "phoneType", label: "Phone type (Mobile / VoIP / Landline)" },
   { value: "source", label: "Source" },
   { value: "tags", label: "Tags" },
   { value: "assignedFromNumber", label: "From number (Twilio)" },
 ];
 
 const MAX_CUSTOM_FIELDS = 10;
+const PHONE_TYPE_OPTIONS: { value: "" | "mobile" | "voip" | "landline"; label: string }[] = [
+  { value: "", label: "— Unmapped (skip) —" },
+  { value: "mobile", label: "Mobile" },
+  { value: "voip", label: "VoIP" },
+  { value: "landline", label: "Landline" },
+];
 
 interface DryRunResult {
   totalRows: number;
@@ -85,6 +107,10 @@ export function ColdSmsImportDialog({
   const [mapping, setMapping] = useState<Record<string, StandardField | "">>({});
   const [customChecked, setCustomChecked] = useState<Record<string, boolean>>({});
   const [customLabels, setCustomLabels] = useState<Record<string, string>>({});
+  const [phoneTypeValueMap, setPhoneTypeValueMap] = useState<
+    Record<string, "" | "mobile" | "voip" | "landline">
+  >({});
+  const [seededPhoneTypeKey, setSeededPhoneTypeKey] = useState("");
 
   const [checkingPreview, setCheckingPreview] = useState(false);
   const [dryRun, setDryRun] = useState<DryRunResult | null>(null);
@@ -101,6 +127,8 @@ export function ColdSmsImportDialog({
     setMapping({});
     setCustomChecked({});
     setCustomLabels({});
+    setPhoneTypeValueMap({});
+    setSeededPhoneTypeKey("");
     setDryRun(null);
     setBuyQuantities({});
     setResult(null);
@@ -117,14 +145,22 @@ export function ColdSmsImportDialog({
     setFileName(file.name);
     setHeaders(hdrs);
     setRows(parsed);
+    // Deliberately conservative — only phone/name/address/website/from-number/
+    // phone-type auto-map. Everything else (county, list source, DNC flag,
+    // etc.) starts unmapped so it lands straight in the operator's opt-in
+    // custom-field checklist below, never silently misclassified as
+    // company/source/tags.
     const nextMapping: Record<string, StandardField | ""> = {};
     for (const h of hdrs) {
       if (looksLikeFromNumberHeader(h)) {
         nextMapping[h] = "assignedFromNumber";
         continue;
       }
-      const guess = guessContactField(h);
-      nextMapping[h] = guess === "email" ? "email" : (guess as StandardField | null) ?? "";
+      if (looksLikePhoneTypeHeader(h)) {
+        nextMapping[h] = "phoneType";
+        continue;
+      }
+      nextMapping[h] = guessColdSmsField(h) ?? "";
     }
     setMapping(nextMapping);
     setStep("map");
@@ -143,6 +179,41 @@ export function ColdSmsImportDialog({
     [customChecked],
   );
   const hasPhoneColumn = Object.values(mapping).includes("phone");
+  const phoneTypeHeader = Object.entries(mapping).find(
+    ([, v]) => v === "phoneType",
+  )?.[0];
+  const distinctPhoneTypeValues = useMemo(() => {
+    if (!phoneTypeHeader) return [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const v = (r[phoneTypeHeader] ?? "").trim();
+      if (v) seen.add(v);
+    }
+    return Array.from(seen).sort();
+  }, [rows, phoneTypeHeader]);
+
+  // Seed a best-effort guess (guessPhoneType) for every distinct value seen
+  // in whichever column is currently mapped to Phone type — runs whenever
+  // that set changes (column re-mapped, or a fresh file lands with the
+  // header auto-detected). Only fills gaps; never clobbers an operator's
+  // existing correction for a value already seen. This is React's sanctioned
+  // "adjust state during render" pattern (a state-tracked key, not a ref) —
+  // see https://react.dev/reference/react/useState#storing-information-from-previous-renders.
+  const seedKey = distinctPhoneTypeValues.join(" ");
+  if (distinctPhoneTypeValues.length > 0 && seededPhoneTypeKey !== seedKey) {
+    setSeededPhoneTypeKey(seedKey);
+    setPhoneTypeValueMap((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const v of distinctPhoneTypeValues) {
+        if (!(v in next)) {
+          next[v] = guessPhoneType(v) ?? "";
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }
 
   async function runPreview() {
     if (!hasPhoneColumn) {
@@ -193,6 +264,13 @@ export function ColdSmsImportDialog({
         if (Number.isFinite(qty) && qty > 0) buyForStates[state] = Math.floor(qty);
       }
 
+      const phoneTypeValueMapToSend: Record<string, "mobile" | "voip" | "landline"> = {};
+      if (phoneTypeHeader) {
+        for (const [raw, bucket] of Object.entries(phoneTypeValueMap)) {
+          if (bucket) phoneTypeValueMapToSend[raw] = bucket;
+        }
+      }
+
       const res = await fetch(`/api/sub-accounts/${subAccountId}/cold-sms/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -201,6 +279,9 @@ export function ColdSmsImportDialog({
           standardMapping: mapping,
           customFieldMapping,
           buyForStates: Object.keys(buyForStates).length ? buyForStates : undefined,
+          phoneTypeValueMap: Object.keys(phoneTypeValueMapToSend).length
+            ? phoneTypeValueMapToSend
+            : undefined,
         }),
       });
       const json = (await res.json()) as CommitResult & { ok?: boolean; error?: string };
@@ -286,6 +367,12 @@ export function ColdSmsImportDialog({
                 <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Standard fields
                 </Label>
+                <p className="text-xs text-muted-foreground">
+                  Only phone, name, address, website, and from-number/phone-type
+                  columns auto-map. Everything else starts unmapped — leave it
+                  that way to skip a column, or check it below to keep it as a
+                  custom field.
+                </p>
                 <div className="overflow-hidden rounded-lg border">
                   <table className="w-full text-sm">
                     <thead className="border-b bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -328,6 +415,44 @@ export function ColdSmsImportDialog({
                   </p>
                 )}
               </div>
+
+              {phoneTypeHeader && distinctPhoneTypeValues.length > 0 && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Phone type values ({distinctPhoneTypeValues.length} distinct)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    &ldquo;{phoneTypeHeader}&rdquo; uses these labels — confirm
+                    or fix how each maps to Mobile/VoIP/Landline. Landline
+                    contacts can&apos;t receive SMS.
+                  </p>
+                  <div className="space-y-1.5 rounded-lg border p-2">
+                    {distinctPhoneTypeValues.map((v) => (
+                      <div key={v} className="flex items-center gap-2">
+                        <span className="w-40 shrink-0 truncate text-xs font-medium">
+                          {v}
+                        </span>
+                        <select
+                          value={phoneTypeValueMap[v] ?? ""}
+                          onChange={(e) =>
+                            setPhoneTypeValueMap((prev) => ({
+                              ...prev,
+                              [v]: e.target.value as "" | "mobile" | "voip" | "landline",
+                            }))
+                          }
+                          className="h-7 flex-1 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 text-foreground dark:bg-input/30 [&_option]:bg-background [&_option]:text-foreground"
+                        >
+                          {PHONE_TYPE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {unmappedHeaders.length > 0 && (
                 <div className="space-y-2">

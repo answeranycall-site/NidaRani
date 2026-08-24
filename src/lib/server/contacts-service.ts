@@ -46,6 +46,8 @@ export interface CreateContactInput {
   phone: string;
   company: string;
   address: string;
+  website?: string;
+  phoneType?: "mobile" | "voip" | "landline" | null;
   source: string;
   tags: string[];
   pipelineStage?: string | null;
@@ -96,6 +98,8 @@ export async function createContactServerSide(
     phone: input.phone,
     company: input.company,
     address: input.address,
+    website: input.website ?? "",
+    phoneType: input.phoneType ?? null,
     source: input.source,
     tags: input.tags,
     pipelineStage: input.pipelineStage ?? null,

@@ -422,6 +422,29 @@ function NumberRow({
   const [busy, setBusy] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [fixing, setFixing] = useState(false);
+  const [settingPrimary, setSettingPrimary] = useState(false);
+
+  async function makePrimary() {
+    setSettingPrimary(true);
+    try {
+      const res = await fetch(
+        `/api/sub-accounts/${subAccountId}/twilio/numbers/${number.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isPrimary: true }),
+        },
+      );
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed to update");
+      toast.success(`${number.label} is now primary.`);
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update");
+    } finally {
+      setSettingPrimary(false);
+    }
+  }
 
   const lifetimeErrorPct =
     number.lifetimeSent > 0
@@ -501,8 +524,25 @@ function NumberRow({
     <tr className="border-b last:border-0">
       <td className="px-4 py-3">
         <div className="flex items-center gap-1.5 font-medium">
-          {number.isPrimary && (
-            <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+          {number.isPrimary ? (
+            <span
+              title="Primary — the fallback number used for any contact not yet locked to a specific number (new manual sends, non-campaign outreach)."
+              className="shrink-0"
+            >
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+            </span>
+          ) : (
+            !archived && (
+              <button
+                type="button"
+                onClick={makePrimary}
+                disabled={settingPrimary}
+                title="Set as primary"
+                className="shrink-0 text-muted-foreground/40 hover:text-amber-400"
+              >
+                <Star className="h-3 w-3" />
+              </button>
+            )
           )}
           {number.label}
         </div>
@@ -536,7 +576,11 @@ function NumberRow({
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
           <div className="flex flex-col gap-1 text-[11px]">
-            <HookBadge label="SMS" ok={number.smsHookOk} />
+            <HookBadge
+              label="SMS"
+              ok={number.smsHookOk}
+              tooltip="Checks that Twilio's SMS webhook for this number is set to this exact CRM deployment's inbound URL. Which sub-account an inbound then lands in is decided by which sub-account's number pool contains this exact number — never by an existing contact."
+            />
             {number.retellAgentId ? (
               <Link
                 href={saPath("/retell-voice")}
@@ -546,7 +590,11 @@ function NumberRow({
                 Retell agent
               </Link>
             ) : (
-              <HookBadge label="Voice" ok={number.voiceHookOk} />
+              <HookBadge
+                label="Voice"
+                ok={number.voiceHookOk}
+                tooltip="Checks the Voice URL is blank, points at this CRM, or points at Missed Call Text Back's handler. A blank URL still counts as OK — it just means nothing answers calls to this number yet."
+              />
             )}
             {hooksNeedFix && (
               <Button
@@ -611,16 +659,28 @@ function NumberRow({
   );
 }
 
-function HookBadge({ label, ok }: { label: string; ok: boolean | null }) {
+function HookBadge({
+  label,
+  ok,
+  tooltip,
+}: {
+  label: string;
+  ok: boolean | null;
+  tooltip: string;
+}) {
   if (ok === null) {
     return (
-      <span className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground">
+      <span
+        title={tooltip}
+        className="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 font-medium text-muted-foreground"
+      >
         {label}: unknown
       </span>
     );
   }
   return (
     <span
+      title={tooltip}
       className={
         "inline-flex w-fit items-center rounded-full px-2 py-0.5 font-medium " +
         (ok
