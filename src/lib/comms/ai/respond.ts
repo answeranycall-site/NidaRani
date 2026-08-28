@@ -60,7 +60,8 @@ type AiSkipReason =
   | "bot_off"
   | "bot_paused"
   | "contact_cap_reached"
-  | "llm_failed";
+  | "llm_failed"
+  | "echo_loop_detected";
 
 type RespondOutcome =
   | { kind: "replied"; replyText: string; tokens: number }
@@ -184,6 +185,54 @@ async function loadRecentHistory(
     });
   }
   return turns;
+}
+
+/**
+ * Loop-breaker: refuses to auto-reply when the inbound text is just an echo
+ * of the message we ourselves most recently sent this contact — e.g. a
+ * misconfigured relay, a decoy/honeypot number, or any other external
+ * system that bounces text back verbatim (often wrapped, like
+ * "New sms from {number}: {our own words}"). A real human replying
+ * naturally is vanishingly unlikely to include our own exact sentence back
+ * to us, so a substring match is a strong, low-false-positive signal —
+ * generic across whatever wrapper text the bouncing system uses, so it
+ * protects against this whole CLASS of bug rather than one specific cause.
+ * Time-boxed to the last 10 minutes so a human quoting something we said
+ * days ago in a genuine reply is never mistaken for a loop, and length-
+ * boxed (skip anything under 12 chars) so a short reply like "Ok" can't
+ * spuriously "match" by being a trivial substring of the inbound.
+ */
+const ECHO_LOOP_WINDOW_MS = 10 * 60 * 1000;
+const ECHO_LOOP_MIN_BODY_LENGTH = 12;
+
+async function isEchoOfOurOwnMessage(
+  contactId: string,
+  incomingMessage: string,
+  messagesCollection: string,
+): Promise<boolean> {
+  try {
+    const snap = await getAdminDb()
+      .collection("contacts")
+      .doc(contactId)
+      .collection(messagesCollection)
+      .where("direction", "==", "outbound")
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+    if (snap.empty) return false;
+    const last = snap.docs[0].data() as {
+      body?: string;
+      createdAt?: { toMillis?: () => number };
+    };
+    const lastBody = (last.body ?? "").trim();
+    if (lastBody.length < ECHO_LOOP_MIN_BODY_LENGTH) return false;
+    const sentAtMs = last.createdAt?.toMillis?.() ?? null;
+    if (sentAtMs !== null && Date.now() - sentAtMs > ECHO_LOOP_WINDOW_MS) return false;
+    return incomingMessage.toLowerCase().includes(lastBody.toLowerCase());
+  } catch (err) {
+    console.warn("[ai/respond] echo-loop check failed (failing open)", err);
+    return false;
+  }
 }
 
 // System prompt building moved to @/lib/comms/ai/prompt — shared with the
@@ -503,6 +552,24 @@ export async function maybeRespondWithAi(
       meta: { reason: "contact_opted_out", channel: channelId },
     });
     return { kind: "skipped", reason: "contact_opted_out" };
+  }
+
+  // Guard: inbound is just an echo of our own last message (loop-breaker —
+  // see isEchoOfOurOwnMessage's doc comment for why this matters and what
+  // it catches). Cheap and placed before the LLM call on purpose.
+  if (
+    await isEchoOfOurOwnMessage(contact.id, incomingMessage, transport.messagesCollection)
+  ) {
+    await logActivity({
+      contactId: contact.id,
+      agencyId: subAccount.agencyId,
+      subAccountId,
+      type: "ai_skipped",
+      content:
+        "AI reply skipped — inbound looked like an echo of our own last message (likely a relay/decoy number, not a real reply).",
+      meta: { reason: "echo_loop_detected", channel: channelId },
+    });
+    return { kind: "skipped", reason: "echo_loop_detected" };
   }
 
   // Guard: profile prompt blank — refuse to send anything.

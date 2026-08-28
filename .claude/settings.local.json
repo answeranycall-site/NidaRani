@@ -16,7 +16,8 @@
       "Bash(npx tsc *)",
       "Bash(echo \"EXIT=$?\")",
       "Bash(npx eslint *)",
-      "Bash(curl -s -o /dev/null -w \"HTTP_STATUS=%{http_code}\\\\n\" http://localhost:3000/ --max-time 5)"
+      "Bash(curl -s -o /dev/null -w \"HTTP_STATUS=%{http_code}\\\\n\" http://localhost:3000/ --max-time 5)",
+      "Bash(node *.mjs)"
     ]
   }
 }
