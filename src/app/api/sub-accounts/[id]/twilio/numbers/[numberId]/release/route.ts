@@ -17,9 +17,14 @@ import type { SubAccountDoc, TwilioConfig, TwilioPoolNumber } from "@/types";
  * in Twilio — this is the serious, irreversible action.
  *
  * Refuses on the current primary (same guard as plain delete) and on a
- * number still assigned to any contact (surfaces the count so the operator
- * can reassign first — releasing out from under an active contact would
- * silently break their future sends).
+ * number still assigned to any contact — UNLESS the caller passes
+ * `reassignTo` (another enabled, non-archived number in this same pool),
+ * in which case every assigned contact is bulk-repointed to that number
+ * (their `assignedFromNumberLockedAt` is left as-is — a contact who already
+ * had a real conversation stays "locked" to a specific number, just a
+ * different one, preserving the pool's "block, don't silently reroute"
+ * guarantee for any FUTURE release too) before the release proceeds.
+ * Without `reassignTo`, the count is surfaced so the operator can choose.
  */
 export async function POST(
   request: Request,
@@ -28,6 +33,12 @@ export async function POST(
   const { id: subAccountId, numberId } = await ctx.params;
   const access = await requireSubAccountAdmin(request, subAccountId);
   if (access instanceof NextResponse) return access;
+
+  const body = await request.json().catch(() => ({}) as { reassignTo?: unknown });
+  const reassignTo =
+    typeof (body as { reassignTo?: unknown }).reassignTo === "string"
+      ? ((body as { reassignTo: string }).reassignTo.trim() || null)
+      : null;
 
   const db = getAdminDb();
   const [numberSnap, subSnap] = await Promise.all([
@@ -53,21 +64,62 @@ export async function POST(
     );
   }
 
-  const assignedSnap = await db
+  const assignedQuery = db
     .collection("contacts")
     .where("subAccountId", "==", subAccountId)
-    .where("assignedFromNumber", "==", number.e164)
-    .limit(1)
-    .count()
-    .get();
-  const assignedCount = assignedSnap.data().count;
-  if (assignedCount > 0) {
-    return NextResponse.json(
-      {
-        error: `${assignedCount} contact(s) are still assigned to this number — reassign them before releasing it, or their future sends will block.`,
-      },
-      { status: 400 },
-    );
+    .where("assignedFromNumber", "==", number.e164);
+
+  if (!reassignTo) {
+    const assignedSnap = await assignedQuery.limit(1).count().get();
+    const assignedCount = assignedSnap.data().count;
+    if (assignedCount > 0) {
+      return NextResponse.json(
+        {
+          error: `${assignedCount} contact(s) are still assigned to this number — reassign them before releasing it, or their future sends will block.`,
+          assignedCount,
+        },
+        { status: 400 },
+      );
+    }
+  } else {
+    if (reassignTo === number.e164) {
+      return NextResponse.json(
+        { error: "Can't reassign a number's contacts to itself." },
+        { status: 400 },
+      );
+    }
+    const targetSnap = await db
+      .collection(`subAccounts/${subAccountId}/twilioNumbers`)
+      .where("e164", "==", reassignTo)
+      .limit(1)
+      .get();
+    const target = targetSnap.docs[0]?.data() as TwilioPoolNumber | undefined;
+    if (!target || target.archivedAt || !target.enabled) {
+      return NextResponse.json(
+        { error: "The reassignment target isn't an enabled number in this pool." },
+        { status: 400 },
+      );
+    }
+    const assignedDocs = await assignedQuery.get();
+    if (!assignedDocs.empty) {
+      const batches: Promise<FirebaseFirestore.WriteResult[]>[] = [];
+      let batch = db.batch();
+      let opsInBatch = 0;
+      for (const doc of assignedDocs.docs) {
+        batch.update(doc.ref, {
+          assignedFromNumber: reassignTo,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        opsInBatch++;
+        if (opsInBatch === 450) {
+          batches.push(batch.commit());
+          batch = db.batch();
+          opsInBatch = 0;
+        }
+      }
+      if (opsInBatch > 0) batches.push(batch.commit());
+      await Promise.all(batches);
+    }
   }
 
   const cfg = (subSnap.data()?.twilioConfig as TwilioConfig | undefined) ?? null;

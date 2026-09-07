@@ -360,6 +360,9 @@ function NumbersTable({
               subAccountId={subAccountId}
               onChanged={onChanged}
               archived={archived}
+              reassignTargets={numbers.filter(
+                (o) => o.id !== n.id && o.enabled && !o.archivedAt,
+              )}
             />
           ))}
         </tbody>
@@ -412,11 +415,15 @@ function NumberRow({
   subAccountId,
   onChanged,
   archived,
+  reassignTargets = [],
 }: {
   number: PoolNumber;
   subAccountId: string;
   onChanged: () => void;
   archived?: boolean;
+  /** Other enabled, non-archived pool numbers this one's contacts could be
+   *  reassigned to if release is blocked on them still being assigned here. */
+  reassignTargets?: PoolNumber[];
 }) {
   const { saPath } = useSubAccount();
   const [busy, setBusy] = useState(false);
@@ -498,6 +505,14 @@ function NumberRow({
     }
   }
 
+  async function postRelease(reassignTo?: string) {
+    return fetch(`/api/sub-accounts/${subAccountId}/twilio/numbers/${number.id}/release`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reassignTo ? { reassignTo } : {}),
+    });
+  }
+
   async function requestDeletion() {
     const confirmed = window.confirm(
       `Release ${number.label} (${number.e164}) from Twilio? This stops the recurring charge but is irreversible — Twilio cannot un-release a number back to you.`,
@@ -505,11 +520,35 @@ function NumberRow({
     if (!confirmed) return;
     setReleasing(true);
     try {
-      const res = await fetch(
-        `/api/sub-accounts/${subAccountId}/twilio/numbers/${number.id}/release`,
-        { method: "POST" },
-      );
-      const json = (await res.json()) as { ok?: boolean; error?: string };
+      let res = await postRelease();
+      let json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        assignedCount?: number;
+      };
+
+      // Blocked on contacts still assigned here — offer to move them to
+      // another enabled pool number and retry, instead of a dead end.
+      if (!res.ok && typeof json.assignedCount === "number" && json.assignedCount > 0) {
+        if (reassignTargets.length === 0) {
+          throw new Error(
+            `${json.assignedCount} contact(s) are still assigned to this number, and there's ` +
+              `no other enabled number in the pool to move them to. Enable another number first.`,
+          );
+        }
+        const target = reassignTargets.find((n) => n.isPrimary) ?? reassignTargets[0];
+        const reassignConfirmed = window.confirm(
+          `${json.assignedCount} contact(s) are still assigned to ${number.label}. ` +
+            `Move them to "${target.label}" (${target.e164}) and then release ${number.label}?`,
+        );
+        if (!reassignConfirmed) {
+          toast.error(json.error ?? "Release cancelled.");
+          return;
+        }
+        res = await postRelease(target.e164);
+        json = (await res.json()) as { ok?: boolean; error?: string };
+      }
+
       if (!res.ok || !json.ok) throw new Error(json.error ?? "Failed to release");
       toast.success("Number released from Twilio and archived.");
       onChanged();
